@@ -178,7 +178,7 @@ cp .env.example .env
 docker network create web-common 2>/dev/null || true
 docker compose build
 docker compose run --rm codex-gateway \
-  node scripts/create-user.mjs admin '<至少-8-位-密码>'
+  node scripts/create-user.mjs --admin admin '<至少-8-位-密码>'
 docker compose up -d
 ```
 
@@ -190,6 +190,8 @@ docker compose up -d
 pnpm install
 pnpm dev
 ```
+
+`pnpm dev` 使用 Nitro dev 预设，不包含 `/gw/` 之外的预览拦截；同源浏览器预览只在生产构建（含 E2E）中可用。
 
 常用命令：
 
@@ -214,8 +216,10 @@ pnpm test:e2e
 ```bash
 CODEX_GATEWAY_CONFIG_SECRET="replace-with-a-long-random-secret" \
 CODEX_GATEWAY_DB_PATH="./data/codex-gateway.db" \
-pnpm user:create <username> <password>
+pnpm user:create -- --admin <username> <password>
 ```
+
+普通用户由管理员在"设置 → 用户管理"中创建，并可在那里分配托管 host。
 
 `CODEX_GATEWAY_CONFIG_SECRET` 用于加密保存连接配置。生产环境必须设置稳定且足够长的 secret；更换 secret 会导致已有加密配置无法解密。
 

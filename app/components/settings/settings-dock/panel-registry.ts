@@ -22,6 +22,10 @@ export const settingsPanelRegistry = {
     component: "SettingsDockNotificationPanel",
     titleKey: "app.notificationSettings",
   },
+  users: {
+    component: "SettingsDockUsersPanel",
+    titleKey: "app.adminUsersTitle",
+  },
 } satisfies Record<SettingsPanelKind, SettingsPanelPolicy>;
 
 export const settingsPanelKinds = [
@@ -29,4 +33,5 @@ export const settingsPanelKinds = [
   "config",
   "hosts",
   "notifications",
+  "users",
 ] as const satisfies readonly SettingsPanelKind[];

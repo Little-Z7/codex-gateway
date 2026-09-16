@@ -6,7 +6,7 @@ export default defineNuxtConfig({
   compatibilityDate: "2025-07-15",
   app: {
     // The Gateway UI lives under /gw/ so every other root path can serve same-origin browser
-    // previews routed by the preview cookie. See server/nitro/node-entry.ts.
+    // previews routed by the preview cookie. See server/nitro/node-entry.mjs.
     baseURL: "/gw/",
   },
   devtools: { enabled: true },

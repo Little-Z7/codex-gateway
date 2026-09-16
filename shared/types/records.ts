@@ -12,6 +12,7 @@ export interface HostRecord {
   password?: string | null;
   proxyUrl: string | null;
   hasPassword: boolean;
+  managed: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -37,6 +38,7 @@ export interface HostCreateInput {
   privateKey?: string | null;
   password?: string | null;
   proxyUrl?: string | null;
+  managed?: boolean;
 }
 
 export type HostUpdateInput = HostCreateInput;

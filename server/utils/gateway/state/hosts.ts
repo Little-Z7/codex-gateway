@@ -23,6 +23,7 @@ function normalizeHost(input: HostCreateInput, id = nextId(gatewayMemoryState.ho
     privateKey: input.privateKey ?? null,
     password: input.password ?? null,
     proxyUrl: trimmedOrNull(input.proxyUrl),
+    managed: input.managed ?? existing?.managed ?? false,
     hasPassword: Boolean(input.password),
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,

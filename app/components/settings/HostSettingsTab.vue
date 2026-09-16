@@ -5,9 +5,11 @@ import { Button } from "@codex-gateway/ui/button";
 import HostEditList from "@/components/settings/HostEditList.vue";
 import HostConnectionFields from "./host-connection/HostConnectionFields.vue";
 import { emptyHostConnectionForm, hostConnectionPayload } from "./host-connection/form";
+import { useAuthStore } from "@/stores/auth";
 import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
 
 const emit = defineEmits<{ close: [] }>();
+const auth = useAuthStore();
 const catalog = useGatewayCatalogStore();
 const { t } = useI18n();
 const hostForm = ref(emptyHostConnectionForm());
@@ -20,8 +22,8 @@ async function createHost() {
 </script>
 
 <template>
-  <div class="grid gap-4 md:grid-cols-2">
-    <div class="space-y-3">
+  <div class="grid gap-4" :class="auth.isAdmin ? 'md:grid-cols-2' : ''">
+    <div v-if="auth.isAdmin" class="space-y-3">
       <div class="font-medium">{{ t("app.addHost") }}</div>
       <HostConnectionFields v-model="hostForm" create />
       <Button

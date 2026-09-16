@@ -12,6 +12,10 @@ export function defineGatewayConfigMutationHandler<T>(handler: (event: H3Event) 
   });
 }
 
+export function withUserConfigLock(userId: number) {
+  return userConfigLock(userId);
+}
+
 function userConfigLock(userId: number) {
   const existing = userConfigLocks.get(userId);
   if (existing) {

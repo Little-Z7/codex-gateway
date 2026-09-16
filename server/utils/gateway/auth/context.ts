@@ -45,3 +45,15 @@ export function requireAuthenticatedUser(event: H3Event): AuthenticatedUser {
   }
   return user;
 }
+
+export function requireAdmin(event: H3Event): AuthenticatedUser {
+  const user = requireAuthenticatedUser(event);
+  if (user.role !== "admin") {
+    throw createError({
+      statusCode: 403,
+      statusMessage: "Forbidden",
+      message: "Administrator role required",
+    });
+  }
+  return user;
+}

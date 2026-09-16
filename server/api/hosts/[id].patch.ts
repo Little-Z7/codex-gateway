@@ -1,4 +1,4 @@
-import { getRouterParam, readValidatedBody } from "h3";
+import { createError, getRouterParam, readValidatedBody } from "h3";
 import { defineGatewayConfigMutationHandler } from "../../utils/gateway/http/config-mutation";
 import { requireRecord } from "../../utils/gateway/http/validation/common";
 import { hostUpdateSchema } from "../../utils/gateway/http/validation/hosts-projects";
@@ -9,7 +9,14 @@ export default defineGatewayConfigMutationHandler(async (event) => {
   const id = Number(getRouterParam(event, "id"));
   const userId = event.context.auth!.user.id;
   const input = await readValidatedBody(event, (body) => hostUpdateSchema.parse(body));
-  requireRecord(hostStore.getWithSecret(id), "Host not found");
+  const existing = requireRecord(hostStore.getWithSecret(id), "Host not found");
+  if (existing.managed) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: "Forbidden",
+      message: "Managed hosts are configured by an administrator",
+    });
+  }
   return userConfigMutationService.commit(userId, () =>
     requireRecord(hostStore.update(id, input), "Host not found"),
   );

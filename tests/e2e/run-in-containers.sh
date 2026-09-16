@@ -39,10 +39,11 @@ trap cleanup EXIT
 
 docker compose -p "$project_name" -f "$compose_file" build \
   build-runner ssh-target ssh-target-legacy-node ssh-target-legacy-codex ssh-target-mfa
-# Build, application server, and browser runner use separate 2 GiB cgroups. The browser runner
+# The application server and browser runner use separate 2 GiB cgroups (the build runner gets 4
+# GiB). The browser runner
 # shares the gateway network namespace so same-origin preview requests reach the same listener.
 docker compose -p "$project_name" -f "$compose_file" run --rm build-runner \
-  bash -lc 'rm -rf .output .nuxt .data-e2e/* /e2e-output/* && pnpm exec nuxt build --extends ./tests/e2e/nuxt-layer && cp -a .output/. /e2e-output/ && node scripts/create-user.mjs "$E2E_GATEWAY_USERNAME" "$E2E_GATEWAY_PASSWORD"'
+  bash -lc 'rm -rf .output .nuxt .data-e2e/* /e2e-output/* && pnpm exec nuxt build --extends ./tests/e2e/nuxt-layer && cp -a .output/. /e2e-output/ && node scripts/create-user.mjs --admin "$E2E_GATEWAY_USERNAME" "$E2E_GATEWAY_PASSWORD" && node scripts/create-user.mjs "$E2E_GATEWAY_MEMBER_USERNAME" "$E2E_GATEWAY_MEMBER_PASSWORD"'
 docker compose -p "$project_name" -f "$compose_file" up -d --wait \
   gateway-under-test
 docker compose -p "$project_name" -f "$compose_file" run --rm test-runner \

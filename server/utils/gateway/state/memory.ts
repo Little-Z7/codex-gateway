@@ -221,6 +221,10 @@ export function replaceCurrentGatewayMemoryState(nextState: GatewayMemoryState) 
   statesByUser.set(userId, nextState);
 }
 
+export function dropGatewayMemoryState(userId: number) {
+  statesByUser.delete(userId);
+}
+
 export function runWithGatewayUser<T>(userId: number, callback: () => T): T {
   return userScope.run(userId, callback);
 }

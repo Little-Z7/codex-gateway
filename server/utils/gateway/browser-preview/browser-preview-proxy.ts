@@ -45,7 +45,17 @@ export async function handleBrowserPreviewRequest(
     const cookieToken = readCookie(request, authCookieName());
     const session = browserPreviewManager.resolve(cookieToken);
     if (!session) {
-      if (pathname === "/" && cookieToken === undefined) {
+      if (pathname === "/") {
+        if (cookieToken !== undefined) {
+          // A stale preview cookie means the last session was closed or replaced; clear it so the
+          // root path stays a clean entry into the Gateway UI.
+          response.setHeader(
+            "set-cookie",
+            `${authCookieName()}=; Path=/; HttpOnly;${
+              process.env.BROWSER_PREVIEW_SCHEME === "http" ? "" : " Secure;"
+            } SameSite=Lax; Max-Age=0`,
+          );
+        }
         response.writeHead(302, { location: useRuntimeConfig().app.baseURL });
         response.end();
         return;

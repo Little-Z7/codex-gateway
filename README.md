@@ -181,7 +181,7 @@ cp .env.example .env
 docker network create web-common 2>/dev/null || true
 docker compose build
 docker compose run --rm codex-gateway \
-  node scripts/create-user.mjs admin '<a-password-with-at-least-8-characters>'
+  node scripts/create-user.mjs --admin admin '<a-password-with-at-least-8-characters>'
 docker compose up -d
 ```
 
@@ -193,6 +193,8 @@ Open the service through your reverse proxy, sign in with the manually created a
 pnpm install
 pnpm dev
 ```
+
+`pnpm dev` uses the Nitro dev preset, which does not include preview interception outside `/gw/`; same-origin browser previews only work in the production build (including E2E).
 
 Common commands:
 
@@ -217,8 +219,10 @@ Create an admin user:
 ```bash
 CODEX_GATEWAY_CONFIG_SECRET="replace-with-a-long-random-secret" \
 CODEX_GATEWAY_DB_PATH="./data/codex-gateway.db" \
-pnpm user:create <username> <password>
+pnpm user:create -- --admin <username> <password>
 ```
+
+Regular users are created by an administrator in Settings → User management, where they can also be assigned a managed host.
 
 `CODEX_GATEWAY_CONFIG_SECRET` encrypts stored connection config. Use a stable, sufficiently long secret in production. Changing it makes existing encrypted config unreadable.
 

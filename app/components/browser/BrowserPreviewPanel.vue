@@ -7,6 +7,7 @@ import {
   WebPreviewNavigationButton,
   WebPreviewUrl,
 } from "@codex-gateway/ai-elements/web-preview";
+import { Button } from "@codex-gateway/ui/button";
 import { storeToRefs } from "pinia";
 import { computed, ref, watch } from "vue";
 import { useGatewayBrowserStore } from "@/stores/gateway-browser";
@@ -159,15 +160,15 @@ async function toggleInsecureTls() {
     >
       <div class="flex flex-col items-center gap-3">
         <span>{{ $t("app.browserPreviewReplaced") }}</span>
-        <button
+        <Button
           type="button"
+          variant="outline"
           data-testid="browser-reactivate"
-          class="rounded-md border border-hairline px-3 py-1.5 font-medium text-ink hover:bg-canvas-soft"
           :disabled="opening"
           @click="reactivate"
         >
           {{ $t("app.browserReactivate") }}
-        </button>
+        </Button>
       </div>
     </div>
     <div v-else-if="opening" class="grid min-h-0 flex-1 place-items-center text-ink-muted">

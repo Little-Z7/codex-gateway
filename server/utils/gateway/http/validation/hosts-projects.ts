@@ -14,6 +14,7 @@ export const hostBaseSchema = z
     privateKey: z.string().nullable().optional(),
     password: z.string().nullable().optional(),
     proxyUrl: z.string().trim().nullable().optional().default("socks5h://127.0.0.1:7890"),
+    managed: z.boolean().default(false),
   })
   .strict();
 

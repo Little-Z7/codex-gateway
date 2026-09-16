@@ -131,5 +131,23 @@ function migrate(db: DatabaseSync) {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_tmux_monitors_active_location
       ON tmux_monitors(user_id, host_id, session_name, window_index, pane_index)
       WHERE status = 'active';
+
+    CREATE TABLE IF NOT EXISTS managed_hosts (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      host_id INTEGER NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('ready','provisioning','error','removed')),
+      container_name TEXT UNIQUE,
+      container_id TEXT,
+      volume_name TEXT,
+      ssh_public_key TEXT,
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
+
+  const userColumns = db.prepare("PRAGMA table_info(users)").all();
+  if (!userColumns.some((column) => column.name === "role")) {
+    db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
+  }
 }
