@@ -57,7 +57,7 @@ export async function fetchRemoteFile(
     headers.set("if-none-match", etag);
   }
   const query = new URLSearchParams({ hostId: String(hostId), path });
-  const response = await fetch(`/api/remote/files?${query.toString()}`, {
+  const response = await fetch(gatewayPath(`api/remote/files?${query.toString()}`), {
     headers,
     signal,
     // ETag validation is explicit; the browser cache must not issue a second unauthenticated fetch.
@@ -98,7 +98,7 @@ export async function writeRemoteTextFile(
   if (etag !== null) headers.set("if-match", etag);
   if (force) headers.set("x-codex-force-overwrite", "true");
   const query = new URLSearchParams({ hostId: String(hostId), path });
-  const response = await fetch(`/api/remote/files?${query.toString()}`, {
+  const response = await fetch(gatewayPath(`api/remote/files?${query.toString()}`), {
     method: "PUT",
     headers,
     body: text,

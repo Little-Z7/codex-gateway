@@ -19,7 +19,7 @@ const imageSource = computed(() => {
     hostId: String(props.hostId),
     path: props.item.path,
   });
-  return `/api/remote/images?${query.toString()}`;
+  return gatewayPath(`api/remote/images?${query.toString()}`);
 });
 
 const label = computed(() => String(props.item.path || t("app.imageView")));

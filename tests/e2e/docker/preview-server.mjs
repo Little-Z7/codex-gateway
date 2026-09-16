@@ -30,7 +30,7 @@ const server = createServer((request, response) => {
     <script src="/missing-preview-entry.js"></script>
     <script>
       fetch('/api/message').then(r=>r.json()).then(({message})=>document.querySelector('#http').textContent=message);
-      const socket=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/api/browser-preview/websocket?path=/socket');
+      const socket=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/socket');
       socket.addEventListener('open',()=>socket.send('remote-preview-websocket'));
       socket.addEventListener('message',event=>document.querySelector('#ws').textContent=event.data);
       socket.addEventListener('error',()=>document.querySelector('#ws').textContent='websocket-error');

@@ -4,6 +4,8 @@ import http, {
   type ServerResponse,
 } from "node:http";
 import { text as consumeText } from "node:stream/consumers";
+import { TLSSocket } from "node:tls";
+import { useRuntimeConfig } from "nitropack/runtime";
 import { z } from "zod";
 import { browserPreviewEvents } from "./browser-preview-events";
 import { BrowserPreviewHttpAgent } from "./browser-preview-http-agent";
@@ -18,12 +20,16 @@ const BOOTSTRAP_PATH = "/_gateway/preview/bootstrap";
 const SESSION_PATH = "/_gateway/preview/session";
 const ticketRequestSchema = z.object({ ticket: z.string().min(1), sessionId: z.uuid() }).strict();
 
+/**
+ * Handles every request that does not belong to the Gateway UI itself. Preview sessions are
+ * same-origin with the Gateway and are routed purely by the HttpOnly cookie issued during the
+ * ticket exchange, so the request path is forwarded upstream untouched.
+ */
 export async function handleBrowserPreviewRequest(
   request: IncomingMessage,
   response: ServerResponse,
 ) {
   try {
-    const hostname = requestHostname(request);
     // Match only the pathname for Gateway-owned control routes. The bootstrap carries sessionId
     // in its query string, while ordinary preview requests must retain their complete URL when
     // forwarded upstream.
@@ -33,11 +39,17 @@ export async function handleBrowserPreviewRequest(
       return;
     }
     if (pathname === SESSION_PATH && request.method === "POST") {
-      await exchangeTicket(request, response, hostname);
+      await exchangeTicket(request, response);
       return;
     }
-    const session = browserPreviewManager.resolve(hostname, readCookie(request, authCookieName()));
+    const cookieToken = readCookie(request, authCookieName());
+    const session = browserPreviewManager.resolve(cookieToken);
     if (!session) {
+      if (pathname === "/" && cookieToken === undefined) {
+        response.writeHead(302, { location: useRuntimeConfig().app.baseURL });
+        response.end();
+        return;
+      }
       sendText(response, 401, "Browser preview session expired. Reopen the Browser panel.");
       return;
     }
@@ -79,7 +91,7 @@ async function proxyHttpRequest(
     const upstream = http.request(
       {
         method: request.method,
-        path: browserPreviewRequestUrl(request),
+        path: request.url ?? "/",
         headers,
         agent,
         host: session.target.hostname,
@@ -89,7 +101,7 @@ async function proxyHttpRequest(
         upstreamResponse = incoming;
         publishUpstreamFailureResponse(session, request, incoming.statusCode ?? 502);
         const responseHeaders = { ...incoming.headers };
-        rewriteLocation(session, responseHeaders);
+        rewriteLocation(session, request, responseHeaders);
         stripCookieDomains(responseHeaders);
         publishFramePolicy(session, responseHeaders);
         response.writeHead(incoming.statusCode ?? 502, responseHeaders);
@@ -160,7 +172,7 @@ function logUpstreamFailure(
     sessionId: session.sessionId,
     targetOrigin: session.target.origin,
     requestMethod: request.method,
-    requestPath: browserPreviewRequestUrl(request),
+    requestPath: request.url ?? "/",
     message: error.message,
   });
 }
@@ -197,14 +209,35 @@ function translatePreviewUrl(session: BrowserPreviewSession, value: string) {
   }
 }
 
-function rewriteLocation(session: BrowserPreviewSession, headers: http.OutgoingHttpHeaders) {
+function rewriteLocation(
+  session: BrowserPreviewSession,
+  request: IncomingMessage,
+  headers: http.OutgoingHttpHeaders,
+) {
   if (typeof headers.location !== "string") return;
   try {
     const location = new URL(headers.location, session.target);
     if (location.origin === session.target.origin) {
-      headers.location = `${session.previewOrigin}${location.pathname}${location.search}${location.hash}`;
+      headers.location = `${previewRequestOrigin(request)}${location.pathname}${location.search}${location.hash}`;
     }
   } catch {}
+}
+
+/**
+ * The preview shares the Gateway origin, so redirects that point back at the target origin are
+ * rewritten to the same origin and host the browser just used.
+ */
+function previewRequestOrigin(request: IncomingMessage) {
+  const forwarded = request.headers["x-forwarded-proto"];
+  const forwardedScheme =
+    typeof forwarded === "string" ? (forwarded.split(",")[0]?.trim() ?? "") : "";
+  const scheme =
+    forwardedScheme !== ""
+      ? forwardedScheme
+      : request.socket instanceof TLSSocket
+        ? "https"
+        : "http";
+  return `${scheme}://${request.headers.host ?? ""}`;
 }
 
 function stripCookieDomains(headers: http.OutgoingHttpHeaders) {
@@ -242,14 +275,9 @@ function requestDestination(request: IncomingMessage) {
   return typeof destination === "string" && destination !== "" ? destination : "unknown";
 }
 
-async function exchangeTicket(
-  request: IncomingMessage,
-  response: ServerResponse,
-  hostname: string,
-) {
+async function exchangeTicket(request: IncomingMessage, response: ServerResponse) {
   const body = ticketRequestSchema.parse(JSON.parse(await consumeText(request)));
   const result = browserPreviewManager.exchangeTicket(
-    hostname,
     body.ticket,
     body.sessionId,
     readCookie(request, authCookieName()),
@@ -276,17 +304,8 @@ const ticket=location.hash.slice(1);const sessionId=new URL(location.href).searc
 </script>`);
 }
 
-function requestHostname(request: IncomingMessage) {
-  return (String(request.headers.host ?? "").split(":", 1)[0] ?? "").toLowerCase();
-}
-
 function requestPathname(request: IncomingMessage) {
-  return new URL(browserPreviewRequestUrl(request), "http://browser-preview.invalid").pathname;
-}
-
-function browserPreviewRequestUrl(request: IncomingMessage) {
-  const original = request.headers["x-browser-preview-path"];
-  return typeof original === "string" && original !== "" ? original : (request.url ?? "/");
+  return new URL(request.url ?? "/", "http://browser-preview.invalid").pathname;
 }
 
 export function readPreviewCookie(value: string | undefined) {

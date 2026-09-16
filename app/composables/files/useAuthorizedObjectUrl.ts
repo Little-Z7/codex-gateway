@@ -70,5 +70,5 @@ export function useAuthorizedObjectUrl(source: Ref<string> | ComputedRef<string>
 }
 
 function isPublicImageSource(source: string) {
-  return /^blob:|^data:|^https?:\/\//i.test(source) && !source.startsWith("/api/");
+  return /^blob:|^data:|^https?:\/\//i.test(source) && !isGatewayApiPath(source);
 }

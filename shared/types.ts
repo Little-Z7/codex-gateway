@@ -47,6 +47,7 @@ export type {
 export type { ModelListResult, ModelRecord } from "./types/models";
 export type { TerminalOpenTarget, TerminalScope, TerminalSessionSnapshot } from "./types/terminal";
 export type {
+  BrowserPreviewCloseReason,
   BrowserPreviewResourceFailure,
   BrowserPreviewSessionSnapshot,
   BrowserPreviewTarget,

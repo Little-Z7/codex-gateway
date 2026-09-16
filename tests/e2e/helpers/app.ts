@@ -36,7 +36,9 @@ export async function authenticatedFetch<T>(
     if (token === null || token === "") {
       throw new Error("Missing E2E auth token");
     }
-    const response = await fetch(request.url, {
+    // The Gateway UI and API live under the app baseURL; /api/* is shorthand for /gw/api/*.
+    const url = request.url.startsWith("/api/") ? `/gw${request.url}` : request.url;
+    const response = await fetch(url, {
       method: request.method ?? "GET",
       headers: {
         authorization: `Bearer ${token}`,

@@ -1147,7 +1147,7 @@ test("history prepend and current Agent streaming preserve the same detached anc
 function trackThreadTurnsHttpRequests(page: Page) {
   let count = 0;
   page.on("request", (request) => {
-    if (new URL(request.url()).pathname === "/api/threads/turns") {
+    if (new URL(request.url()).pathname === "/gw/api/threads/turns") {
       count += 1;
     }
   });

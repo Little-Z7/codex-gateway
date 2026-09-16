@@ -5,7 +5,7 @@ import { authenticatedFetch, openApp } from "./helpers/app";
 test("requires bearer auth for protected HTTP APIs", async ({ page }) => {
   await openApp(page);
   const unauthorized = await page.evaluate(async () => {
-    const response = await fetch("/api/config/export");
+    const response = await fetch("/gw/api/config/export");
     return {
       ok: response.ok,
       status: response.status,
@@ -40,7 +40,7 @@ test("returns to login when the current session is revoked", async ({ page }) =>
   // Revoke through HTTP without touching browser storage. The authenticated realtime connection
   // must deliver the policy close that clears the stale local session in the same way as expiry.
   const revokeStatus = await page.evaluate(async (authorization) => {
-    const response = await fetch("/api/auth/logout", {
+    const response = await fetch("/gw/api/auth/logout", {
       method: "POST",
       headers: { authorization: `Bearer ${authorization}` },
     });
@@ -50,7 +50,7 @@ test("returns to login when the current session is revoked", async ({ page }) =>
 
   await expect(page.getByRole("heading", { name: "登录 Codex Gateway" })).toBeVisible();
   const revokedStatus = await page.evaluate(async (authorization) => {
-    const response = await fetch("/api/config/export", {
+    const response = await fetch("/gw/api/config/export", {
       headers: { authorization: `Bearer ${authorization}` },
     });
     return response.status;

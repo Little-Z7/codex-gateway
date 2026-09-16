@@ -149,7 +149,7 @@ test("fans out a real remote app-server thread to multiple browser clients acros
   const secondPage = await secondContext.newPage();
   let remoteImageRequestCount = 0;
   secondPage.on("request", (request) => {
-    if (new URL(request.url()).pathname === "/api/remote/images") {
+    if (new URL(request.url()).pathname === "/gw/api/remote/images") {
       remoteImageRequestCount += 1;
     }
   });
@@ -320,7 +320,7 @@ test("fans out a real remote app-server thread to multiple browser clients acros
 
 function isTokenlessRealtimeUrl(rawUrl: string) {
   const url = new URL(rawUrl);
-  return url.pathname === "/api/realtime" && url.search === "";
+  return url.pathname === "/gw/api/realtime" && url.search === "";
 }
 
 function firstIntermediateStepsToggle(page: Page) {

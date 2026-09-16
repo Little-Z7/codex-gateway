@@ -16,7 +16,8 @@ import BrowserPreviewDiagnostics from "./BrowserPreviewDiagnostics.vue";
 
 const props = defineProps<{ panelId: string }>();
 const browser = useGatewayBrowserStore();
-const { panels, sessions, frameWarnings, resourceFailures } = storeToRefs(browser);
+const { panels, sessions, replacedSessions, frameWarnings, resourceFailures } =
+  storeToRefs(browser);
 const opening = ref(false);
 const error = ref("");
 const frameKey = ref(0);
@@ -24,6 +25,9 @@ const frameUrl = ref("");
 const panel = computed(() => panels.value[props.panelId] ?? null);
 const session = computed(() =>
   Object.values(sessions.value).find((item) => item.panelId === props.panelId),
+);
+const replaced = computed(() =>
+  session.value ? replacedSessions.value[session.value.sessionId] === true : false,
 );
 const warning = computed(() =>
   session.value ? frameWarnings.value[session.value.sessionId] : undefined,
@@ -69,9 +73,25 @@ function reload() {
   frameKey.value += 1;
 }
 
+// The preview shares this origin and the proxy forwards the path untouched, so the external link
+// and reload URL are just the target's path on this origin.
 function previewTargetUrl(activeSession: NonNullable<typeof session.value>) {
   const target = new URL(activeSession.targetUrl);
-  return `${activeSession.previewOrigin}${target.pathname}${target.search}${target.hash}`;
+  return `${target.pathname}${target.search}${target.hash}`;
+}
+
+async function reactivate() {
+  const target = panel.value;
+  if (!target || opening.value) return;
+  opening.value = true;
+  error.value = "";
+  try {
+    await openBrowserPreview(target);
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    opening.value = false;
+  }
 }
 
 async function toggleInsecureTls() {
@@ -119,7 +139,12 @@ async function toggleInsecureTls() {
     >
       <ShieldAlertIcon class="size-4 shrink-0" />
       <span class="min-w-0 flex-1 truncate">{{ $t("app.browserFrameBlocked") }}</span>
-      <a v-if="session" :href="session.previewOrigin" target="_blank" class="font-medium underline">
+      <a
+        v-if="session"
+        :href="previewTargetUrl(session)"
+        target="_blank"
+        class="font-medium underline"
+      >
         {{ $t("app.openExternally") }}
       </a>
     </div>
@@ -128,7 +153,24 @@ async function toggleInsecureTls() {
       :failures="failures"
       @dismiss="browser.clearResourceFailures(session.sessionId)"
     />
-    <div v-if="opening" class="grid min-h-0 flex-1 place-items-center text-ink-muted">
+    <div
+      v-if="session && replaced"
+      class="grid min-h-0 flex-1 place-items-center p-6 text-center text-sm text-ink-muted"
+    >
+      <div class="flex flex-col items-center gap-3">
+        <span>{{ $t("app.browserPreviewReplaced") }}</span>
+        <button
+          type="button"
+          data-testid="browser-reactivate"
+          class="rounded-md border border-hairline px-3 py-1.5 font-medium text-ink hover:bg-canvas-soft"
+          :disabled="opening"
+          @click="reactivate"
+        >
+          {{ $t("app.browserReactivate") }}
+        </button>
+      </div>
+    </div>
+    <div v-else-if="opening" class="grid min-h-0 flex-1 place-items-center text-ink-muted">
       <LoaderCircleIcon class="size-5 animate-spin" />
     </div>
     <div v-else-if="error" class="grid min-h-0 flex-1 place-items-center p-6 text-sm text-danger">

@@ -3,7 +3,7 @@ export interface RemoteFileLinkTarget {
   line: number | null;
 }
 
-const browserOwnedPath = /^(?:\/$|\/(?:_nuxt|api|favicon\.ico|robots\.txt)(?:\/|$))/;
+const browserOwnedPath = /^(?:\/$|\/(?:_nuxt|_gateway|api|favicon\.ico|robots\.txt)(?:\/|$))/;
 
 export function parseRemoteFileLink(href: string, baseHref: string): RemoteFileLinkTarget | null {
   let url: URL;
@@ -19,7 +19,16 @@ export function parseRemoteFileLink(href: string, baseHref: string): RemoteFileL
   }
 
   const decodedPath = decodeURIComponent(url.pathname);
-  const { path, line } = splitLineSuffix(decodedPath);
+  // Relative links inside remote Markdown resolve under the app baseURL (/gw/), so strip the
+  // Gateway prefix before deciding whether the link targets a remote file.
+  const gatewayPrefix = useRuntimeConfig().app.baseURL.replace(/\/$/, "");
+  const remotePath =
+    decodedPath === gatewayPrefix
+      ? "/"
+      : decodedPath.startsWith(`${gatewayPrefix}/`)
+        ? decodedPath.slice(gatewayPrefix.length)
+        : decodedPath;
+  const { path, line } = splitLineSuffix(remotePath);
   if (browserOwnedPath.test(path)) {
     return null;
   }

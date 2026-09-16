@@ -1,4 +1,3 @@
-import type { Message, Peer } from "crossws";
 import WebSocket, { type RawData } from "ws";
 import ensureError from "ensure-error";
 import {
@@ -9,18 +8,30 @@ import {
   BROWSER_PREVIEW_WEBSOCKET_CONNECT_TIMEOUT_MS,
 } from "./browser-preview-websocket-limits";
 
-type BrowserPreviewFrame = string | Uint8Array;
+export type BrowserPreviewFrame = string | Uint8Array;
+
+/**
+ * The browser-facing end of the bridge. Preview upgrades are accepted by a `ws` WebSocketServer
+ * in the custom Node entry, so this is the minimal surface the bridge needs — intentionally a
+ * subset of what both `ws` WebSocket and crossws Peer can satisfy.
+ */
+export interface BrowserPreviewDownstream {
+  readonly bufferedAmount: number;
+  send(frame: BrowserPreviewFrame): void;
+  close(code?: number, reason?: string): void;
+  waitForDrain(options: { threshold: number; signal: AbortSignal }): Promise<void>;
+}
 
 interface BrowserPreviewWebSocketBridgeOptions {
-  peer: Peer;
+  downstream: BrowserPreviewDownstream;
   connectUpstream: () => Promise<WebSocket>;
   onBridgeError: (error: Error) => void;
 }
 
 /**
- * Bridges the two standard WebSocket implementations without adding another protocol. crossws
- * supplies waitForDrain() for the browser side and ws supplies bufferedAmount for the upstream;
- * the bounded queues only cover the periods where either endpoint cannot currently accept data.
+ * Bridges the browser WebSocket to the remote upstream without adding another protocol. The
+ * downstream supplies waitForDrain() and the upstream `ws` socket supplies bufferedAmount; the
+ * bounded queues only cover the periods where either endpoint cannot currently accept data.
  */
 export class BrowserPreviewWebSocketBridge {
   private upstream: WebSocket | undefined;
@@ -40,9 +51,8 @@ export class BrowserPreviewWebSocketBridge {
     void this.connect();
   }
 
-  sendFromPeer(message: Message) {
+  sendFromPeer(frame: BrowserPreviewFrame) {
     if (this.closed) return;
-    const frame = frameFromMessage(message);
     if (this.upstream?.readyState === WebSocket.OPEN) {
       this.sendToUpstream(frame);
       return;
@@ -118,7 +128,7 @@ export class BrowserPreviewWebSocketBridge {
   private sendToPeer(frame: BrowserPreviewFrame) {
     if (
       this.queuedToPeer.size ||
-      this.options.peer.bufferedAmount > BROWSER_PREVIEW_PEER_DRAIN_THRESHOLD_BYTES
+      this.options.downstream.bufferedAmount > BROWSER_PREVIEW_PEER_DRAIN_THRESHOLD_BYTES
     ) {
       if (!this.queuedToPeer.push(frame)) {
         this.fail(1009, "Browser WebSocket buffer limit exceeded");
@@ -139,9 +149,9 @@ export class BrowserPreviewWebSocketBridge {
 
   private async drainPeerQueue() {
     while (!this.closed && this.queuedToPeer.size) {
-      if (this.options.peer.bufferedAmount > BROWSER_PREVIEW_PEER_DRAIN_THRESHOLD_BYTES) {
+      if (this.options.downstream.bufferedAmount > BROWSER_PREVIEW_PEER_DRAIN_THRESHOLD_BYTES) {
         try {
-          await this.options.peer.waitForDrain({
+          await this.options.downstream.waitForDrain({
             threshold: BROWSER_PREVIEW_PEER_DRAIN_THRESHOLD_BYTES,
             signal: this.peerDrainAbort.signal,
           });
@@ -156,14 +166,14 @@ export class BrowserPreviewWebSocketBridge {
 
   private safeSendToPeer(frame: BrowserPreviewFrame) {
     if (
-      this.options.peer.bufferedAmount + frameByteLength(frame) >
+      this.options.downstream.bufferedAmount + frameByteLength(frame) >
       BROWSER_PREVIEW_MAX_WEBSOCKET_BUFFERED_BYTES
     ) {
       this.fail(1009, "Browser WebSocket buffer limit exceeded");
       return;
     }
     try {
-      this.options.peer.send(frame);
+      this.options.downstream.send(frame);
     } catch (error) {
       this.options.onBridgeError(ensureError(error));
       this.fail(1011, "Browser WebSocket failed");
@@ -184,7 +194,7 @@ export class BrowserPreviewWebSocketBridge {
     const upstream = this.upstream;
     this.upstream = undefined;
     if (upstream && upstream.readyState < WebSocket.CLOSING) upstream.close(code, reason);
-    if (code !== undefined) this.options.peer.close(code, reason);
+    if (code !== undefined) this.options.downstream.close(code, reason);
   }
 
   private clearConnectTimeout() {
@@ -233,17 +243,13 @@ class BoundedFrameQueue {
   }
 }
 
-function frameFromMessage(message: Message): BrowserPreviewFrame {
-  return typeof message.rawData === "string" ? message.rawData : message.uint8Array();
-}
-
-function binaryFrame(data: RawData): Uint8Array {
+export function binaryFrame(data: RawData): Uint8Array {
   if (Array.isArray(data)) return Buffer.concat(data);
   if (data instanceof ArrayBuffer) return new Uint8Array(data);
   return data;
 }
 
-function textFrame(data: RawData) {
+export function textFrame(data: RawData) {
   if (Array.isArray(data)) return Buffer.concat(data).toString("utf8");
   if (data instanceof ArrayBuffer) return Buffer.from(data).toString("utf8");
   return data.toString("utf8");

@@ -79,6 +79,17 @@ export function subscribeBrowserPreviewEvents(peer: RealtimePeer) {
   state.browserPreviewUnsubscribe = browserPreviewEvents.subscribe(
     authenticatedUserId(peer),
     (event) => {
+      if (event.type === "session-closed") {
+        // Session eviction is browser-scoped: only the page that owned the replaced session needs
+        // the overlay; other tabs of the same user keep their own preview state.
+        if (event.ownerId !== state.browserOwnerId) return;
+        sendRealtimePeerMessage(peer, {
+          type: "browser.sessionClosed",
+          sessionId: event.sessionId,
+          reason: event.reason,
+        });
+        return;
+      }
       if (event.type === "frame-policy") {
         sendRealtimePeerMessage(peer, {
           type: "browser.framePolicyWarning",

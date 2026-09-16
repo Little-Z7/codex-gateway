@@ -47,7 +47,7 @@ function imageSource(image: { type: string; url: string; path: string }) {
       hostId: String(props.hostId),
       path: image.path,
     });
-    return `/api/remote/images?${query.toString()}`;
+    return gatewayPath(`api/remote/images?${query.toString()}`);
   }
   return "";
 }

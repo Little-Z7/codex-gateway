@@ -24,7 +24,7 @@ export async function installRealtimeSocketProbe(page: Page) {
     class TrackedWebSocket extends OriginalWebSocket {
       constructor(url: string | URL, protocols?: string | string[]) {
         super(url, protocols);
-        if (new URL(String(url), window.location.href).pathname !== "/api/realtime") {
+        if (new URL(String(url), window.location.href).pathname !== "/gw/api/realtime") {
           return;
         }
         probe.sockets.add(this);

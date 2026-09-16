@@ -197,7 +197,6 @@ const browserSessionSchema = z
     panelId: nonEmptyString,
     targetUrl: nonEmptyString,
     allowInsecureTls: z.boolean().optional(),
-    previewOrigin: nonEmptyString,
     bootstrapUrl: nonEmptyString,
     status: z.enum(["open", "closed"]),
   })
@@ -745,6 +744,13 @@ export const realtimeServerMessageSchema: z.ZodType<RealtimeServerMessage> = z.d
       .strict(),
     z
       .object({ type: z.literal("browser.closed"), ...requestIdField, sessionId: nonEmptyString })
+      .strict(),
+    z
+      .object({
+        type: z.literal("browser.sessionClosed"),
+        sessionId: nonEmptyString,
+        reason: z.enum(["replaced"]),
+      })
       .strict(),
     z
       .object({

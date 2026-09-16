@@ -22,7 +22,7 @@ export async function popoutDockItem(
   item: IDockviewPanel | DockviewGroupPanel,
   blockedMessage: { title: string; description: string },
 ) {
-  const opened = await api.addPopoutGroup(item, { popoutUrl: "/popout.html" });
+  const opened = await api.addPopoutGroup(item, { popoutUrl: gatewayPath("popout.html") });
   if (!opened) notifyPopoutBlocked(blockedMessage);
 }
 

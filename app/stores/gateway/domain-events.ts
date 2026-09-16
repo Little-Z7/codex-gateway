@@ -47,6 +47,10 @@ export type GatewayDomainEventMap = {
   "realtime-terminal-error": { sessionId?: string; message: string };
   "realtime-browser-opened": { session: BrowserPreviewSessionSnapshot };
   "realtime-browser-closed": { sessionId: string };
+  "realtime-browser-session-closed": {
+    sessionId: string;
+    reason: "replaced";
+  };
   "realtime-browser-error": { message: string };
   "realtime-browser-frame-warning": { sessionId: string; value: string };
   "realtime-browser-resource-failed": {

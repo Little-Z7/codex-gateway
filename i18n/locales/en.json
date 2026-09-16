@@ -208,6 +208,8 @@
     "browserResourceLoadFailed": "{count} remote request failed | {count} remote requests failed",
     "browserResourceLoadFailedHint": "A remote document, asset, or API request failed. These errors can leave the preview blank or incomplete.",
     "browserAddress": "Preview address",
+    "browserPreviewReplaced": "This preview was opened in another panel. A browser can only keep one active preview at a time.",
+    "browserReactivate": "Reactivate",
     "allowInsecureTls": "Allow insecure TLS for this preview",
     "openExternally": "Open externally",
     "reload": "Reload",

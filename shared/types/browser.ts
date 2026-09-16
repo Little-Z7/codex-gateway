@@ -9,10 +9,11 @@ export interface BrowserPreviewTarget {
 
 export interface BrowserPreviewSessionSnapshot extends BrowserPreviewTarget {
   sessionId: string;
-  previewOrigin: string;
   bootstrapUrl: string;
   status: "open" | "closed";
 }
+
+export type BrowserPreviewCloseReason = "replaced";
 
 export interface BrowserPreviewResourceFailure {
   statusCode: number;

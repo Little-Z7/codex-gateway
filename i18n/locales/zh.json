@@ -208,6 +208,8 @@
     "browserResourceLoadFailed": "远端页面有 {count} 个请求失败",
     "browserResourceLoadFailedHint": "远端文档、资源或 API 请求失败，可能导致预览空白或内容不完整。",
     "browserAddress": "预览地址",
+    "browserPreviewReplaced": "此预览已在其他面板打开。同一浏览器同一时间只能保持一个活跃预览。",
+    "browserReactivate": "重新激活",
     "allowInsecureTls": "允许此预览使用不安全 TLS",
     "openExternally": "外部打开",
     "reload": "重新加载",

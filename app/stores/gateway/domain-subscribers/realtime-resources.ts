@@ -60,6 +60,10 @@ export function registerRealtimeResourceSubscribers() {
   gatewayDomainEvents.on("realtime-browser-closed", ({ sessionId }) => {
     useGatewayBrowserStore().removeSession(sessionId);
   });
+  gatewayDomainEvents.on("realtime-browser-session-closed", ({ sessionId, reason }) => {
+    if (reason === "replaced") useGatewayBrowserStore().markSessionReplaced(sessionId);
+    else useGatewayBrowserStore().removeSession(sessionId);
+  });
   gatewayDomainEvents.on("realtime-browser-error", ({ message }) => {
     useGatewayBootstrapStore().setError(message);
   });

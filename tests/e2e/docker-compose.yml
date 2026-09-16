@@ -85,10 +85,8 @@ services:
       CODEX_GATEWAY_CONFIG_SECRET: e2e-config-secret
       CODEX_GATEWAY_DB_PATH: /workspace/codex-gateway/.data-e2e/codex-gateway.db
       NUXT_IGNORE_LOCK: "1"
-      # Preview origins enter through the nginx sidecar below. This mirrors production so remote
-      # /_nuxt/* assets cannot be intercepted as Gateway public assets before reaching the proxy.
-      BROWSER_PREVIEW_PUBLIC_PORT: "3200"
-      BROWSER_PREVIEW_DOMAIN: 127.0.0.1.nip.io
+      # Previews share the Gateway origin and are routed by cookie; BROWSER_PREVIEW_SCHEME only
+      # keeps the HttpOnly cookie non-Secure over plain HTTP.
       BROWSER_PREVIEW_SCHEME: http
     volumes:
       - build-output:/e2e-output:ro
@@ -108,28 +106,12 @@ services:
       timeout: 3s
       retries: 60
 
-  browser-preview-ingress:
-    image: nginx:1.29-alpine
-    network_mode: service:gateway-under-test
-    depends_on:
-      gateway-under-test:
-        condition: service_healthy
-    volumes:
-      - ./docker/browser-preview-nginx.conf:/etc/nginx/nginx.conf:ro
-    healthcheck:
-      # An unauthenticated preview request correctly returns 401, so readiness probes the listener
-      # rather than treating an application status code as an ingress failure.
-      test: ["CMD", "nc", "-z", "127.0.0.1", "3200"]
-      interval: 1s
-      timeout: 3s
-      retries: 30
-
   test-runner:
     image: codex-gateway-e2e-runner
     mem_limit: 2g
     network_mode: service:gateway-under-test
     depends_on:
-      browser-preview-ingress:
+      gateway-under-test:
         condition: service_healthy
     environment:
       CI: ${CI:-}
@@ -149,7 +131,7 @@ services:
       E2E_CODEX_MODEL: ${E2E_CODEX_MODEL:-gpt-5.6-luna}
       E2E_BARK_SERVER_URL: http://bark-target:8080
       E2E_BARK_REQUEST_LOG: /bark-requests/requests.jsonl
-      PLAYWRIGHT_BASE_URL: http://codex.127.0.0.1.nip.io:3100
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:3100
       HOME: /home/pwuser
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     volumes:
