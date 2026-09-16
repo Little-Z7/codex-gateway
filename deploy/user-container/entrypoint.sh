@@ -20,8 +20,10 @@ if [ -n "${CODEX_GATEWAY_SSH_AUTHORIZED_KEY:-}" ]; then
 fi
 
 # Shared Codex login: symlink rather than copy — Codex rewrites auth.json in place, so the link
-# keeps pointing at the shared file every container can refresh from.
-if [ -d /srv/codex-auth ] && [ -f /srv/codex-auth/auth.json ]; then
+# keeps pointing at the shared file every container can refresh from. Link even when auth.json
+# does not exist yet: an admin can provision before running the shared login, and a dangling
+# link is harmless — Codex creates the target through the symlink on first write.
+if [ -d /srv/codex-auth ]; then
   ln -sfn /srv/codex-auth/auth.json "${HOME_DIR}/.codex/auth.json"
 fi
 

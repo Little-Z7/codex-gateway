@@ -29,7 +29,24 @@ export E2E_SUPPORTED_CODEX_VERSION="$(
 # Per-user workspace containers are created by the gateway through the host Docker socket, so
 # the shared auth dir lives on the host and leftovers are reaped here rather than by compose.
 export E2E_SHARED_AUTH_DIR="${E2E_SHARED_AUTH_DIR:-$(mktemp -d /tmp/codex-gateway-e2e-auth.XXXXXX)}"
-mkdir -p "$E2E_SHARED_AUTH_DIR"
+export E2E_SHARED_DATA_DIR="${E2E_SHARED_DATA_DIR:-$(mktemp -d /tmp/codex-gateway-e2e-data.XXXXXX)}"
+mkdir -p "$E2E_SHARED_AUTH_DIR" "$E2E_SHARED_DATA_DIR"
+# A pre-existing file in the shared dir lets the isolation spec prove two user containers can
+# read each other's writes (PUT /api/remote/files requires an existing file).
+echo "e2e-shared-seed" > "$E2E_SHARED_DATA_DIR/e2e-shared-seed.txt"
+{ [ "$(id -u)" -eq 0 ] && chown -R 1000:1000 "$E2E_SHARED_DATA_DIR" \
+  || sudo -n chown -R 1000:1000 "$E2E_SHARED_DATA_DIR" 2>/dev/null || true; }
+
+# On hosts with a real Codex login, seed the shared auth dir so provisioned containers are
+# immediately usable. Best effort: missing auth or permission errors must not abort the run.
+export E2E_SHARED_AUTH_PRESENT=0
+if [ -f "$E2E_CODEX_HOME/auth.json" ]; then
+  if cp "$E2E_CODEX_HOME/auth.json" "$E2E_SHARED_AUTH_DIR/auth.json" 2>/dev/null \
+    && chmod 600 "$E2E_SHARED_AUTH_DIR/auth.json" 2>/dev/null \
+    && { [ "$(id -u)" -eq 0 ] && chown 1000:1000 "$E2E_SHARED_AUTH_DIR/auth.json" || sudo -n chown 1000:1000 "$E2E_SHARED_AUTH_DIR/auth.json" 2>/dev/null || true; }; then
+    export E2E_SHARED_AUTH_PRESENT=1
+  fi
+fi
 
 cleanup() {
   status=$?
@@ -47,7 +64,7 @@ cleanup() {
   for volume in $(docker volume ls -q --filter "name=codex-e2e-user-"); do
     docker volume rm -f "$volume" >/dev/null 2>&1 || true
   done
-  rm -rf "$E2E_SHARED_AUTH_DIR"
+  rm -rf "$E2E_SHARED_AUTH_DIR" "$E2E_SHARED_DATA_DIR"
 }
 trap cleanup EXIT
 

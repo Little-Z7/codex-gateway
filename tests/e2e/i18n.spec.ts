@@ -78,7 +78,8 @@ test("config JSON editor shows current config by default and scrolls", async ({ 
   await page.getByTestId("settings-toggle").click();
   const settingsPanel = page.getByTestId("settings-panel");
   await expect(settingsPanel.locator(".dv-groupview")).toHaveCount(1);
-  await expect(settingsPanel.getByRole("tab")).toHaveCount(4);
+  // The default e2e account is an admin, so the user-management tab is visible too.
+  await expect(settingsPanel.getByRole("tab")).toHaveCount(5);
   const editor = page.getByTestId("config-json-editor");
   await expect(editor).toContainText('"version"');
   await expect(editor).toContainText('"notifications"');

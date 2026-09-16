@@ -7,6 +7,11 @@
 - `app/stores/`：按领域拆分的 Pinia store；状态和动作放在对应领域，跨领域事件沿用现有 `gateway/domain-events.ts` 等机制，不重新集中到单个 gateway store。
 - `server/api/`、`server/routes/`：Nuxt/Nitro HTTP、WebSocket 和代理入口，浏览器通过 Gateway 访问远端服务。
 - `server/utils/gateway/`：后端 gateway 核心，包括 SSH、Codex app-server RPC、thread broker、运行时索引。
+- `server/nitro/node-entry.mjs`：自定义 Nitro entry，`/gw/` 之外的请求与 WS upgrade 全部走按 cookie 路由的同源预览代理。
+- `server/utils/gateway/provisioning/`：直连 Docker Engine API 的用户容器 provisioning（不引入新依赖）。
+- `server/api/admin/`：admin 角色专用接口（用户管理、托管 host、容器生命周期）。
+- `deploy/`：用户工作区镜像（`deploy/user-container/`）与部署脚本/手册（`deploy/scripts/`、`deploy/README.zh-CN.md`）。
+- Gateway UI 与 API 位于 `app.baseURL=/gw/` 之下，前端拼 URL 统一用 `app/utils/gateway-url.ts` 的 `gatewayPath`。
 - `shared/types.ts`：前后端共享 DTO 和类型。
 - `i18n/locales/`：UI 文案。默认中文，新增可见文案必须同步维护中英文。
 - `tests/e2e/`：Playwright E2E。测试必须走真实 Nuxt server、真实 SSH 环境、真实 Codex app-server。

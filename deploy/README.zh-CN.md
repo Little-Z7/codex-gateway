@@ -5,6 +5,7 @@
 ## 前置条件
 
 - Docker Engine + Compose v2；Gateway 容器需要挂 `/var/run/docker.sock` 来创建用户容器。
+- `bash`、`openssl`；bootstrap 在非 root 下运行时需要 `sudo`（用于把共享目录 chown 到 uid 1000）。
 - Gateway 所在机器能访问 OpenAI（Codex 登录与模型调用）。
 - 安全提示：挂载 docker.sock 等于给 Gateway 宿主机 root 权限，**必须部署在内网或可信反向代理之后**，不要对公网裸露。
 
@@ -13,7 +14,7 @@
 ```
 ./data/codex-gateway.db     # SQLite：用户、会话、加密后的连接配置
 ./data/shared-auth/         # 共享 Codex 登录（auth.json），uid 1000 可写
-./data/shared/              # 可选：所有用户容器都能看到 /data/shared
+./data/shared/              # 所有用户容器都能读写 /data/shared（统一 uid 1000）
 deploy/user-container/      # 用户工作区镜像（openssh + Node 22 + codex）
 deploy/scripts/             # bootstrap.sh / codex-login.sh
 ```
@@ -31,8 +32,8 @@ bootstrap 幂等：生成 `.env`（含随机 `CODEX_GATEWAY_CONFIG_SECRET`）、
 ```bash
 cp .env.example .env          # 按需修改
 docker network create codex-gateway
-CODEX_CLI_VERSION=$(node --experimental-strip-types --input-type=module -e \
-  "import('./server/utils/gateway/infra/codex/codex-version.ts').then(m => process.stdout.write(m.SUPPORTED_CODEX_VERSION))")
+CODEX_CLI_VERSION=$(grep -oE 'SUPPORTED_CODEX_VERSION = "[^"]+"' \
+  server/utils/gateway/infra/codex/codex-version.ts | cut -d'"' -f2)
 docker compose --profile build-only build codex-gateway-user
 docker compose build codex-gateway
 docker compose run --rm codex-gateway node scripts/create-user.mjs --admin admin '<密码>'

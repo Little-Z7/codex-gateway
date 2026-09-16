@@ -96,6 +96,7 @@ services:
       CODEX_GATEWAY_DOCKER_SOCKET: /var/run/docker.sock
       CODEX_GATEWAY_SHARED_AUTH_DIR: ${E2E_SHARED_AUTH_DIR:?E2E_SHARED_AUTH_DIR is required}
       CODEX_GATEWAY_SHARED_AUTH_MOUNT: /srv/codex-auth
+      CODEX_GATEWAY_SHARED_DATA_DIR: ${E2E_SHARED_DATA_DIR:?E2E_SHARED_DATA_DIR is required}
       CODEX_GATEWAY_USER_CONTAINER_PREFIX: codex-e2e-user-
       CODEX_GATEWAY_SANDBOX_MODE: danger-full-access
     volumes:
@@ -145,6 +146,7 @@ services:
       E2E_BARK_REQUEST_LOG: /bark-requests/requests.jsonl
       E2E_GATEWAY_MEMBER_USERNAME: ${E2E_GATEWAY_MEMBER_USERNAME:-e2e-member}
       E2E_GATEWAY_MEMBER_PASSWORD: ${E2E_GATEWAY_MEMBER_PASSWORD:-codex-gateway-e2e-member-password}
+      E2E_SHARED_AUTH_PRESENT: ${E2E_SHARED_AUTH_PRESENT:-0}
       PLAYWRIGHT_BASE_URL: http://127.0.0.1:3100
       HOME: /home/pwuser
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright

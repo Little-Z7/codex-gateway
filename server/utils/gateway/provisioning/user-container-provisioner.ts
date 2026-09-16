@@ -116,7 +116,11 @@ async function provisionContainer(userId: number) {
   const volumeName = userContainerProvisioner.volumeNameFor(user.username);
   const labels = { [MANAGED_LABEL]: "true", [USER_LABEL]: user.username };
 
-  userStore.upsertManagedHost(userId, 0, {
+  // Capture the existing managed host id *before* marking the row as provisioning: writing 0
+  // here would orphan the old config-side host so neither the member (403) nor the admin
+  // managed-host endpoints could ever remove it.
+  const previousHostId = userStore.getManagedHost(userId)?.hostId ?? 0;
+  userStore.upsertManagedHost(userId, previousHostId, {
     status: "provisioning",
     containerName,
     volumeName,
@@ -157,9 +161,8 @@ async function provisionContainer(userId: number) {
 
     const host = await runAsUserConfigMutation(userId, () => {
       // Provisioning replaces any manually configured managed host for this user.
-      const previous = userStore.getManagedHost(userId);
-      if (previous !== null && previous.hostId !== 0) {
-        hostStore.delete(previous.hostId);
+      if (previousHostId !== 0) {
+        hostStore.delete(previousHostId);
       }
       const createdHost = hostStore.create({
         name: "工作区",
@@ -194,7 +197,7 @@ async function provisionContainer(userId: number) {
       containerId,
     });
   } catch (error) {
-    userStore.upsertManagedHost(userId, userStore.getManagedHost(userId)?.hostId ?? 0, {
+    userStore.upsertManagedHost(userId, previousHostId, {
       status: "error",
       containerName,
       volumeName,

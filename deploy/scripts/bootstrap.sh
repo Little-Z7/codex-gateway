@@ -28,15 +28,23 @@ if grep -q "^CODEX_GATEWAY_CONFIG_SECRET=replace-with-a-stable-random-secret" .e
   echo "generated CODEX_GATEWAY_CONFIG_SECRET"
 fi
 
-# Codex CLI version is pinned to the gateway's supported protocol version.
+# Codex CLI version is pinned to the gateway's supported protocol version. Extracted with grep
+# so bootstrap does not need Node/pnpm on the host.
 CODEX_CLI_VERSION="$(
-  node --experimental-strip-types --input-type=module -e \
-    "import('./server/utils/gateway/infra/codex/codex-version.ts').then(({ SUPPORTED_CODEX_VERSION }) => process.stdout.write(SUPPORTED_CODEX_VERSION))"
+  grep -oE 'SUPPORTED_CODEX_VERSION = "[^"]+"' \
+    server/utils/gateway/infra/codex/codex-version.ts | cut -d'"' -f2
 )"
+if [ -z "$CODEX_CLI_VERSION" ]; then
+  echo "could not read SUPPORTED_CODEX_VERSION from codex-version.ts" >&2
+  exit 1
+fi
 set_env CODEX_CLI_VERSION "$CODEX_CLI_VERSION"
 
 mkdir -p data data/shared-auth data/shared
-chown 1000:1000 data/shared-auth data/shared
+# User containers run as uid/gid 1000; shared dirs must be writable by them.
+CHOWN="chown"
+[ "$(id -u)" -ne 0 ] && CHOWN="sudo chown"
+$CHOWN 1000:1000 data/shared-auth data/shared
 chmod 700 data/shared-auth
 
 # Resolve the shared auth dir to an absolute path for compose bind mounts.

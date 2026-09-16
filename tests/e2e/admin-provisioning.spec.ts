@@ -110,3 +110,98 @@ test("admin provisions a workspace container and the member uses it", async ({ p
   expect(members.body).not.toContain(`"${memberName}"`);
   await memberContext.close();
 });
+
+test("provisioning replaces a manually configured managed host without leaving orphans", async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const memberName = `reprov-${Date.now().toString(36)}`.slice(0, 32);
+  const memberPassword = "reprov-member-password";
+
+  await openApp(page);
+
+  // Create a member without auto-provisioning, then give it a manual managed host.
+  const created = await apiStatus(page, {
+    url: "/api/admin/users",
+    method: "POST",
+    body: { username: memberName, password: memberPassword, role: "user", provision: false },
+  });
+  expect(created.status).toBe(200);
+  const memberId = z
+    .object({ user: z.object({ id: z.number() }).loose() })
+    .parse(JSON.parse(created.body)).user.id;
+
+  const manualHost = await apiStatus(page, {
+    url: `/api/admin/users/${memberId}/managed-host`,
+    method: "PUT",
+    body: {
+      name: "manual-managed",
+      sshHost: "ssh-target",
+      port: 22,
+      username: "codex",
+      authMode: "password",
+      password: "codex",
+      proxyUrl: "",
+    },
+  });
+  expect(manualHost.status).toBe(200);
+
+  // Provision over the manual host: the manual host must be removed, not orphaned.
+  const provision = await apiStatus(page, {
+    url: `/api/admin/users/${memberId}/provision`,
+    method: "POST",
+  });
+  expect(provision.status).toBe(200);
+
+  await expect
+    .poll(
+      async () => {
+        const users = await authenticatedFetch(page, { url: "/api/admin/users" }, (value) =>
+          z
+            .object({
+              users: z.array(
+                z
+                  .object({
+                    username: z.string(),
+                    managedHost: z.object({ status: z.string() }).nullable(),
+                  })
+                  .loose(),
+              ),
+            })
+            .loose()
+            .parse(value),
+        );
+        return users.users.find((user) => user.username === memberName)?.managedHost?.status;
+      },
+      { timeout: 180_000, intervals: [2_000] },
+    )
+    .toBe("ready");
+
+  const memberContext = await browser.newContext();
+  const memberPage = await memberContext.newPage();
+  await openApp(memberPage, {
+    resetConfig: false,
+    credentials: { username: memberName, password: memberPassword },
+  });
+  const hosts = await authenticatedFetch(memberPage, { url: "/api/hosts" }, (value) =>
+    z
+      .array(
+        z
+          .object({ id: z.number(), managed: z.boolean(), name: z.string(), sshHost: z.string() })
+          .loose(),
+      )
+      .parse(value),
+  );
+  expect(hosts).toHaveLength(1);
+  expect(hosts[0]!.managed).toBe(true);
+  expect(hosts[0]!.sshHost).toBe(`codex-e2e-user-${memberName}`);
+
+  // Cleanup: delete the member (drops container + volume).
+  const removed = await apiStatus(page, {
+    url: `/api/admin/users/${memberId}`,
+    method: "DELETE",
+  });
+  expect(removed.status).toBe(200);
+  await memberContext.close();
+});
