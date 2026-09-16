@@ -7,8 +7,8 @@ import { runWithGatewayUser } from "../../../../utils/gateway/state/memory";
 import { ensureUserConfigLoaded } from "../../../../utils/gateway/http/errors";
 import { hostStore } from "../../../../utils/gateway/state/hosts";
 
-// Returns the managed host record (including stored secrets) so the admin dialog can prefill the
-// connection form. Admins already own every member's connection config through this endpoint.
+// Returns the managed host record without secrets so the admin dialog can prefill the connection
+// form; secrets stay server-side and are preserved on update when the form submits nulls.
 export default defineGatewayEventHandler((event) => {
   requireAdmin(event);
   const id = Number(getRouterParam(event, "id"));
@@ -16,6 +16,6 @@ export default defineGatewayEventHandler((event) => {
   const managed = requireRecord(userStore.getManagedHost(id), "Managed host not found");
   return runWithGatewayUser(id, () => {
     ensureUserConfigLoaded(id);
-    return requireRecord(hostStore.getWithSecret(managed.hostId), "Managed host not found");
+    return requireRecord(hostStore.get(managed.hostId), "Managed host not found");
   });
 });

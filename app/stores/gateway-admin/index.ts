@@ -8,6 +8,11 @@ export interface AdminManagedHostSummary {
   lastError: string | null;
 }
 
+export interface AdminContainerSummary {
+  state: "running" | "exited" | "missing" | "unknown";
+  name: string | null;
+}
+
 export interface AdminUserSummary {
   id: number;
   username: string;
@@ -15,10 +20,25 @@ export interface AdminUserSummary {
   isActive: boolean;
   createdAt: string;
   managedHost: AdminManagedHostSummary | null;
+  container: AdminContainerSummary | null;
+}
+
+export interface ProvisioningDiagnostics {
+  enabled: boolean;
+  image: string;
+  network: string | null;
+  sharedAuthDir: string | null;
+  sharedDataDir: string | null;
+  imagePresent: boolean;
+  networkPresent: boolean;
+  authFilePresent: boolean;
+  dockerReachable: boolean;
+  error: string | null;
 }
 
 export const useGatewayAdminStore = defineStore("gateway-admin", () => {
   const users = ref<AdminUserSummary[]>([]);
+  const provisioning = ref<ProvisioningDiagnostics | null>(null);
   const loading = ref(false);
 
   async function listUsers() {
@@ -32,7 +52,17 @@ export const useGatewayAdminStore = defineStore("gateway-admin", () => {
     }
   }
 
-  async function createUser(input: { username: string; password: string; role: string }) {
+  async function loadProvisioning() {
+    provisioning.value = await gatewayApi<ProvisioningDiagnostics>("/api/admin/provisioning");
+    return provisioning.value;
+  }
+
+  async function createUser(input: {
+    username: string;
+    password: string;
+    role: string;
+    provision?: boolean;
+  }) {
     await gatewayApi("/api/admin/users", { method: "POST", body: input });
     await listUsers();
   }
@@ -45,8 +75,38 @@ export const useGatewayAdminStore = defineStore("gateway-admin", () => {
     await listUsers();
   }
 
-  async function deleteUser(userId: number) {
-    await gatewayApi(`/api/admin/users/${userId}`, { method: "DELETE" });
+  async function deleteUser(userId: number, options: { keepVolume?: boolean } = {}) {
+    await gatewayApi(`/api/admin/users/${userId}?keepVolume=${options.keepVolume === true}`, {
+      method: "DELETE",
+    });
+    await listUsers();
+  }
+
+  async function provisionUser(userId: number, options: { recreate?: boolean } = {}) {
+    await gatewayApi(
+      `/api/admin/users/${userId}/provision?recreate=${options.recreate === true ? 1 : 0}`,
+      {
+        method: "POST",
+      },
+    );
+    await listUsers();
+  }
+
+  async function deprovisionUser(userId: number, options: { keepVolume?: boolean } = {}) {
+    await gatewayApi(
+      `/api/admin/users/${userId}/provision?keepVolume=${options.keepVolume === true}`,
+      { method: "DELETE" },
+    );
+    await listUsers();
+  }
+
+  async function startContainer(userId: number) {
+    await gatewayApi(`/api/admin/users/${userId}/container/start`, { method: "POST" });
+    await listUsers();
+  }
+
+  async function stopContainer(userId: number) {
+    await gatewayApi(`/api/admin/users/${userId}/container/stop`, { method: "POST" });
     await listUsers();
   }
 
@@ -62,11 +122,17 @@ export const useGatewayAdminStore = defineStore("gateway-admin", () => {
 
   return {
     users,
+    provisioning,
     loading,
     listUsers,
+    loadProvisioning,
     createUser,
     updateUser,
     deleteUser,
+    provisionUser,
+    deprovisionUser,
+    startContainer,
+    stopContainer,
     putManagedHost,
     deleteManagedHost,
   };

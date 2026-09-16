@@ -103,6 +103,7 @@ export function runtimeConfigFromMemory(): GatewayConfig {
     hosts: state.hosts.map((host) => ({
       ...host,
       hasPassword: Boolean(host.password),
+      hasPrivateKey: Boolean(host.privateKey),
     })),
     projects: projectStore.listConfigured(),
     pinnedThreads: state.pinnedThreads,

@@ -246,6 +246,7 @@ export function buildGatewayMemoryState(config: GatewayConfig): GatewayMemorySta
       ...host,
       proxyUrl: trimmedOrNull(host.proxyUrl),
       hasPassword: typeof host.password === "string" && host.password.length > 0,
+      hasPrivateKey: typeof host.privateKey === "string" && host.privateKey.length > 0,
     })),
     projects: (config.projects ?? []).map((project) => ({
       ...project,

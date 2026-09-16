@@ -174,18 +174,10 @@ Prerequisites: Docker with Compose, Git, and network access from Gateway to the 
 ```bash
 git clone --recurse-submodules https://github.com/yunhaoli24/codex-gateway.git
 cd codex-gateway
-
-cp .env.example .env
-# Replace CODEX_GATEWAY_CONFIG_SECRET in .env with: openssl rand -hex 32
-
-docker network create web-common 2>/dev/null || true
-docker compose build
-docker compose run --rm codex-gateway \
-  node scripts/create-user.mjs --admin admin '<a-password-with-at-least-8-characters>'
-docker compose up -d
+./deploy/scripts/bootstrap.sh <admin-username> '<a-password-with-at-least-8-characters>'
 ```
 
-Open the service through your reverse proxy, sign in with the manually created account, and add the first SSH host from Settings. The bundled Compose file intentionally exposes port `3000` only to the external `web-common` Docker network.
+bootstrap generates `.env` (filling `CODEX_GATEWAY_CONFIG_SECRET` and `CODEX_CLI_VERSION`), builds the Gateway and user-workspace images, creates the admin account, and starts the service on port `3000`. See `deploy/README.zh-CN.md` for the full deployment guide (shared Codex login, provisioning, operations).
 
 ## Local Development
 
@@ -213,6 +205,10 @@ Environment variables:
 | `HOST` | No | Nuxt listen host. Docker uses `0.0.0.0`. |
 | `PORT` | No | Nuxt listen port. Docker uses `3000`. |
 | `BROWSER_PREVIEW_SCHEME` | No | Public scheme of the Gateway origin, `https` by default. Use `http` only for local E2E/development. |
+| `CODEX_GATEWAY_PROVISIONING` | No | `docker` enables per-user container workspaces, `off` (default) disables it. |
+| `CODEX_GATEWAY_DOCKER_NETWORK` | Required for provisioning | Docker network shared by the Gateway and user containers. |
+| `CODEX_GATEWAY_SHARED_AUTH_DIR` | Required for provisioning | Host directory holding the shared Codex login, mounted at `/srv/codex-auth` in user containers. |
+| `CODEX_GATEWAY_USER_IMAGE` | No | User workspace image name, default `codex-gateway-user:latest`. |
 
 Create an admin user:
 

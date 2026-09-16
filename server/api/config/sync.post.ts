@@ -9,7 +9,17 @@ import { userConfigMutationService } from "../../utils/gateway/config/user-confi
 export default defineGatewayConfigMutationHandler(async (event) => {
   const userId = event.context.auth!.user.id;
   const config = await readValidatedBody(event, parseGatewayConfig);
-  assertManagedHostsUnchanged(hostStore.listWithSecret(), config);
+  const currentHosts = hostStore.listWithSecret();
+  assertManagedHostsUnchanged(currentHosts, config);
+  // Export strips managed-host secrets, so a payload that round-trips through export carries
+  // `null` credentials. Restore the stored records before replacing state or the import would
+  // erase the container keys.
+  const managedById = new Map(
+    currentHosts.filter((host) => host.managed).map((host) => [host.id, host]),
+  );
+  config.hosts = config.hosts.map((host) =>
+    host.managed ? (managedById.get(host.id) ?? host) : host,
+  );
   return userConfigMutationService.commit(userId, () => {
     runtimeConfigStore.replace(config);
     return runtimeConfigStore.export();

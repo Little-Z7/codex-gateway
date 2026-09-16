@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { KeyRoundIcon, PlusIcon, Trash2Icon } from "@lucide/vue";
+import { KeyRoundIcon, Loader2Icon, PlusIcon, Trash2Icon } from "@lucide/vue";
 import { storeToRefs } from "pinia";
 import {
   AlertDialog,
@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from "@codex-gateway/ui/select";
 import { toast } from "@codex-gateway/ui/sonner";
+import { Switch } from "@codex-gateway/ui/switch";
 import {
   Table,
   TableBody,
@@ -50,11 +51,11 @@ import { messageFromError, errorMessageLabels } from "@/stores/gateway/thread-ut
 
 const { t } = useI18n();
 const admin = useGatewayAdminStore();
-const { users } = storeToRefs(admin);
+const { users, provisioning } = storeToRefs(admin);
 const errorLabels = computed(() => errorMessageLabels(t));
 
 const createOpen = ref(false);
-const createForm = ref({ username: "", password: "", role: "user" });
+const createForm = ref({ username: "", password: "", role: "user", provision: true });
 const createSaving = ref(false);
 
 const passwordTarget = ref<AdminUserSummary | null>(null);
@@ -62,7 +63,12 @@ const passwordValue = ref("");
 const passwordSaving = ref(false);
 
 const deleteTarget = ref<AdminUserSummary | null>(null);
+const deleteKeepVolume = ref(false);
 const deleting = ref(false);
+
+const containerTarget = ref<AdminUserSummary | null>(null);
+const containerKeepVolume = ref(false);
+const containerBusy = ref(false);
 
 const managedTarget = ref<AdminUserSummary | null>(null);
 const managedForm = ref(emptyHostConnectionForm());
@@ -73,8 +79,39 @@ const removeManagedSaving = ref(false);
 
 const busy = ref<number | null>(null);
 
+// While any user's container is provisioning or transitioning, refresh the list on a short
+// interval so the status badge converges without a manual reload.
+let pollTimer: ReturnType<typeof setTimeout> | null = null;
+watch(users, () => {
+  if (pollTimer !== null) {
+    clearTimeout(pollTimer);
+    pollTimer = null;
+  }
+  if (users.value.some((user) => user.managedHost?.status === "provisioning")) {
+    pollTimer = setTimeout(() => void admin.listUsers().catch(() => {}), 2_000);
+  }
+});
+
 onMounted(() => {
   void admin.listUsers().catch(showError);
+  void admin.loadProvisioning().catch(() => {});
+});
+
+onUnmounted(() => {
+  if (pollTimer !== null) clearTimeout(pollTimer);
+});
+
+const provisioningHints = computed(() => {
+  const info = provisioning.value;
+  if (info === null || !info.enabled) return [];
+  const hints: string[] = [];
+  if (!info.dockerReachable) hints.push(t("app.provisioningHintDocker"));
+  if (info.dockerReachable && !info.imagePresent)
+    hints.push(t("app.provisioningHintImage", { image: info.image }));
+  if (info.dockerReachable && !info.networkPresent)
+    hints.push(t("app.provisioningHintNetwork", { network: info.network ?? "" }));
+  if (!info.authFilePresent) hints.push(t("app.provisioningHintAuth"));
+  return hints;
 });
 
 function showError(error: unknown, fallback = t("app.adminUsersLoadFailed")) {
@@ -95,14 +132,31 @@ function managedStatusLabel(status: string) {
   return t(keys[status] ?? "app.managedHostError");
 }
 
+function containerStateLabel(state: string) {
+  const keys: Record<string, string> = {
+    running: "app.containerRunning",
+    exited: "app.containerExited",
+    missing: "app.containerMissing",
+    unknown: "app.containerUnknown",
+  };
+  return t(keys[state] ?? "app.containerUnknown");
+}
+
+function containerBadgeVariant(state: string) {
+  return state === "running" ? "secondary" : state === "exited" ? "outline" : "destructive";
+}
+
 async function createUser() {
   if (createSaving.value) return;
   createSaving.value = true;
   try {
-    await admin.createUser(createForm.value);
+    await admin.createUser({
+      ...createForm.value,
+      provision: provisioning.value?.enabled === true && createForm.value.provision,
+    });
     toast.success(t("app.adminUserCreated"));
     createOpen.value = false;
-    createForm.value = { username: "", password: "", role: "user" };
+    createForm.value = { username: "", password: "", role: "user", provision: true };
   } catch (error) {
     showError(error, t("app.adminUserCreateFailed"));
   } finally {
@@ -143,13 +197,44 @@ async function deleteUser() {
   if (!user || deleting.value) return;
   deleting.value = true;
   try {
-    await admin.deleteUser(user.id);
+    await admin.deleteUser(user.id, { keepVolume: deleteKeepVolume.value });
     toast.success(t("app.adminUserDeleted"));
     deleteTarget.value = null;
   } catch (error) {
     showError(error, t("app.adminUserDeleteFailed"));
   } finally {
     deleting.value = false;
+  }
+}
+
+async function containerAction(
+  user: AdminUserSummary,
+  action: () => Promise<void>,
+  failedKey: string,
+) {
+  if (busy.value !== null) return;
+  busy.value = user.id;
+  try {
+    await action();
+  } catch (error) {
+    showError(error, t(failedKey));
+  } finally {
+    busy.value = null;
+  }
+}
+
+async function removeContainer() {
+  const user = containerTarget.value;
+  if (!user || containerBusy.value) return;
+  containerBusy.value = true;
+  try {
+    await admin.deprovisionUser(user.id, { keepVolume: containerKeepVolume.value });
+    toast.success(t("app.containerRemovedToast"));
+    containerTarget.value = null;
+  } catch (error) {
+    showError(error, t("app.containerRemoveFailed"));
+  } finally {
+    containerBusy.value = false;
   }
 }
 
@@ -215,6 +300,43 @@ async function removeManagedHost() {
       </Button>
     </div>
 
+    <div
+      v-if="provisioning?.enabled"
+      data-testid="provisioning-status"
+      class="space-y-1 rounded-lg border border-hairline bg-surface p-3 text-sm"
+    >
+      <div class="flex flex-wrap items-center gap-2 text-ink-secondary">
+        <span>{{ t("app.provisioningImage") }}: {{ provisioning.image }}</span>
+        <Badge :variant="provisioning.imagePresent ? 'secondary' : 'destructive'">
+          {{
+            provisioning.imagePresent ? t("app.provisioningReady") : t("app.provisioningMissing")
+          }}
+        </Badge>
+        <span>{{ t("app.provisioningNetwork") }}: {{ provisioning.network ?? "—" }}</span>
+        <Badge :variant="provisioning.networkPresent ? 'secondary' : 'destructive'">
+          {{
+            provisioning.networkPresent ? t("app.provisioningReady") : t("app.provisioningMissing")
+          }}
+        </Badge>
+        <span>{{ t("app.provisioningSharedAuth") }}</span>
+        <Badge :variant="provisioning.authFilePresent ? 'secondary' : 'destructive'">
+          {{
+            provisioning.authFilePresent ? t("app.provisioningReady") : t("app.provisioningMissing")
+          }}
+        </Badge>
+        <span>Docker</span>
+        <Badge :variant="provisioning.dockerReachable ? 'secondary' : 'destructive'">
+          {{
+            provisioning.dockerReachable ? t("app.provisioningReady") : t("app.provisioningMissing")
+          }}
+        </Badge>
+      </div>
+      <p v-for="hint in provisioningHints" :key="hint" class="text-xs text-ink-muted">
+        {{ hint }}
+      </p>
+      <p v-if="provisioning.error" class="text-xs text-destructive">{{ provisioning.error }}</p>
+    </div>
+
     <div class="hidden md:block">
       <Table>
         <TableHeader>
@@ -223,6 +345,7 @@ async function removeManagedHost() {
             <TableHead>{{ t("app.adminUserRole") }}</TableHead>
             <TableHead>{{ t("app.adminUserStatus") }}</TableHead>
             <TableHead>{{ t("app.managedHost") }}</TableHead>
+            <TableHead v-if="provisioning?.enabled">{{ t("app.container") }}</TableHead>
             <TableHead>{{ t("app.adminUserCreatedAt") }}</TableHead>
             <TableHead class="text-right">{{ t("app.adminUserActions") }}</TableHead>
           </TableRow>
@@ -258,9 +381,91 @@ async function removeManagedHost() {
               </template>
               <span v-else class="text-ink-muted">—</span>
             </TableCell>
+            <TableCell v-if="provisioning?.enabled">
+              <Badge
+                v-if="user.container"
+                :variant="containerBadgeVariant(user.container.state)"
+                :title="user.container.name ?? undefined"
+                :data-testid="`container-state-${user.username}`"
+              >
+                <Loader2Icon
+                  v-if="user.managedHost?.status === 'provisioning'"
+                  class="size-3 animate-spin"
+                />
+                {{ containerStateLabel(user.container.state) }}
+              </Badge>
+              <span v-else class="text-ink-muted">—</span>
+            </TableCell>
             <TableCell class="text-ink-secondary">{{ user.createdAt.slice(0, 10) }}</TableCell>
             <TableCell class="text-right">
               <div class="flex flex-wrap justify-end gap-1">
+                <template v-if="provisioning?.enabled">
+                  <Button
+                    v-if="user.container === null"
+                    variant="outline"
+                    size="sm"
+                    :disabled="busy === user.id"
+                    :data-testid="`admin-provision-${user.username}`"
+                    @click="
+                      containerAction(
+                        user,
+                        () => admin.provisionUser(user.id),
+                        'app.containerProvisionFailed',
+                      )
+                    "
+                  >
+                    {{ t("app.createContainer") }}
+                  </Button>
+                  <template v-else>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      :disabled="busy === user.id"
+                      :data-testid="`admin-container-toggle-${user.username}`"
+                      @click="
+                        containerAction(
+                          user,
+                          () =>
+                            user.container!.state === 'running'
+                              ? admin.stopContainer(user.id)
+                              : admin.startContainer(user.id),
+                          'app.containerToggleFailed',
+                        )
+                      "
+                    >
+                      {{
+                        user.container.state === "running"
+                          ? t("app.stopContainer")
+                          : t("app.startContainer")
+                      }}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      :disabled="busy === user.id"
+                      @click="
+                        containerAction(
+                          user,
+                          () => admin.provisionUser(user.id, { recreate: true }),
+                          'app.containerProvisionFailed',
+                        )
+                      "
+                    >
+                      {{ t("app.recreateContainer") }}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      :disabled="busy === user.id"
+                      @click="
+                        containerKeepVolume = false;
+                        containerTarget = user;
+                      "
+                    >
+                      {{ t("app.removeContainer") }}
+                    </Button>
+                  </template>
+                </template>
                 <Button
                   variant="outline"
                   size="sm"
@@ -335,7 +540,87 @@ async function removeManagedHost() {
             {{ managedStatusLabel(user.managedHost.status) }}
           </Badge>
         </div>
+        <div v-if="user.container" class="text-sm text-ink-secondary">
+          {{ user.container.name }}
+          <Badge
+            :variant="containerBadgeVariant(user.container.state)"
+            class="ml-1"
+            :data-testid="`container-state-${user.username}`"
+          >
+            <Loader2Icon
+              v-if="user.managedHost?.status === 'provisioning'"
+              class="size-3 animate-spin"
+            />
+            {{ containerStateLabel(user.container.state) }}
+          </Badge>
+        </div>
         <div class="flex flex-wrap gap-1">
+          <template v-if="provisioning?.enabled">
+            <Button
+              v-if="user.container === null"
+              variant="outline"
+              size="sm"
+              :disabled="busy === user.id"
+              :data-testid="`admin-provision-${user.username}`"
+              @click="
+                containerAction(
+                  user,
+                  () => admin.provisionUser(user.id),
+                  'app.containerProvisionFailed',
+                )
+              "
+            >
+              {{ t("app.createContainer") }}
+            </Button>
+            <template v-else>
+              <Button
+                variant="ghost"
+                size="sm"
+                :disabled="busy === user.id"
+                @click="
+                  containerAction(
+                    user,
+                    () =>
+                      user.container!.state === 'running'
+                        ? admin.stopContainer(user.id)
+                        : admin.startContainer(user.id),
+                    'app.containerToggleFailed',
+                  )
+                "
+              >
+                {{
+                  user.container.state === "running"
+                    ? t("app.stopContainer")
+                    : t("app.startContainer")
+                }}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                :disabled="busy === user.id"
+                @click="
+                  containerAction(
+                    user,
+                    () => admin.provisionUser(user.id, { recreate: true }),
+                    'app.containerProvisionFailed',
+                  )
+                "
+              >
+                {{ t("app.recreateContainer") }}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                :disabled="busy === user.id"
+                @click="
+                  containerKeepVolume = false;
+                  containerTarget = user;
+                "
+              >
+                {{ t("app.removeContainer") }}
+              </Button>
+            </template>
+          </template>
           <Button variant="outline" size="sm" @click="openManagedHost(user)">
             {{ t("app.configureManagedHost") }}
           </Button>
@@ -399,6 +684,13 @@ async function removeManagedHost() {
               <SelectItem value="admin">{{ t("app.roleAdmin") }}</SelectItem>
             </SelectContent>
           </Select>
+          <label
+            v-if="provisioning?.enabled"
+            class="flex items-center justify-between gap-3 text-sm"
+          >
+            <span>{{ t("app.adminProvisionOnCreate") }}</span>
+            <Switch v-model="createForm.provision" data-testid="admin-user-provision-switch" />
+          </label>
           <DialogFooter>
             <Button
               data-testid="admin-user-create-submit"
@@ -464,6 +756,13 @@ async function removeManagedHost() {
             {{ t("app.adminDeleteUserDescription", { username: deleteTarget?.username ?? "" }) }}
           </AlertDialogDescription>
         </AlertDialogHeader>
+        <label
+          v-if="deleteTarget?.container"
+          class="flex items-center justify-between gap-3 text-sm"
+        >
+          <span>{{ t("app.keepDataVolume") }}</span>
+          <Switch v-model="deleteKeepVolume" />
+        </label>
         <AlertDialogFooter>
           <AlertDialogCancel :disabled="deleting">{{
             t("app.cancelFileDelete")
@@ -505,6 +804,41 @@ async function removeManagedHost() {
             @click.capture="removeManagedHost"
           >
             {{ t("app.removeManagedHost") }}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <AlertDialog
+      :open="containerTarget !== null"
+      @update:open="(v) => !v && (containerTarget = null)"
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{{ t("app.removeContainer") }}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {{
+              t("app.removeContainerDescription", {
+                username: containerTarget?.username ?? "",
+              })
+            }}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <label class="flex items-center justify-between gap-3 text-sm">
+          <span>{{ t("app.keepDataVolume") }}</span>
+          <Switch v-model="containerKeepVolume" />
+        </label>
+        <AlertDialogFooter>
+          <AlertDialogCancel :disabled="containerBusy">
+            {{ t("app.cancelFileDelete") }}
+          </AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            :disabled="containerBusy"
+            :data-testid="`admin-container-remove-confirm`"
+            @click.capture="removeContainer"
+          >
+            {{ t("app.removeContainer") }}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

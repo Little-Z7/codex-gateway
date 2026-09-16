@@ -26,6 +26,11 @@ export E2E_SUPPORTED_CODEX_VERSION="$(
     "import('./server/utils/gateway/infra/codex/codex-version.ts').then(({ SUPPORTED_CODEX_VERSION }) => process.stdout.write(SUPPORTED_CODEX_VERSION))"
 )"
 
+# Per-user workspace containers are created by the gateway through the host Docker socket, so
+# the shared auth dir lives on the host and leftovers are reaped here rather than by compose.
+export E2E_SHARED_AUTH_DIR="${E2E_SHARED_AUTH_DIR:-$(mktemp -d /tmp/codex-gateway-e2e-auth.XXXXXX)}"
+mkdir -p "$E2E_SHARED_AUTH_DIR"
+
 cleanup() {
   status=$?
   if [ "$status" -ne 0 ]; then
@@ -34,8 +39,21 @@ cleanup() {
       ssh-target-mfa >&2 || true
   fi
   docker compose -p "$project_name" -f "$compose_file" down --remove-orphans >/dev/null 2>&1 || true
+  # Provisioned user containers live outside the compose project; remove them plus their volumes.
+  for container in $(docker ps -aq --filter "label=codex-gateway.managed=true" \
+    --filter "name=codex-e2e-user-"); do
+    docker rm -f "$container" >/dev/null 2>&1 || true
+  done
+  for volume in $(docker volume ls -q --filter "name=codex-e2e-user-"); do
+    docker volume rm -f "$volume" >/dev/null 2>&1 || true
+  done
+  rm -rf "$E2E_SHARED_AUTH_DIR"
 }
 trap cleanup EXIT
+
+docker build -t codex-gateway-e2e-user:latest \
+  --build-arg "CODEX_CLI_VERSION=$E2E_SUPPORTED_CODEX_VERSION" \
+  "$project_dir/deploy/user-container" >/dev/null
 
 docker compose -p "$project_name" -f "$compose_file" build \
   build-runner ssh-target ssh-target-legacy-node ssh-target-legacy-codex ssh-target-mfa

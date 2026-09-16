@@ -23,7 +23,16 @@ export default defineGatewayEventHandler(async (event) => {
       managed: true,
     };
     if (managed !== null && hostStore.getWithSecret(managed.hostId)?.managed === true) {
-      return requireRecord(hostStore.update(managed.hostId, payload), "Host not found");
+      const existing = hostStore.getWithSecret(managed.hostId);
+      return requireRecord(
+        hostStore.update(managed.hostId, {
+          ...payload,
+          // The admin form never carries stored secrets; empty fields keep the current values.
+          password: input.password ?? existing?.password ?? null,
+          privateKey: input.privateKey ?? existing?.privateKey ?? null,
+        }),
+        "Host not found",
+      );
     }
     return hostStore.create(payload);
   });

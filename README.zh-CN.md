@@ -171,18 +171,10 @@ Browser
 ```bash
 git clone --recurse-submodules https://github.com/yunhaoli24/codex-gateway.git
 cd codex-gateway
-
-cp .env.example .env
-# 使用 openssl rand -hex 32 替换 .env 中的 CODEX_GATEWAY_CONFIG_SECRET
-
-docker network create web-common 2>/dev/null || true
-docker compose build
-docker compose run --rm codex-gateway \
-  node scripts/create-user.mjs --admin admin '<至少-8-位-密码>'
-docker compose up -d
+./deploy/scripts/bootstrap.sh <管理员用户名> '<至少-8-位-密码>'
 ```
 
-通过反向代理打开服务，使用手动创建的账号登录，然后在设置中添加第一台 SSH 主机。项目自带的 Compose 文件只把 `3000` 端口暴露到外部 `web-common` Docker 网络，不会直接发布宿主机端口。
+bootstrap 会生成 `.env`（自动填入 `CODEX_GATEWAY_CONFIG_SECRET` 与 `CODEX_CLI_VERSION`）、构建 Gateway 与用户工作区镜像、创建管理员账号并启动服务，默认监听 `3000` 端口。完整部署步骤、共享登录与运维说明见 `deploy/README.zh-CN.md`。
 
 ## 本地开发
 
@@ -210,6 +202,10 @@ pnpm test:e2e
 | `HOST` | 否 | Nuxt 监听地址。Docker 使用 `0.0.0.0`。 |
 | `PORT` | 否 | Nuxt 监听端口。Docker 使用 `3000`。 |
 | `BROWSER_PREVIEW_SCHEME` | 否 | Gateway 对外使用的公开协议，默认 `https`。仅本地 E2E/开发使用 `http`。 |
+| `CODEX_GATEWAY_PROVISIONING` | 否 | `docker` 启用用户容器托管，`off` 关闭（默认）。 |
+| `CODEX_GATEWAY_DOCKER_NETWORK` | provisioning 必需 | Gateway 与用户容器共享的 Docker 网络名。 |
+| `CODEX_GATEWAY_SHARED_AUTH_DIR` | provisioning 必需 | 宿主机上共享 Codex 登录目录，挂到用户容器 `/srv/codex-auth`。 |
+| `CODEX_GATEWAY_USER_IMAGE` | 否 | 用户工作区镜像名，默认 `codex-gateway-user:latest`。 |
 
 创建管理员用户：
 

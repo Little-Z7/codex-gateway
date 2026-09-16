@@ -59,6 +59,8 @@ test("admin manages users and managed hosts end to end", async ({ page, browser 
   // The admin sees the user-management tab and creates a member.
   await openUsersTab(page);
   await page.getByTestId("admin-create-user").click();
+  // This spec manages hosts manually; container auto-provisioning would replace them.
+  await page.getByTestId("admin-user-provision-switch").click();
   await page.getByTestId("admin-user-username-input").fill(workerName);
   await page.getByTestId("admin-user-password-input").fill(workerPassword);
   await page.getByTestId("admin-user-create-submit").click();
@@ -137,6 +139,41 @@ test("admin manages users and managed hosts end to end", async ({ page, browser 
   });
   expect(threads.status).toBe(200);
 
+  // Export strips managed-host secrets; re-importing the export must not erase them.
+  const exportedConfig = await authenticatedFetch(
+    workerPage,
+    { url: "/api/config/export" },
+    (value) =>
+      z
+        .object({
+          hosts: z.array(
+            z
+              .object({
+                id: z.number(),
+                managed: z.boolean(),
+                password: z.string().nullable().optional(),
+                privateKey: z.string().nullable().optional(),
+              })
+              .loose(),
+          ),
+        })
+        .loose()
+        .parse(value),
+  );
+  const exportedManaged = exportedConfig.hosts.find((host) => host.managed);
+  expect(exportedManaged?.password ?? null).toBeNull();
+  expect(exportedManaged?.privateKey ?? null).toBeNull();
+  const reimport = await apiStatus(workerPage, {
+    url: "/api/config/sync",
+    method: "POST",
+    body: exportedConfig,
+  });
+  expect(reimport.status).toBe(200);
+  const threadsAfterReimport = await apiStatus(workerPage, {
+    url: `/api/threads?hostId=${managedHost!.id}`,
+  });
+  expect(threadsAfterReimport.status).toBe(200);
+
   // Disabling the member revokes live sessions: the open page is dropped back to login.
   await openUsersTab(page);
   await page
@@ -187,7 +224,7 @@ test("assigning a managed host preserves the member's existing config", async ({
     {
       url: "/api/admin/users",
       method: "POST",
-      body: { username: memberName, password: memberPassword, role: "user" },
+      body: { username: memberName, password: memberPassword, role: "user", provision: false },
     },
     (value) =>
       z
