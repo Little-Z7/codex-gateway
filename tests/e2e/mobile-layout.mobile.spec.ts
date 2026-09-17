@@ -277,12 +277,11 @@ test("virtualizes a large running turn in one agent timeline", async ({ page }, 
   if (commandRowHandle === null) throw new Error("Expected mounted command row");
 
   // Intermediate work renders inside a collapsed group; expand it so the file-change rows mount.
-  // The header row can be re-rendered by the virtualizer on toggle, so poll on the open state
-  // rather than holding the pre-click element.
+  // Once open, the header can leave the virtual window as the group grows, so assert on the
+  // mounted file rows instead of the toggle testid.
   const intermediateToggle = page.getByRole("button", { name: /中间过程/ }).first();
   await expect(intermediateToggle).toHaveAttribute("data-state", "closed");
   await intermediateToggle.click();
-  await expect(page.getByTestId("intermediate-steps")).toBeVisible();
 
   const fileChange = page.getByRole("button", { name: /src\/large_file_/ }).first();
   await expect(fileChange).toBeVisible();
