@@ -10,14 +10,14 @@ import { sendTurn } from "./submission";
 import { respondToServerRequest } from "./transport";
 
 export function createGatewayThreadTurnActions() {
-  const t = useGatewayTranslator();
+  const { t, te } = useGatewayTranslator();
   return {
-    sendTurn: (text: string, options?: ComposerTurnOptions) => sendTurn(t, text, options),
-    loadOlderTurns: (options?: { limit?: number }) => loadOlderTurns(t, options),
-    loadTurnItems: (turnId: string) => loadTurnItems(t, turnId),
-    interruptActiveTurn: () => interruptActiveTurn(t),
+    sendTurn: (text: string, options?: ComposerTurnOptions) => sendTurn(t, te, text, options),
+    loadOlderTurns: (options?: { limit?: number }) => loadOlderTurns(t, te, options),
+    loadTurnItems: (turnId: string) => loadTurnItems(t, te, turnId),
+    interruptActiveTurn: () => interruptActiveTurn(t, te),
     interruptThreadTurn: (input: { hostId: number; threadId: string; projectId?: number | null }) =>
-      interruptThreadTurn(t, input),
+      interruptThreadTurn(t, te, input),
     respondToServerRequest,
     maybeQueueServerOverloadedRetry: (
       hostId: number,

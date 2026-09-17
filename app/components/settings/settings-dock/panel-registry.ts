@@ -6,6 +6,10 @@ interface SettingsPanelPolicy {
 }
 
 export const settingsPanelRegistry = {
+  account: {
+    component: "SettingsDockAccountPanel",
+    titleKey: "app.accountSettings",
+  },
   appearance: {
     component: "SettingsDockAppearancePanel",
     titleKey: "app.appearanceSettings",
@@ -29,6 +33,7 @@ export const settingsPanelRegistry = {
 } satisfies Record<SettingsPanelKind, SettingsPanelPolicy>;
 
 export const settingsPanelKinds = [
+  "account",
   "appearance",
   "config",
   "hosts",

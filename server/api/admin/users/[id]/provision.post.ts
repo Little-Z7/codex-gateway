@@ -11,7 +11,11 @@ import { auditLog } from "../../../../utils/gateway/audit/audit-log";
 export default defineGatewayEventHandler(async (event) => {
   const admin = requireAdmin(event);
   if (!provisioningConfig().enabled) {
-    throw createError({ statusCode: 400, statusMessage: "Provisioning is disabled" });
+    throw createError({
+      statusCode: 400,
+      data: { code: "admin.provisioningDisabled" },
+      statusMessage: "Provisioning is disabled",
+    });
   }
   const id = Number(getRouterParam(event, "id"));
   const user = requireRecord(userStore.findById(id), "User not found");
@@ -20,7 +24,11 @@ export default defineGatewayEventHandler(async (event) => {
     managed !== null && managed.containerName !== null && managed.status !== "removed";
   const recreate = getQuery(event).recreate === "1" || getQuery(event).recreate === "true";
   if (hasContainer && !recreate) {
-    throw createError({ statusCode: 409, statusMessage: "Container already exists" });
+    throw createError({
+      statusCode: 409,
+      data: { code: "admin.containerExists" },
+      statusMessage: "Container already exists",
+    });
   }
   if (hasContainer) {
     await userContainerProvisioner.deprovision(id, { keepVolume: true });

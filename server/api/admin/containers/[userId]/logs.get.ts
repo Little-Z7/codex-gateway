@@ -11,7 +11,11 @@ export default defineGatewayEventHandler(async (event) => {
   requireRecord(userStore.findById(userId), "User not found");
   const managed = userStore.getManagedHost(userId);
   if (managed === null || managed.containerName === null) {
-    throw createError({ statusCode: 404, statusMessage: "Container not found" });
+    throw createError({
+      statusCode: 404,
+      data: { code: "admin.containerNotFound" },
+      statusMessage: "Container not found",
+    });
   }
   const tail = Math.min(Math.max(Number(getQuery(event).tail ?? 200) || 200, 10), 1000);
   const docker = new DockerEngineClient();

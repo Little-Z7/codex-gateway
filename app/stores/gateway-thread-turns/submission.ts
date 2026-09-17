@@ -20,11 +20,12 @@ import {
 } from "./history";
 import { runTurnRequestWithAutoRetry } from "./retry";
 import { requestTurnStart, requestTurnSteer } from "./transport";
-import type { Translate, TurnRequestResult } from "./types";
+import type { Translate, TranslateExists, TurnRequestResult } from "./types";
 import { captureSessionEpoch } from "@/utils/session-epoch";
 
 export async function sendTurn(
   t: Translate,
+  te: TranslateExists,
   text: string,
   options: ComposerTurnOptions = {},
 ): Promise<boolean> {
@@ -114,11 +115,14 @@ export async function sendTurn(
   } catch (error: unknown) {
     if (!sessionIsCurrent()) return false;
     useGatewayThreadTurnsStore().clearRequest(hostId, threadId);
-    gateway.setError(messageFromError(error, t("app.sendMessageFailed"), errorMessageLabels(t)), {
-      hostId,
-      projectId,
-      threadId,
-    });
+    gateway.setError(
+      messageFromError(error, t("app.sendMessageFailed"), errorMessageLabels(t, te)),
+      {
+        hostId,
+        projectId,
+        threadId,
+      },
+    );
     if (!shouldSteerActiveTurn) {
       runtimeStore.setThreadStatus(hostId, threadId, "completed");
     }

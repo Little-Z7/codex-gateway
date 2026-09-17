@@ -10,11 +10,13 @@ import { errorMessageLabels } from "@/stores/gateway/thread-utils/identity";
 
 export function useGatewayTerminalTransport() {
   const gateway = useGatewayBootstrapStore();
-  const { t } = useI18n();
+  const i18n = useI18n();
+  const { t } = i18n;
+  const te = (key: string) => i18n.te(key);
   const ctx: GatewayTerminalTransportContext = {
     t,
     get errorLabels() {
-      return errorMessageLabels(t);
+      return errorMessageLabels(t, te);
     },
     setError: gateway.setError,
   };

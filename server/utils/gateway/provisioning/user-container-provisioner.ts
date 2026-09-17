@@ -6,6 +6,7 @@ import { runAsUserConfigMutation } from "../config/target-user-mutation";
 import { userStore } from "../auth/users";
 import { hostStore } from "../state/hosts";
 import { projectStore } from "../state/projects";
+import { auditLog } from "../audit/audit-log";
 import { runtimeLog } from "../runtime/runtime-log";
 import { DockerEngineClient, isDockerNotFound } from "./docker-engine-client";
 import { provisioningConfig } from "./provisioning-config";
@@ -96,7 +97,148 @@ export const userContainerProvisioner = {
       }
     });
   },
+
+  /** Rows left in `provisioning` after a gateway restart are either finished work that never got
+   * recorded, or dead attempts. The container is the source of truth: when it is reachable and
+   * `codex --version` succeeds inside it, register the workspace the same way provision() does
+   * (fresh keypair installed via docker exec — the in-memory provisioning key is gone). */
+  async repairProvisioningRows(): Promise<number> {
+    const config = provisioningConfig();
+    if (!config.enabled) return 0;
+    const docker = new DockerEngineClient();
+    const rows = userStore.listManagedHostsByStatus("provisioning");
+    let repaired = 0;
+    for (const row of rows) {
+      if (row.containerName === null) {
+        userStore.upsertManagedHost(row.userId, row.hostId, {
+          status: "error",
+          lastError: "Gateway 重启时 provisioning 未完成",
+        });
+        continue;
+      }
+      try {
+        const info = await withTimeout(docker.inspectContainer(row.containerName), 5_000);
+        const running = Reflect.get(recordFromUnknown(info?.State) ?? {}, "Running") === true;
+        if (!running) throw new Error("container not running");
+        const probe = await docker.execInContainer(row.containerName, ["codex", "--version"]);
+        if (probe.exitCode !== 0) throw new Error(probe.output.trim() || "codex --version failed");
+
+        const user = userStore.findById(row.userId);
+        if (user === null) throw new Error("user removed");
+        const keyPair = utils.generateKeyPairSync("ed25519");
+        await docker.execInContainer(row.containerName, [
+          "sh",
+          "-c",
+          `mkdir -p /home/dev/.ssh && printf '%s\n' '${keyPair.public}' >> /home/dev/.ssh/authorized_keys && chown -R dev:dev /home/dev/.ssh`,
+        ]);
+        const host = await registerWorkspaceHost(
+          row.userId,
+          row.containerName,
+          row.hostId,
+          keyPair.private,
+        );
+        userStore.upsertManagedHost(row.userId, host.id, {
+          status: "ready",
+          containerName: row.containerName,
+          containerId: row.containerId,
+          volumeName: row.volumeName,
+          sshPublicKey: keyPair.public,
+          lastError: null,
+        });
+        repaired += 1;
+        runtimeLog("interrupted provisioning repaired after restart", {
+          userId: row.userId,
+          containerName: row.containerName,
+        });
+      } catch (error) {
+        userStore.upsertManagedHost(row.userId, row.hostId, {
+          status: "error",
+          lastError: "Gateway 重启时 provisioning 未完成",
+        });
+        runtimeLog("interrupted provisioning marked error", {
+          userId: row.userId,
+          containerName: row.containerName,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return repaired;
+  },
+
+  /** Periodic drift check: managed containers that vanished are flagged `missing` so the admin
+   * console can offer rebuild; a row whose container came back flips back to ready. */
+  async reconcileContainers(): Promise<void> {
+    const config = provisioningConfig();
+    if (!config.enabled) return;
+    const docker = new DockerEngineClient();
+    for (const row of userStore.listManagedHosts().values()) {
+      if (row.status !== "ready" && row.status !== "missing" && row.status !== "error") continue;
+      if (row.containerName === null) continue;
+      let state: "present" | "missing";
+      try {
+        await withTimeout(docker.inspectContainer(row.containerName), 5_000);
+        state = "present";
+      } catch (error) {
+        if (!isDockerNotFound(error)) {
+          runtimeLog("container reconcile inspect failed", {
+            userId: row.userId,
+            containerName: row.containerName,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          continue;
+        }
+        state = "missing";
+      }
+      if (state === "missing" && row.status === "ready") {
+        userStore.upsertManagedHost(row.userId, row.hostId, { status: "missing" });
+        auditLog.record(
+          null,
+          "container.reconcile",
+          { type: "container", id: row.containerName, label: row.containerName },
+          { status: "missing" },
+        );
+      } else if (state === "present" && row.status === "missing") {
+        userStore.upsertManagedHost(row.userId, row.hostId, { status: "ready", lastError: null });
+        auditLog.record(
+          null,
+          "container.reconcile",
+          { type: "container", id: row.containerName, label: row.containerName },
+          { status: "ready" },
+        );
+      }
+    }
+  },
 };
+
+async function registerWorkspaceHost(
+  userId: number,
+  containerName: string,
+  previousHostId: number,
+  privateKey: string,
+) {
+  return await runAsUserConfigMutation(userId, () => {
+    // Provisioning replaces any manually configured managed host for this user.
+    if (previousHostId !== 0) {
+      hostStore.delete(previousHostId);
+    }
+    const createdHost = hostStore.create({
+      name: "工作区",
+      sshHost: containerName,
+      port: 22,
+      username: "dev",
+      authMode: "privateKey",
+      privateKey,
+      proxyUrl: null,
+      managed: true,
+    });
+    projectStore.create({
+      hostId: createdHost.id,
+      name: "workspace",
+      remotePath: "/home/dev/workspace",
+    });
+    return createdHost;
+  });
+}
 
 function containerName(userId: number) {
   return userStore.getManagedHost(userId)?.containerName ?? null;
@@ -159,6 +301,13 @@ async function provisionContainer(userId: number) {
       Binds: binds,
       RestartPolicy: { Name: "unless-stopped" },
       Init: true,
+      LogConfig: {
+        Type: "json-file",
+        Config: {
+          "max-size": config.userContainerLogMaxSize,
+          "max-file": config.userContainerLogMaxFiles,
+        },
+      },
     };
     if (config.memory !== null) hostConfig.Memory = parseMemoryLimit(config.memory);
     if (config.cpus !== null) hostConfig.NanoCpus = Math.round(Number(config.cpus) * 1e9);
@@ -176,28 +325,12 @@ async function provisionContainer(userId: number) {
 
     await waitForCodex(containerName, keyPair.private, containerId);
 
-    const host = await runAsUserConfigMutation(userId, () => {
-      // Provisioning replaces any manually configured managed host for this user.
-      if (previousHostId !== 0) {
-        hostStore.delete(previousHostId);
-      }
-      const createdHost = hostStore.create({
-        name: "工作区",
-        sshHost: containerName,
-        port: 22,
-        username: "dev",
-        authMode: "privateKey",
-        privateKey: keyPair.private,
-        proxyUrl: null,
-        managed: true,
-      });
-      projectStore.create({
-        hostId: createdHost.id,
-        name: "workspace",
-        remotePath: "/home/dev/workspace",
-      });
-      return createdHost;
-    });
+    const host = await registerWorkspaceHost(
+      userId,
+      containerName,
+      previousHostId,
+      keyPair.private,
+    );
 
     userStore.upsertManagedHost(userId, host.id, {
       status: "ready",

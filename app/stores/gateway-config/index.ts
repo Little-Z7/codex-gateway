@@ -17,7 +17,7 @@ import { recordFromUnknown } from "~~/shared/utils/records";
 import { captureSessionEpoch } from "@/utils/session-epoch";
 
 export const useGatewayConfigStore = defineStore("gateway-config", () => {
-  const t = useGatewayTranslator();
+  const { t } = useGatewayTranslator();
   const gatewayConfig = ref<GatewayConfig>(defaultGatewayConfig());
   const pinnedThreadSync = createPinnedThreadSync({ apply: applyPinnedThreads });
 

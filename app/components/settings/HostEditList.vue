@@ -17,8 +17,8 @@ import { errorMessageLabels, messageFromError } from "@/stores/gateway/thread-ut
 
 const catalog = useGatewayCatalogStore();
 const { hosts } = storeToRefs(catalog);
-const { t } = useI18n();
-const errorLabels = computed(() => errorMessageLabels(t));
+const { t, te } = useI18n();
+const errorLabels = computed(() => errorMessageLabels(t, te));
 const expandedHostId = ref<number | null>(hosts.value[0]?.id ?? null);
 const forms = ref<Record<number, HostConnectionFormValue>>({});
 const savingHostId = ref<number | null>(null);

@@ -10,8 +10,8 @@ import { errorMessageLabels, messageFromError } from "@/stores/gateway/thread-ut
 const emit = defineEmits<{ close: [] }>();
 const auth = useAuthStore();
 const store = useGatewayConfigStore();
-const { t } = useI18n();
-const errorLabels = computed(() => errorMessageLabels(t));
+const { t, te } = useI18n();
+const errorLabels = computed(() => errorMessageLabels(t, te));
 const configText = ref(store.exportConfigText());
 const configError = ref("");
 

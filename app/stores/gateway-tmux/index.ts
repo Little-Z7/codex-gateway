@@ -37,7 +37,7 @@ interface OpenTmuxPanelTarget {
 }
 
 export const useGatewayTmuxStore = defineStore("gateway-tmux", () => {
-  const t = useGatewayTranslator();
+  const { t } = useGatewayTranslator();
   const panelOpen = useAccountLocalStorage("tmux-panel-open", false);
   const active = ref<TmuxMonitor[]>([]);
   const history = ref<TmuxMonitor[]>([]);

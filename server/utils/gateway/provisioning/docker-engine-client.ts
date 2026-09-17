@@ -99,7 +99,12 @@ export class DockerEngineClient {
     return this.request("GET", `/containers/${encodeURIComponent(id)}/json`);
   }
 
-  async requestRaw(method: string, path: string, timeoutMs = 10_000): Promise<Buffer> {
+  async requestRaw(
+    method: string,
+    path: string,
+    timeoutMs = 10_000,
+    body?: Buffer,
+  ): Promise<Buffer> {
     return await new Promise((resolve, reject) => {
       const request = http.request(
         { socketPath: this.socketPath, method, path: `/${DOCKER_API_VERSION}${path}` },
@@ -111,8 +116,42 @@ export class DockerEngineClient {
       );
       request.setTimeout(timeoutMs, () => request.destroy(new Error("Docker request timed out")));
       request.on("error", reject);
-      request.end();
+      if (body !== undefined) {
+        request.setHeader("content-type", "application/json");
+        request.end(body);
+      } else {
+        request.end();
+      }
     });
+  }
+
+  /**
+   * Runs a command inside a container and resolves with its combined (demuxed) output and exit
+   * code. Used for provisioning repair: appending an authorized key and probing `codex`.
+   */
+  async execInContainer(
+    id: string,
+    cmd: string[],
+    user = "0",
+  ): Promise<{ output: string; exitCode: number }> {
+    const created = await this.request("POST", `/containers/${encodeURIComponent(id)}/exec`, {
+      AttachStdout: true,
+      AttachStderr: true,
+      Tty: false,
+      User: user,
+      Cmd: cmd,
+    });
+    const execId = String((created as { Id?: string } | null | undefined)?.Id ?? "");
+    if (execId === "") throw new Error("Docker exec create returned no Id");
+    const body = await this.requestRaw(
+      "POST",
+      `/exec/${encodeURIComponent(execId)}/start`,
+      15_000,
+      Buffer.from(JSON.stringify({ Detach: false, Tty: false })),
+    );
+    const inspect = await this.request("GET", `/exec/${encodeURIComponent(execId)}/json`);
+    const exitCode = Number((inspect as { ExitCode?: number } | null | undefined)?.ExitCode ?? -1);
+    return { output: demuxDockerLogFrames(body), exitCode };
   }
 
   async containerStats(id: string, timeoutMs = 5_000): Promise<DockerContainerStats | null> {

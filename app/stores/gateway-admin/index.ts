@@ -1,6 +1,12 @@
 import { defineStore } from "pinia";
 import { gatewayApi } from "@/utils/gateway-api";
 
+export interface AdminLockout {
+  key: string;
+  lockedUntil: string;
+  retryAfterSeconds: number;
+}
+
 export interface AdminManagedHostSummary {
   hostId: number;
   hostName: string | null;
@@ -312,7 +318,24 @@ export const useGatewayAdminStore = defineStore("gateway-admin", () => {
     await loadSharedLogin();
   }
 
+  const lockouts = ref<AdminLockout[]>([]);
+  async function loadLockouts() {
+    lockouts.value = (
+      await gatewayApi<{ lockouts: AdminLockout[] }>("/api/admin/security/lockouts")
+    ).lockouts;
+  }
+  async function unlockLockout(key: string) {
+    await gatewayApi("/api/admin/security/lockouts", {
+      method: "DELETE",
+      body: { key },
+    });
+    await loadLockouts();
+  }
+
   return {
+    lockouts,
+    loadLockouts,
+    unlockLockout,
     users,
     provisioning,
     overview,

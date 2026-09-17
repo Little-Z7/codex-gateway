@@ -11,8 +11,8 @@ import { normalizeNotificationSettings } from "@/stores/gateway/config";
 import { errorMessageLabels, messageFromError } from "@/stores/gateway/thread-utils/identity";
 
 const store = useGatewayConfigStore();
-const { t } = useI18n();
-const errorLabels = computed(() => errorMessageLabels(t));
+const { t, te } = useI18n();
+const errorLabels = computed(() => errorMessageLabels(t, te));
 const saving = ref(false);
 const error = ref("");
 const form = ref<GatewayNotificationSettings>(normalizeNotificationSettings());

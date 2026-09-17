@@ -11,6 +11,7 @@ export default defineGatewayConfigMutationHandler((event) => {
   if (existing.managed) {
     throw createError({
       statusCode: 403,
+      data: { code: "hosts.managedReadonly" },
       statusMessage: "Forbidden",
       message: "Managed hosts are configured by an administrator",
     });

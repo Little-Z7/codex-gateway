@@ -44,6 +44,9 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=build /app/.output ./.output
 COPY --from=build /app/scripts ./scripts
+# create-user.mjs loads the shared schema through Node's built-in type stripping; the compiled
+# .output does not ship .ts sources, so copy the single file it needs.
+COPY --from=build /app/server/utils/gateway/storage/schema.ts ./server/utils/gateway/storage/schema.ts
 EXPOSE 3000
 ENTRYPOINT ["/usr/bin/tini", "--"]
 # The 1 GiB container also hosts SSH/TLS/native buffers. Keep V8 old-space bounded to leave room

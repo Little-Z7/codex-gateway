@@ -76,6 +76,8 @@ export interface ProvisioningConfig {
   containerPrefix: string;
   memory: string | null;
   cpus: string | null;
+  userContainerLogMaxSize: string;
+  userContainerLogMaxFiles: string;
   sandboxMode: string;
   modelProvider: ModelProviderConfig;
 }
@@ -96,6 +98,10 @@ export function provisioningConfig(): ProvisioningConfig {
     memory: trimmedOrNull(process.env.CODEX_GATEWAY_USER_CONTAINER_MEMORY),
     cpus: trimmedOrNull(process.env.CODEX_GATEWAY_USER_CONTAINER_CPUS),
     sandboxMode: trimmedOrNull(process.env.CODEX_GATEWAY_SANDBOX_MODE) ?? "danger-full-access",
+    userContainerLogMaxSize:
+      trimmedOrNull(process.env.CODEX_GATEWAY_USER_CONTAINER_LOG_MAX_SIZE) ?? "10m",
+    userContainerLogMaxFiles:
+      trimmedOrNull(process.env.CODEX_GATEWAY_USER_CONTAINER_LOG_MAX_FILES) ?? "3",
     modelProvider: modelProviderConfig(),
   };
 }

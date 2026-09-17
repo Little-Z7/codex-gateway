@@ -934,6 +934,36 @@
     "newThreadExample1": "帮我梳理这个项目的结构",
     "newThreadExample2": "修复一个最近的 bug",
     "newThreadExample3": "写一个小的工具脚本",
-    "newThreadPlaceholder": "描述你想让 Codex 做的事"
+    "newThreadPlaceholder": "描述你想让 Codex 做的事",
+    "accountSettings": "账户",
+    "accountUsername": "用户名",
+    "changePassword": "修改密码",
+    "currentPassword": "当前密码",
+    "newPassword": "新密码",
+    "confirmPassword": "确认新密码",
+    "passwordChanged": "密码已更新，其他设备已退出登录",
+    "passwordChangeFailed": "修改密码失败",
+    "passwordChangeMismatch": "两次输入的新密码不一致",
+    "adminSecurity": "安全",
+    "adminSecurityLockouts": "当前登录锁定",
+    "adminNoLockouts": "没有生效中的锁定",
+    "adminUnlock": "解锁",
+    "loginLocked": "登录已锁定，请 {minutes} 分钟后再试"
+  },
+  "errors": {
+    "auth.invalidCredentials": "用户名或密码错误",
+    "auth.locked": "登录已锁定，请 {minutes} 分钟后再试",
+    "auth.passwordTooShort": "新密码至少 8 位",
+    "admin.lastAdmin": "至少需要保留一名管理员",
+    "admin.selfDemotion": "不能停用或降级自己的账号",
+    "admin.selfDelete": "不能删除自己的账号",
+    "admin.usernameTaken": "用户名已存在",
+    "admin.provisioningDisabled": "未启用容器 provisioning",
+    "admin.containerExists": "容器已存在",
+    "admin.containerNotFound": "容器不存在",
+    "hosts.managedReadonly": "托管主机只能由管理员配置",
+    "hosts.notFound": "主机不存在",
+    "common.notFound": "资源不存在",
+    "common.missing": "资源缺失"
   }
 }

@@ -7,16 +7,16 @@ import { toast } from "@codex-gateway/ui/sonner";
 import { useGatewayAdminStore } from "@/stores/gateway-admin";
 import { messageFromError, errorMessageLabels } from "@/stores/gateway/thread-utils/identity";
 
-const { t } = useI18n();
+const { t, te } = useI18n();
 const admin = useGatewayAdminStore();
-const { systemInfo, sharedLoginStatus } = storeToRefs(admin);
-const errorLabels = computed(() => errorMessageLabels(t));
+const { systemInfo, sharedLoginStatus, lockouts } = storeToRefs(admin);
+const errorLabels = computed(() => errorMessageLabels(t, te));
 const sharedLoginBusy = ref(false);
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 async function refresh() {
   try {
-    await Promise.all([admin.loadSystem(), admin.loadSharedLogin()]);
+    await Promise.all([admin.loadSystem(), admin.loadSharedLogin(), admin.loadLockouts()]);
   } catch (error) {
     toast.error(messageFromError(error, t("app.adminSystemLoadFailed"), errorLabels.value));
   }
@@ -41,6 +41,14 @@ async function cancelSharedLogin() {
     toast.error(messageFromError(error, t("app.adminSharedLoginFailed"), errorLabels.value));
   } finally {
     sharedLoginBusy.value = false;
+  }
+}
+
+async function unlock(key: string) {
+  try {
+    await admin.unlockLockout(key);
+  } catch (error) {
+    toast.error(messageFromError(error, t("app.adminSystemLoadFailed"), errorLabels.value));
   }
 }
 
@@ -255,6 +263,31 @@ const runtimeRows = computed(() => {
           </Button>
         </div>
       </template>
+    </div>
+
+    <div class="rounded-lg border border-hairline bg-surface p-4" data-testid="admin-security-card">
+      <div class="text-sm font-medium text-ink">{{ t("app.adminSecurity") }}</div>
+      <div class="mt-1 text-xs text-ink-muted">{{ t("app.adminSecurityLockouts") }}</div>
+      <ul v-if="lockouts.length" class="mt-3 space-y-2">
+        <li
+          v-for="entry in lockouts"
+          :key="entry.key"
+          class="flex items-center justify-between gap-3 text-sm"
+          :data-testid="`admin-lockout-${entry.key}`"
+        >
+          <span class="font-mono text-ink-secondary">{{ entry.key }}</span>
+          <span class="text-ink-muted">{{ entry.lockedUntil }}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            :data-testid="`admin-unlock-${entry.key}`"
+            @click="unlock(entry.key)"
+          >
+            {{ t("app.adminUnlock") }}
+          </Button>
+        </li>
+      </ul>
+      <p v-else class="mt-3 text-sm text-ink-muted">{{ t("app.adminNoLockouts") }}</p>
     </div>
   </div>
 </template>

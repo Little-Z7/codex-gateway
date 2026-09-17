@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { z } from "zod";
 import { authenticatedFetch, openApp } from "./helpers/app";
+import { dockerInspectContainer } from "./helpers/docker-engine";
 
 async function apiStatus(page: Page, request: { url: string; method?: string; body?: unknown }) {
   return page.evaluate(async (request) => {
@@ -85,6 +86,13 @@ test("admin provisions a workspace container and the member uses it", async ({ p
   expect(configToml.status).toBe(200);
   expect(configToml.body).toContain('cli_auth_credentials_store = "file"');
   expect(configToml.body).toContain('sandbox_mode = "danger-full-access"');
+
+  // User containers must carry bounded json-file log rotation.
+  const inspect = await dockerInspectContainer(`codex-e2e-user-${memberName}`);
+  const logConfig = inspect.HostConfig.LogConfig;
+  expect(logConfig.Type).toBe("json-file");
+  expect(logConfig.Config["max-size"]).toBe("10m");
+  expect(logConfig.Config["max-file"]).toBe("3");
 
   // SSH + app-server inside the user container respond; an empty thread list is acceptable
   // without a shared Codex login.

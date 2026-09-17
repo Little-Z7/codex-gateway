@@ -4,10 +4,10 @@ import ProvisioningDiagnosticsCard from "./ProvisioningDiagnosticsCard.vue";
 import { useGatewayAdminStore } from "@/stores/gateway-admin";
 import { messageFromError, errorMessageLabels } from "@/stores/gateway/thread-utils/identity";
 
-const { t } = useI18n();
+const { t, te } = useI18n();
 const admin = useGatewayAdminStore();
 const { overview, audit } = storeToRefs(admin);
-const errorLabels = computed(() => errorMessageLabels(t));
+const errorLabels = computed(() => errorMessageLabels(t, te));
 
 onMounted(async () => {
   try {

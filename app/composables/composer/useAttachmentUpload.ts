@@ -11,7 +11,9 @@ export function useAttachmentUpload(
   attachedFiles: Ref<ComposerAttachment[]>,
 ) {
   const store = useGatewayBootstrapStore();
-  const { t } = useI18n();
+  const i18n = useI18n();
+  const { t } = i18n;
+  const te = (key: string) => i18n.te(key);
   const uploadInputRef = ref<HTMLInputElement | null>(null);
   const uploadingAttachments = ref(false);
 
@@ -77,7 +79,7 @@ export function useAttachmentUpload(
     } catch (error: unknown) {
       if (!sessionIsCurrent()) return;
       store.setError(
-        messageFromError(error, t("app.uploadAttachmentFailed"), errorMessageLabels(t)),
+        messageFromError(error, t("app.uploadAttachmentFailed"), errorMessageLabels(t, te)),
         { hostId },
       );
     } finally {

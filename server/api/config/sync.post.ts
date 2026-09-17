@@ -40,6 +40,7 @@ function assertManagedHostsUnchanged(current: HostRecord[], incoming: GatewayCon
     if (candidate === undefined || !sameManagedHost(host, candidate)) {
       throw createError({
         statusCode: 400,
+        data: { code: "hosts.managedReadonly" },
         statusMessage: "Bad Request",
         message: "Managed hosts can only be changed by an administrator",
       });
@@ -48,6 +49,7 @@ function assertManagedHostsUnchanged(current: HostRecord[], incoming: GatewayCon
   if (incomingManagedById.size !== current.filter((item) => item.managed).length) {
     throw createError({
       statusCode: 400,
+      data: { code: "hosts.managedReadonly" },
       statusMessage: "Bad Request",
       message: "Managed hosts can only be changed by an administrator",
     });

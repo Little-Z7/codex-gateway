@@ -13,6 +13,8 @@ export interface ErrorMessageLabels {
   proxy: string;
   proxyEnabled: string;
   proxyNone: string;
+  /** Maps a stable server error code (errors.<code>) to localized text, null when missing. */
+  errorForCode?: (code: string) => string | null;
 }
 
 const defaultErrorLabels: ErrorMessageLabels = {
@@ -36,8 +38,18 @@ export function messageFromError(
   return unknownGatewayErrorFromError(error, fallback, labels).toDisplayMessage();
 }
 
-export function errorMessageLabels(t: (key: string) => string): ErrorMessageLabels {
+export function errorMessageLabels(
+  t: (key: string, named?: Record<string, unknown>) => string,
+  te?: (key: string) => boolean,
+): ErrorMessageLabels {
   return {
+    errorForCode:
+      te === undefined
+        ? undefined
+        : (code) => {
+            const key = `errors.${code}`;
+            return te(key) ? t(key) : null;
+          },
     scope: t("app.errorScope"),
     host: t("app.errorHost"),
     ssh: t("app.errorSsh"),

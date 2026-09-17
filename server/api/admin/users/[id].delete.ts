@@ -16,6 +16,7 @@ export default defineGatewayEventHandler(async (event) => {
   if (id === admin.id) {
     throw createError({
       statusCode: 400,
+      data: { code: "admin.selfDelete" },
       statusMessage: "Bad Request",
       message: "You cannot delete your own account",
     });
@@ -23,6 +24,7 @@ export default defineGatewayEventHandler(async (event) => {
   if (target.role === "admin" && target.isActive && userStore.countActiveAdmins() <= 1) {
     throw createError({
       statusCode: 400,
+      data: { code: "admin.lastAdmin" },
       statusMessage: "Bad Request",
       message: "At least one active administrator is required",
     });

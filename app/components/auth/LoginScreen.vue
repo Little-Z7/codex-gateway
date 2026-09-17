@@ -3,10 +3,10 @@ import { Loader2Icon } from "@lucide/vue";
 import { Button } from "@codex-gateway/ui/button";
 import { Input } from "@codex-gateway/ui/input";
 import { useAuthStore } from "@/stores/auth";
-import { gatewayErrorMessage } from "@/utils/gateway-error";
+import { gatewayErrorPayload, gatewayErrorMessage } from "@/utils/gateway-error";
 
 const auth = useAuthStore();
-const { t } = useI18n();
+const { t, te } = useI18n();
 const username = ref("");
 const password = ref("");
 const loading = ref(false);
@@ -18,7 +18,16 @@ async function submit() {
   try {
     await auth.login({ username: username.value, password: password.value });
   } catch (caught: unknown) {
-    error.value = gatewayErrorMessage(caught, t("app.loginFailed"));
+    const payload = gatewayErrorPayload(caught);
+    if (payload.code === "auth.locked" && typeof payload.retryAfterSeconds === "number") {
+      error.value = t("errors.auth.locked", {
+        minutes: Math.ceil(payload.retryAfterSeconds / 60),
+      });
+    } else if (payload.code !== undefined && te(`errors.${payload.code}`)) {
+      error.value = t(`errors.${payload.code}`);
+    } else {
+      error.value = gatewayErrorMessage(caught, t("app.loginFailed"));
+    }
   } finally {
     loading.value = false;
   }

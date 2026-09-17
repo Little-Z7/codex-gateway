@@ -108,3 +108,18 @@ docker compose up -d codex-gateway
 - **auth.json 不存在**：诊断卡"共享登录缺失"→ 跑 `deploy/scripts/codex-login.sh`。
 - **共享登录被踢 / refresh 冲突**：多个容器同时 refresh 后旧 token 失效属正常，Codex 会 reload 磁盘上的最新 auth.json；若 auth.json 损坏，重新登录即可。
 - **容器创建失败**：行的 error 徽标 tooltip 里有 `last_error`；已创建的容器会保留供 `docker logs <name>` 排查。
+
+## 备份与恢复
+
+`deploy/scripts/backup.sh` 把 Gateway 全部持久化状态快照到 `data/backups/<timestamp>/`：
+
+- **SQLite**：优先用 `sqlite3 .backup` 在线一致性快照；本机没有 sqlite3 时借用 `codex-gateway` 容器里的 sqlite3，再退回 WAL checkpoint + 文件拷贝。
+- **共享 auth 目录**：`CODEX_GATEWAY_SHARED_AUTH_DIR`（`auth.json` 等）整体复制。
+- **用户 home 卷**：每个 `codex-user-*-home` 卷用 `docker run --rm -v vol:/src alpine tar` 打成 `volumes/<卷名>.tar.gz`。
+
+```bash
+./deploy/scripts/backup.sh                     # 输出目录 data/backups/<timestamp>/
+./deploy/scripts/restore.sh data/backups/<ts>  # 恢复：先停 gateway，再回写 db/auth/卷
+```
+
+restore 会停掉 `codex-gateway` 服务、回写 SQLite（清掉 wal/shm）、共享 auth 目录，并为每个备份卷重建 `docker volume` 后解包。恢复完成后 `docker compose up -d codex-gateway` 重启即可。数据库快照是离线的但备份过程不要求停机；恢复必须先停 Gateway 避免 WAL 覆盖。

@@ -934,6 +934,36 @@
     "newThreadExample1": "Walk me through this project's structure",
     "newThreadExample2": "Fix a recent bug",
     "newThreadExample3": "Write a small utility script",
-    "newThreadPlaceholder": "Describe what you want Codex to do"
+    "newThreadPlaceholder": "Describe what you want Codex to do",
+    "accountSettings": "Account",
+    "accountUsername": "Username",
+    "changePassword": "Change password",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "passwordChanged": "Password updated; other sessions were signed out",
+    "passwordChangeFailed": "Failed to change password",
+    "passwordChangeMismatch": "New passwords do not match",
+    "adminSecurity": "Security",
+    "adminSecurityLockouts": "Active sign-in lockouts",
+    "adminNoLockouts": "No active lockouts",
+    "adminUnlock": "Unlock",
+    "loginLocked": "Sign-in locked; try again in {minutes} min"
+  },
+  "errors": {
+    "auth.invalidCredentials": "Invalid username or password",
+    "auth.locked": "Sign-in locked; try again in {minutes} min",
+    "auth.passwordTooShort": "New password must be at least 8 characters",
+    "admin.lastAdmin": "At least one active administrator is required",
+    "admin.selfDemotion": "You cannot disable or demote your own account",
+    "admin.selfDelete": "You cannot delete your own account",
+    "admin.usernameTaken": "Username already exists",
+    "admin.provisioningDisabled": "Container provisioning is disabled",
+    "admin.containerExists": "Container already exists",
+    "admin.containerNotFound": "Container not found",
+    "hosts.managedReadonly": "Managed hosts can only be changed by an administrator",
+    "hosts.notFound": "Host not found",
+    "common.notFound": "Resource not found",
+    "common.missing": "Resource missing"
   }
 }

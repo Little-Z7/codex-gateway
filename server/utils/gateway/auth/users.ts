@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { GatewayConfig } from "~~/shared/types";
 import { defaultGatewayConfig } from "../../../../shared/config";
 import { gatewayDatabase, gatewayDatabaseExists } from "../storage/database";
+import { MANAGED_HOST_STATUSES, type ManagedHostStatus } from "../storage/schema";
 import { parseGatewayConfig } from "../http/validation/config";
 import {
   decryptJson,
@@ -38,7 +39,7 @@ export interface AdminUserRecord {
 export interface ManagedHostRecord {
   userId: number;
   hostId: number;
-  status: "ready" | "provisioning" | "error" | "removed";
+  status: ManagedHostStatus;
   containerName: string | null;
   containerId: string | null;
   volumeName: string | null;
@@ -138,6 +139,42 @@ export const userStore = {
     gatewayDatabase().prepare("DELETE FROM users WHERE id = ?").run(id);
   },
 
+  verifyUserPassword(userId: number, password: string) {
+    const row = gatewayDatabase()
+      .prepare("SELECT password_hash, is_active FROM users WHERE id = ?")
+      .get(userId);
+    if (!row || Number(row.is_active) !== 1) return false;
+    return verifyPassword(password, String(row.password_hash));
+  },
+
+  changePassword(userId: number, newPassword: string) {
+    if (newPassword.length < 8) {
+      throw new Error("Password must be at least 8 characters");
+    }
+    gatewayDatabase()
+      .prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?")
+      .run(hashPassword(newPassword), new Date().toISOString(), userId);
+  },
+
+  revokeOtherUserSessions(userId: number, keepToken: string) {
+    const keepHash = keepToken === "" ? null : hashToken(keepToken);
+    const rows = gatewayDatabase()
+      .prepare("SELECT token_hash FROM sessions WHERE user_id = ?")
+      .all(userId);
+    const revoked = rows
+      .map((row) => String(row.token_hash))
+      .filter((tokenHash) => tokenHash !== keepHash);
+    if (!revoked.length) return;
+    const stmt = gatewayDatabase().prepare(
+      "DELETE FROM sessions WHERE user_id = ? AND token_hash = ?",
+    );
+    for (const tokenHash of revoked) {
+      stmt.run(userId, tokenHash);
+      sessionActivityTracker.forget(tokenHash);
+      sessionRevocationEvents.emit(tokenHash);
+    }
+  },
+
   revokeUserSessions(userId: number) {
     const rows = gatewayDatabase()
       .prepare("SELECT token_hash FROM sessions WHERE user_id = ?")
@@ -163,6 +200,13 @@ export const userStore = {
   listManagedHosts(): Map<number, ManagedHostRecord> {
     const rows = gatewayDatabase().prepare("SELECT * FROM managed_hosts").all();
     return new Map(rows.map((row) => [Number(row.user_id), managedHostFromRow(row)]));
+  },
+
+  listManagedHostsByStatus(status: ManagedHostStatus): ManagedHostRecord[] {
+    const rows = gatewayDatabase()
+      .prepare("SELECT * FROM managed_hosts WHERE status = ?")
+      .all(status);
+    return rows.map((row) => managedHostFromRow(row));
   },
 
   upsertManagedHost(
@@ -196,7 +240,7 @@ export const userStore = {
       .run(
         userId,
         hostId,
-        fields.status ?? "ready",
+        assertManagedHostStatus(fields.status ?? "ready"),
         fields.containerName ?? null,
         fields.containerId ?? null,
         fields.volumeName ?? null,
@@ -352,8 +396,19 @@ function rowRole(value: unknown): GatewayUserRole {
   return value === "admin" ? "admin" : "user";
 }
 
-function managedHostStatus(value: unknown): ManagedHostRecord["status"] {
-  return value === "provisioning" || value === "error" || value === "removed" ? value : "ready";
+function isManagedHostStatus(value: unknown): value is ManagedHostStatus {
+  return typeof value === "string" && (MANAGED_HOST_STATUSES as readonly string[]).includes(value);
+}
+
+function assertManagedHostStatus(value: string): ManagedHostStatus {
+  if (!isManagedHostStatus(value)) {
+    throw new Error(`Invalid managed host status: ${value}`);
+  }
+  return value;
+}
+
+function managedHostStatus(value: unknown): ManagedHostStatus {
+  return isManagedHostStatus(value) ? value : "ready";
 }
 
 function rowText(value: string | number | bigint | Uint8Array | null | undefined) {

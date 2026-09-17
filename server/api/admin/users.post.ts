@@ -25,6 +25,7 @@ export default defineGatewayEventHandler(async (event) => {
   if (userStore.findByUsername(input.username)) {
     throw createError({
       statusCode: 409,
+      data: { code: "admin.usernameTaken" },
       statusMessage: "Conflict",
       message: "Username already exists",
     });

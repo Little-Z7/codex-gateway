@@ -56,7 +56,7 @@ export default defineNuxtConfig({
     },
     scheduledTasks: {
       "*/30 * * * * *": ["gateway:sync-running-threads"],
-      "*/5 * * * *": ["gateway:poll-tmux-monitors"],
+      "*/5 * * * *": ["gateway:poll-tmux-monitors", "gateway:reconcile-containers"],
       "0 * * * *": ["gateway:prune-expired-sessions"],
     },
   },

@@ -53,10 +53,10 @@ import ProvisioningDiagnosticsCard from "../ProvisioningDiagnosticsCard.vue";
 import { SearchIcon, LogOutIcon } from "@lucide/vue";
 
 const props = withDefaults(defineProps<{ extended?: boolean }>(), { extended: false });
-const { t } = useI18n();
+const { t, te } = useI18n();
 const admin = useGatewayAdminStore();
 const { users, provisioning } = storeToRefs(admin);
-const errorLabels = computed(() => errorMessageLabels(t));
+const errorLabels = computed(() => errorMessageLabels(t, te));
 
 const createOpen = ref(false);
 const createForm = ref({ username: "", password: "", role: "user", provision: true });

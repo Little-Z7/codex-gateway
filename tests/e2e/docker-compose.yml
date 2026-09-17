@@ -163,6 +163,7 @@ services:
       HOME: /home/pwuser
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
       - ${E2E_CODEX_HOME:-${HOME}/.codex}:/codex-auth:ro
       - ../../test-results:/workspace/codex-gateway/test-results
       - e2e-data:/workspace/codex-gateway/.data-e2e
