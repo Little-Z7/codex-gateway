@@ -54,7 +54,7 @@ async function submit() {
         {{ auth.isAdmin ? t("app.roleAdmin") : t("app.roleUser") }}
       </div>
     </div>
-    <form class="space-y-4" @submit.prevent="submit">
+    <form v-if="auth.selfPasswordChangeAllowed" class="space-y-4" @submit.prevent="submit">
       <div class="text-sm font-medium text-ink">{{ t("app.changePassword") }}</div>
       <div class="space-y-2">
         <Label for="account-current-password">{{ t("app.currentPassword") }}</Label>
@@ -94,5 +94,8 @@ async function submit() {
         {{ t("app.changePassword") }}
       </Button>
     </form>
+    <p v-else class="text-sm text-ink-muted" data-testid="account-password-disabled">
+      {{ t("app.passwordChangeDisabled") }}
+    </p>
   </section>
 </template>

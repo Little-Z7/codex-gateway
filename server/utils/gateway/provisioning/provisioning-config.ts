@@ -1,4 +1,5 @@
 import { trimmedOrNull } from "~~/shared/utils/strings";
+import { resolveModelProvider } from "../settings/model-provider";
 
 export type ModelProviderMode = "openai" | "custom";
 
@@ -102,6 +103,6 @@ export function provisioningConfig(): ProvisioningConfig {
       trimmedOrNull(process.env.CODEX_GATEWAY_USER_CONTAINER_LOG_MAX_SIZE) ?? "10m",
     userContainerLogMaxFiles:
       trimmedOrNull(process.env.CODEX_GATEWAY_USER_CONTAINER_LOG_MAX_FILES) ?? "3",
-    modelProvider: modelProviderConfig(),
+    modelProvider: resolveModelProvider(modelProviderConfig()),
   };
 }

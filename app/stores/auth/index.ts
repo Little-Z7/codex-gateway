@@ -17,6 +17,7 @@ export const useAuthStore = defineStore("auth", () => {
 
   const isAuthenticated = computed(() => token.value !== "");
   const isAdmin = computed(() => role.value === "admin");
+  const selfPasswordChangeAllowed = ref(true);
 
   watch([storedToken, storedUsername, storedRole], ([nextToken, nextUsername, nextRole]) => {
     if (!initialized.value) return;
@@ -37,7 +38,8 @@ export const useAuthStore = defineStore("auth", () => {
     );
     initialized.value = true;
     // Tokens written before roles existed carry no stored role; fetch it once so isAdmin settles.
-    if (token.value !== "" && storedRole.value === null) {
+    // refreshProfile also refreshes feature flags (e.g. self-service password change).
+    if (token.value !== "") {
       void refreshProfile();
     }
   }
@@ -45,11 +47,15 @@ export const useAuthStore = defineStore("auth", () => {
   async function refreshProfile() {
     if (token.value === "") return;
     try {
-      const response = await $fetch<{ user: { role?: string } }>("/api/auth/me", {
+      const response = await $fetch<{
+        user: { role?: string };
+        features?: { selfPasswordChange?: boolean };
+      }>("/api/auth/me", {
         headers: { authorization: `Bearer ${token.value}` },
       });
       role.value = normalizeRole(response.user.role);
       storedRole.value = role.value;
+      selfPasswordChangeAllowed.value = response.features?.selfPasswordChange ?? true;
     } catch {}
   }
 
@@ -114,6 +120,7 @@ export const useAuthStore = defineStore("auth", () => {
     username,
     role,
     isAdmin,
+    selfPasswordChangeAllowed,
     initialized,
     sessionEpoch,
     isAuthenticated,

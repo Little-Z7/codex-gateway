@@ -3,9 +3,19 @@ import { storeToRefs } from "pinia";
 import { CopyIcon, ExternalLinkIcon, Loader2Icon } from "@lucide/vue";
 import { Badge } from "@codex-gateway/ui/badge";
 import { Button } from "@codex-gateway/ui/button";
+import { Input } from "@codex-gateway/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@codex-gateway/ui/select";
+import { Switch } from "@codex-gateway/ui/switch";
 import { toast } from "@codex-gateway/ui/sonner";
 import { useGatewayAdminStore } from "@/stores/gateway-admin";
 import { messageFromError, errorMessageLabels } from "@/stores/gateway/thread-utils/identity";
+import AdminBackupsCard from "./AdminBackupsCard.vue";
 
 const { t, te } = useI18n();
 const admin = useGatewayAdminStore();
@@ -13,6 +23,149 @@ const { systemInfo, sharedLoginStatus, lockouts } = storeToRefs(admin);
 const errorLabels = computed(() => errorMessageLabels(t, te));
 const sharedLoginBusy = ref(false);
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+// Provider edit form — apiKey stays write-only; an empty field keeps the stored secret.
+const providerForm = ref({
+  mode: "openai" as "openai" | "custom",
+  id: "",
+  name: "",
+  baseUrl: "",
+  apiKey: "",
+  wireApi: "responses",
+  model: "",
+  webSearch: false,
+});
+const providerSaving = ref(false);
+const providerInitialized = ref(false);
+const restartBusy = ref(false);
+
+const securityForm = ref({
+  loginMaxFailures: 5,
+  lockoutMinutes: 15,
+  sessionDays: 30,
+  allowSelfPasswordChange: true,
+});
+const securitySaving = ref(false);
+const securityInitialized = ref(false);
+
+const notificationsForm = ref({ barkServerUrl: "" });
+const notificationsSaving = ref(false);
+const notificationsInitialized = ref(false);
+
+const auditRetentionDays = ref(180);
+const auditRetentionInitialized = ref(false);
+
+watch(
+  () => systemInfo.value,
+  (info) => {
+    if (!info) return;
+    if (!providerInitialized.value) {
+      const m = info.modelProvider;
+      providerForm.value = {
+        mode: m.mode === "custom" ? "custom" : "openai",
+        id: m.id,
+        name: m.displayName,
+        baseUrl: m.baseUrl ?? "",
+        apiKey: "",
+        wireApi: m.wireApi,
+        model: m.model ?? "",
+        webSearch: m.webSearch === "disabled",
+      };
+      providerInitialized.value = true;
+    }
+    if (!securityInitialized.value) {
+      securityForm.value = { ...info.settings.security };
+      securityInitialized.value = true;
+    }
+    if (!notificationsInitialized.value) {
+      notificationsForm.value = { barkServerUrl: info.settings.notifications.barkServerUrl ?? "" };
+      notificationsInitialized.value = true;
+    }
+    if (!auditRetentionInitialized.value) {
+      auditRetentionDays.value = info.settings.audit.retentionDays;
+      auditRetentionInitialized.value = true;
+    }
+  },
+  { immediate: true },
+);
+
+async function saveProvider() {
+  if (providerSaving.value) return;
+  providerSaving.value = true;
+  try {
+    await admin.saveModelProvider({
+      mode: providerForm.value.mode,
+      id: providerForm.value.id.trim(),
+      name: providerForm.value.name.trim(),
+      baseUrl: providerForm.value.baseUrl.trim() === "" ? null : providerForm.value.baseUrl.trim(),
+      ...(providerForm.value.apiKey === "" ? {} : { apiKey: providerForm.value.apiKey }),
+      wireApi: providerForm.value.wireApi,
+      model: providerForm.value.model.trim() === "" ? null : providerForm.value.model.trim(),
+      webSearch: providerForm.value.webSearch ? "disabled" : null,
+    });
+    providerForm.value.apiKey = "";
+    toast.success(t("app.adminProviderSavedRestartHint"));
+  } catch (error) {
+    toast.error(messageFromError(error, t("app.adminSettingsSaveFailed"), errorLabels.value));
+  } finally {
+    providerSaving.value = false;
+  }
+}
+
+async function restartAll() {
+  if (restartBusy.value) return;
+  restartBusy.value = true;
+  try {
+    const result = await admin.restartAllContainers();
+    toast.success(
+      t("app.adminRestartAllDone", { restarted: result.restarted, failed: result.failures.length }),
+    );
+  } catch (error) {
+    toast.error(messageFromError(error, t("app.adminRestartAllFailed"), errorLabels.value));
+  } finally {
+    restartBusy.value = false;
+  }
+}
+
+async function saveSecurity() {
+  if (securitySaving.value) return;
+  securitySaving.value = true;
+  try {
+    await admin.saveSecurity({ ...securityForm.value });
+    toast.success(t("app.adminSettingsSaved"));
+  } catch (error) {
+    toast.error(messageFromError(error, t("app.adminSettingsSaveFailed"), errorLabels.value));
+  } finally {
+    securitySaving.value = false;
+  }
+}
+
+async function saveAuditRetention() {
+  try {
+    await admin.saveAuditRetention(auditRetentionDays.value);
+    toast.success(t("app.adminSettingsSaved"));
+  } catch (error) {
+    toast.error(messageFromError(error, t("app.adminSettingsSaveFailed"), errorLabels.value));
+  }
+}
+
+async function saveNotifications() {
+  if (notificationsSaving.value) return;
+  notificationsSaving.value = true;
+  try {
+    await admin.saveNotifications({
+      barkServerUrl:
+        notificationsForm.value.barkServerUrl.trim() === ""
+          ? null
+          : notificationsForm.value.barkServerUrl.trim(),
+    });
+    toast.success(t("app.adminSettingsSaved"));
+  } catch (error) {
+    toast.error(messageFromError(error, t("app.adminSettingsSaveFailed"), errorLabels.value));
+  } finally {
+    notificationsSaving.value = false;
+  }
+}
 
 async function refresh() {
   try {
@@ -120,6 +273,18 @@ const providerRows = computed(() => {
   ];
 });
 
+function formatBytes(bytes: number | null | undefined) {
+  if (bytes == null) return "—";
+  const units = ["B", "KiB", "MiB", "GiB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
 const runtimeRows = computed(() => {
   const info = systemInfo.value;
   if (!info) return [];
@@ -129,6 +294,14 @@ const runtimeRows = computed(() => {
     kv("app.adminCfgDbPath", info.paths.database),
     kv("app.adminCfgCodexVersion", info.runtime.supportedCodexVersion),
     kv("app.adminCfgNode", info.runtime.nodeVersion),
+    kv("app.adminRuntimeWsPeers", info.runtime.websocketPeers),
+    kv("app.adminRuntimeSsh", info.runtime.sshConnections),
+    kv("app.adminRuntimeRpc", info.runtime.rpcSessions),
+    kv("app.adminRuntimeEvents", info.runtime.gatewayEvents),
+    kv(
+      "app.adminRuntimeMemory",
+      `${formatBytes(info.runtime.memory.heapUsedBytes)} / ${formatBytes(info.runtime.memory.rssBytes)}`,
+    ),
   ];
 });
 </script>
@@ -179,6 +352,80 @@ const runtimeRows = computed(() => {
       <p v-if="systemInfo?.modelProvider.error" class="mt-2 text-xs text-destructive">
         {{ systemInfo.modelProvider.error }}
       </p>
+
+      <div class="mt-3 grid gap-3 border-t border-hairline pt-3 sm:grid-cols-2 lg:grid-cols-3">
+        <label class="space-y-1 text-xs text-ink-muted">
+          {{ t("app.adminCfgProviderMode") }}
+          <Select v-model="providerForm.mode" data-testid="admin-provider-mode">
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="openai">openai</SelectItem>
+              <SelectItem value="custom">custom</SelectItem>
+            </SelectContent>
+          </Select>
+        </label>
+        <label class="space-y-1 text-xs text-ink-muted">
+          {{ t("app.adminCfgProviderId") }}
+          <Input v-model="providerForm.id" data-testid="admin-provider-id" />
+        </label>
+        <label class="space-y-1 text-xs text-ink-muted">
+          {{ t("app.adminCfgProviderName") }}
+          <Input v-model="providerForm.name" data-testid="admin-provider-name" />
+        </label>
+        <label class="space-y-1 text-xs text-ink-muted">
+          {{ t("app.adminCfgProviderBaseUrl") }}
+          <Input v-model="providerForm.baseUrl" data-testid="admin-provider-base-url" />
+        </label>
+        <label class="space-y-1 text-xs text-ink-muted">
+          {{ t("app.adminCfgProviderKey") }}
+          <Input
+            v-model="providerForm.apiKey"
+            type="password"
+            :placeholder="
+              systemInfo?.modelProvider.apiKeyConfigured
+                ? `••••${systemInfo.modelProvider.apiKeyLast4 ?? ''}`
+                : ''
+            "
+            autocomplete="off"
+            data-testid="admin-provider-api-key"
+          />
+        </label>
+        <label class="space-y-1 text-xs text-ink-muted">
+          {{ t("app.adminCfgProviderWireApi") }}
+          <Input v-model="providerForm.wireApi" data-testid="admin-provider-wire-api" />
+        </label>
+        <label class="space-y-1 text-xs text-ink-muted">
+          {{ t("app.adminCfgProviderModel") }}
+          <Input v-model="providerForm.model" data-testid="admin-provider-model" />
+        </label>
+        <label class="flex items-center gap-2 self-end text-xs text-ink-muted">
+          <Switch
+            v-model:checked="providerForm.webSearch"
+            data-testid="admin-provider-web-search"
+          />
+          {{ t("app.adminCfgProviderWebSearch") }}
+        </label>
+      </div>
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          :disabled="providerSaving"
+          data-testid="admin-provider-save"
+          @click="saveProvider"
+        >
+          {{ t("app.adminSettingsSave") }}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          :disabled="restartBusy"
+          data-testid="admin-restart-all"
+          @click="restartAll"
+        >
+          {{ t("app.adminRestartAllContainers") }}
+        </Button>
+        <span class="text-xs text-ink-muted">{{ t("app.adminProviderSavedRestartHint") }}</span>
+      </div>
     </div>
 
     <div class="rounded-lg border border-hairline bg-surface p-4" data-testid="admin-shared-login">
@@ -288,6 +535,99 @@ const runtimeRows = computed(() => {
         </li>
       </ul>
       <p v-else class="mt-3 text-sm text-ink-muted">{{ t("app.adminNoLockouts") }}</p>
+
+      <div class="mt-3 grid gap-3 border-t border-hairline pt-3 sm:grid-cols-2 lg:grid-cols-4">
+        <label class="space-y-1 text-xs text-ink-muted">
+          {{ t("app.adminSecurityMaxFailures") }}
+          <Input
+            v-model.number="securityForm.loginMaxFailures"
+            type="number"
+            min="1"
+            data-testid="admin-security-max-failures"
+          />
+        </label>
+        <label class="space-y-1 text-xs text-ink-muted">
+          {{ t("app.adminSecurityLockoutMinutes") }}
+          <Input
+            v-model.number="securityForm.lockoutMinutes"
+            type="number"
+            min="1"
+            data-testid="admin-security-lockout-minutes"
+          />
+        </label>
+        <label class="space-y-1 text-xs text-ink-muted">
+          {{ t("app.adminSecuritySessionDays") }}
+          <Input
+            v-model.number="securityForm.sessionDays"
+            type="number"
+            min="1"
+            data-testid="admin-security-session-days"
+          />
+        </label>
+        <label class="flex items-center gap-2 self-end text-xs text-ink-muted">
+          <Switch
+            v-model:checked="securityForm.allowSelfPasswordChange"
+            data-testid="admin-security-self-password"
+          />
+          {{ t("app.adminSecuritySelfPassword") }}
+        </label>
+      </div>
+      <div class="mt-3 flex flex-wrap items-center gap-3">
+        <Button
+          size="sm"
+          :disabled="securitySaving"
+          data-testid="admin-security-save"
+          @click="saveSecurity"
+        >
+          {{ t("app.adminSettingsSave") }}
+        </Button>
+        <label class="flex items-center gap-2 text-xs text-ink-muted">
+          {{ t("app.adminAuditRetentionDays") }}
+          <Input
+            v-model.number="auditRetentionDays"
+            type="number"
+            min="1"
+            class="w-24"
+            data-testid="admin-audit-retention"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="admin-audit-retention-save"
+            @click="saveAuditRetention"
+          >
+            {{ t("app.adminSettingsSave") }}
+          </Button>
+        </label>
+      </div>
     </div>
+
+    <div
+      class="rounded-lg border border-hairline bg-surface p-4"
+      data-testid="admin-notifications-card"
+    >
+      <div class="text-sm font-medium">{{ t("app.adminNotificationsTitle") }}</div>
+      <div class="mt-2 flex items-end gap-2">
+        <label class="min-w-0 flex-1 space-y-1 text-xs text-ink-muted">
+          {{ t("app.adminBarkServerUrl") }}
+          <Input
+            v-model="notificationsForm.barkServerUrl"
+            placeholder="https://api.day.app"
+            data-testid="admin-bark-server-url"
+          />
+        </label>
+        <Button
+          size="sm"
+          :disabled="notificationsSaving"
+          data-testid="admin-notifications-save"
+          @click="saveNotifications"
+        >
+          {{ t("app.adminSettingsSave") }}
+        </Button>
+      </div>
+      <p class="mt-1 text-xs text-ink-faint">{{ t("app.adminBarkServerHint") }}</p>
+    </div>
+
+    <AdminBackupsCard />
   </div>
 </template>

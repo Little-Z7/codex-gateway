@@ -12,7 +12,17 @@ import { recordFromUnknown } from "~~/shared/utils/records";
 import { runPeerScoped, sendRealtimePeerMessage, stateFor, type RealtimePeer } from "./peer-state";
 import { clearOwnedSubscriptions, clearSubscriptions } from "./subscription-map";
 
+const activePeers = new WeakSet<RealtimePeer>();
+let activePeerCount = 0;
+
+/** Open realtime websocket connections — surfaced on the admin system page. */
+export function realtimePeerCount() {
+  return activePeerCount;
+}
+
 export function openRealtimePeer(peer: RealtimePeer) {
+  activePeers.add(peer);
+  activePeerCount += 1;
   const state = stateFor(peer);
   state.authTimer = setTimeout(() => {
     if (!state.authenticated) {
@@ -52,6 +62,7 @@ export async function handleRealtimePeerMessage(peer: RealtimePeer, rawMessage: 
 }
 
 export function cleanupRealtimePeer(peer: RealtimePeer) {
+  if (activePeers.delete(peer)) activePeerCount -= 1;
   const state = stateFor(peer);
   if (state.authTimer !== undefined) {
     clearTimeout(state.authTimer);

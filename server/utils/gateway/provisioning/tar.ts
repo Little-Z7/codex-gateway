@@ -27,6 +27,35 @@ function tarHeader(name: string, mode: number, size: number, type: "0" | "5") {
   return header;
 }
 
+/**
+ * Recursively tars a directory tree. Directories get explicit `5` entries; file contents are
+ * preserved verbatim. Paths are stored relative to `dir` using POSIX separators.
+ */
+export function tarTree(dir: string): Buffer {
+  const chunks: Buffer[] = [];
+  const walk = (current: string, prefix: string) => {
+    const entries = readdirSync(current, { withFileTypes: true }).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    for (const entry of entries) {
+      const absolute = path.join(current, entry.name);
+      const name = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+      if (entry.isDirectory()) {
+        chunks.push(tarHeader(`${name}/`, 0o755, 0, "5"));
+        walk(absolute, name);
+      } else if (entry.isFile()) {
+        const data = readFileSync(absolute);
+        chunks.push(tarHeader(name, 0o644, data.length, "0"), data);
+        const pad = (512 - (data.length % 512)) % 512;
+        if (pad > 0) chunks.push(Buffer.alloc(pad));
+      }
+    }
+  };
+  walk(dir, "");
+  chunks.push(Buffer.alloc(1024));
+  return Buffer.concat(chunks);
+}
+
 export function tarDirectory(dir: string): Buffer {
   const chunks: Buffer[] = [];
   const addEntry = (absPath: string, relName: string) => {

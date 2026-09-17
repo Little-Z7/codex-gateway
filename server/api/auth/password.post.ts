@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auditLog } from "../../utils/gateway/audit/audit-log";
 import { loginLockout } from "../../utils/gateway/auth/login-lockout";
 import { requireAuthenticatedUser } from "../../utils/gateway/auth/context";
+import { securitySettings } from "../../utils/gateway/settings/model-provider";
 import { userStore } from "../../utils/gateway/auth/users";
 import { gatewayApiError } from "../../utils/gateway/http/errors";
 
@@ -13,6 +14,9 @@ const passwordSchema = z.object({
 
 export default defineEventHandler(async (event) => {
   const user = requireAuthenticatedUser(event);
+  if (!securitySettings().allowSelfPasswordChange) {
+    throw gatewayApiError("auth.passwordChangeDisabled", 403, "Password change is disabled");
+  }
   const input = await readValidatedBody(event, (body) => passwordSchema.parse(body));
   const key = `u:${user.username}`;
   const locked = loginLockout.lockedFor(key);

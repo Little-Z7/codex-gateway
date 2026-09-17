@@ -56,6 +56,11 @@ export class SshConnectionPool extends EventEmitter<SshConnectionPoolEvents> {
     super();
   }
 
+  /** Live (or connecting) pooled SSH connections — surfaced on the admin system page. */
+  activeConnectionCount() {
+    return this.clients.size;
+  }
+
   connect(host: HostWithSecret): Promise<Client> {
     const resolved = resolveSshConfig(host);
     const key = this.connectionKeyFor(host);

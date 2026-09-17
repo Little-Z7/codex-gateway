@@ -225,6 +225,13 @@ export function dropGatewayMemoryState(userId: number) {
   statesByUser.delete(userId);
 }
 
+/** Buffered gateway events across every user scope — surfaced on the admin system page. */
+export function gatewayEventCount() {
+  let total = anonymousState.events.length;
+  for (const state of statesByUser.values()) total += state.events.length;
+  return total;
+}
+
 export function runWithGatewayUser<T>(userId: number, callback: () => T): T {
   return userScope.run(userId, callback);
 }

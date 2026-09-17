@@ -13,6 +13,7 @@ import {
 } from "../storage/crypto";
 import { sessionRevocationEvents } from "./session-events";
 import { sessionActivityTracker } from "./session-activity-tracker";
+import { securitySettings } from "../settings/model-provider";
 
 export type GatewayUserRole = "admin" | "user";
 
@@ -51,7 +52,10 @@ export interface ManagedHostRecord {
   updatedAt: string;
 }
 
-const SESSION_DAYS = 30;
+// Session lifetime resolves through the settings layer (admin-editable; default 30 days).
+function sessionDays() {
+  return securitySettings().sessionDays;
+}
 
 export const userStore = {
   createUser(username: string, password: string, role: GatewayUserRole = "user") {
@@ -276,7 +280,7 @@ export const userStore = {
       return null;
     }
     const token = randomBytes(32).toString("base64url");
-    const expiresAt = new Date(Date.now() + SESSION_DAYS * 86_400_000).toISOString();
+    const expiresAt = new Date(Date.now() + sessionDays() * 86_400_000).toISOString();
     const now = new Date().toISOString();
     gatewayDatabase()
       .prepare(

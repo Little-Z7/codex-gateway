@@ -26,6 +26,13 @@ interface SubscriptionLeases {
 }
 
 export class ControllerRegistry {
+  // hostSessions live inside per-user registry instances; a process-wide count is kept for the
+  // admin system page's runtime card.
+  private static liveHostSessions = 0;
+  static activeHostSessionCount() {
+    return ControllerRegistry.liveHostSessions;
+  }
+
   private readonly controllers = new Map<string, ThreadController>();
   private readonly pendingControllers = new Map<string, Promise<ThreadController>>();
   private readonly controllerGenerations = new Map<string, number>();
@@ -193,7 +200,10 @@ export class ControllerRegistry {
     this.deletePendingForHost(userId, hostId);
     const key = this.hostKey(userId, hostId);
     const session = this.hostSessions.get(key);
-    this.hostSessions.delete(key);
+    if (session !== undefined) {
+      this.hostSessions.delete(key);
+      ControllerRegistry.liveHostSessions -= 1;
+    }
     session?.close();
   }
 
@@ -292,6 +302,7 @@ export class ControllerRegistry {
         () => this.disposeHostSession(userId, host.id, provider.id, session),
       );
       this.hostSessions.set(key, session);
+      ControllerRegistry.liveHostSessions += 1;
     }
     return session.connect();
   }
@@ -327,6 +338,7 @@ export class ControllerRegistry {
     const hostKey = this.hostKey(userId, hostId, providerId);
     if (session && this.hostSessions.get(hostKey) === session) {
       this.hostSessions.delete(hostKey);
+      ControllerRegistry.liveHostSessions -= 1;
     }
     // A bootstrap subscription belongs to the app-server connection created by thread/start. Once
     // that transport closes there is no protocol operation that can reattach an unmaterialized

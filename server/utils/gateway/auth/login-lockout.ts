@@ -1,16 +1,7 @@
-import { trimmedOrFallback } from "~~/shared/utils/strings";
+import { securitySettings } from "../settings/model-provider";
 
-// In-memory only: a gateway restart clears the counters, which is accepted. Thresholds are env
-// knobs today; C4 will move them to persisted settings without changing this API surface.
-const maxFailures = Math.max(
-  1,
-  Number(trimmedOrFallback(process.env.CODEX_GATEWAY_LOGIN_MAX_FAILURES, "5")) || 5,
-);
-const lockoutMs =
-  Math.max(
-    1,
-    Number(trimmedOrFallback(process.env.CODEX_GATEWAY_LOGIN_LOCKOUT_MINUTES, "15")) || 15,
-  ) * 60_000;
+// In-memory only: a gateway restart clears the counters, which is accepted. Thresholds resolve
+// through the settings layer (DB > env > default) on every call so admin edits apply immediately.
 
 type Entry = { failures: number; lockedUntil: number };
 
@@ -37,10 +28,12 @@ export const loginLockout = {
   recordFailure(key: string) {
     const now = Date.now();
     const existing = entryFor(key);
+    const settings = securitySettings();
     const failures = (existing?.failures ?? 0) + 1;
     entries.set(key, {
       failures,
-      lockedUntil: failures >= maxFailures ? now + lockoutMs : 0,
+      lockedUntil:
+        failures >= settings.loginMaxFailures ? now + settings.lockoutMinutes * 60_000 : 0,
     });
   },
 

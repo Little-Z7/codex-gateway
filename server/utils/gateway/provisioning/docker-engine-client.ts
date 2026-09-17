@@ -63,6 +63,24 @@ export class DockerEngineClient {
     return this.request("GET", `/images/${encodeURIComponent(name)}/json`);
   }
 
+  /** Pulls `fromImage:tag` when the image is not present locally. */
+  async ensureImage(image: string) {
+    const parts = image.split(":");
+    const fromImage = parts[0] ?? image;
+    const tag = parts[1] ?? "latest";
+    try {
+      await this.inspectImage(image);
+      return;
+    } catch (error) {
+      if (!isDockerNotFound(error)) throw error;
+    }
+    await this.requestRaw(
+      "POST",
+      `/images/create?fromImage=${encodeURIComponent(fromImage)}&tag=${encodeURIComponent(tag)}`,
+      120_000,
+    );
+  }
+
   inspectNetwork(name: string) {
     return this.request("GET", `/networks/${encodeURIComponent(name)}`);
   }
@@ -277,27 +295,31 @@ export interface DockerVolumeInfo {
   UsageData?: { Size?: number };
 }
 
-/** Docker multiplexes log streams into frames: [stream(1), 0,0,0, length(4 BE)] + payload. */
-export function demuxDockerLogFrames(buffer: Buffer) {
-  const lines: Buffer[] = [];
+/**
+ * Binary-safe variant used for streamed tar archives (backups). `stream` filters the frame
+ * channel — 1 is stdout, 2 is stderr; undefined keeps both.
+ */
+export function demuxDockerFrames(buffer: Buffer, stream?: 1 | 2): Buffer {
+  const chunks: Buffer[] = [];
   let offset = 0;
   while (offset + 8 <= buffer.length) {
+    const channel = buffer.readUInt8(offset);
     const length = buffer.readUInt32BE(offset + 4);
     const end = offset + 8 + length;
-    if (end > buffer.length) {
-      break;
+    if (end > buffer.length) break;
+    if (stream === undefined || channel === stream) {
+      chunks.push(buffer.subarray(offset + 8, end));
     }
-    lines.push(buffer.subarray(offset + 8, end));
     offset = end;
   }
-  // If the buffer was not framed (e.g. TTY container), treat it as plain text.
-  if (offset === 0) {
-    return buffer.toString();
-  }
-  if (offset < buffer.length) {
-    lines.push(buffer.subarray(offset));
-  }
-  return Buffer.concat(lines).toString();
+  if (offset === 0) return buffer;
+  if (offset < buffer.length) chunks.push(buffer.subarray(offset));
+  return Buffer.concat(chunks);
+}
+
+/** Docker multiplexes log streams into frames: [stream(1), 0,0,0, length(4 BE)] + payload. */
+export function demuxDockerLogFrames(buffer: Buffer) {
+  return demuxDockerFrames(buffer).toString();
 }
 
 export function defaultDockerSocket() {
