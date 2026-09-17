@@ -4,6 +4,7 @@ import { requireAdmin } from "../../../utils/gateway/auth/context";
 import { userStore } from "../../../utils/gateway/auth/users";
 import { defineGatewayEventHandler } from "../../../utils/gateway/http/errors";
 import { requireRecord } from "../../../utils/gateway/http/validation/common";
+import { auditLog } from "../../../utils/gateway/audit/audit-log";
 
 const updateUserSchema = z
   .object({
@@ -40,6 +41,12 @@ export default defineGatewayEventHandler(async (event) => {
   }
 
   const user = requireRecord(userStore.updateUser(id, input), "User not found");
+  auditLog.record(
+    admin,
+    "user.update",
+    { type: "user", id, label: target.username },
+    { isActive: input.isActive, role: input.role, passwordReset: input.password !== undefined },
+  );
   // Disabling or resetting credentials must drop live sessions so existing tabs and sockets die.
   if (input.isActive === false || input.password !== undefined) {
     userStore.revokeUserSessions(id);

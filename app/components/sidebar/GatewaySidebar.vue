@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { SettingsIcon } from "@lucide/vue";
+import { SettingsIcon, ShieldIcon } from "@lucide/vue";
 import { computed, nextTick, ref } from "vue";
 import { Button } from "@codex-gateway/ui/button";
 import {
@@ -13,7 +13,9 @@ import SettingsPanel from "@/components/settings/SettingsPanel.vue";
 import BrowserOpenDialog from "@/components/browser/BrowserOpenDialog.vue";
 import { useLongPressContextMenu } from "@/composables/interactions/useLongPressContextMenu";
 import { useWorkspaceLaunchActions } from "@/composables/workspace/useWorkspaceLaunchActions";
+import { useAuthStore } from "@/stores/auth";
 import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
+import { gatewayPath } from "@/utils/gateway-url";
 import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
 import AddProjectDialog from "./AddProjectDialog.vue";
 import HostTree from "./host-tree/HostTree.vue";
@@ -32,6 +34,7 @@ import { provideHostMfaDialog } from "@/composables/host-mfa/useHostMfaDialog";
 import type { HostTreeController } from "./host-tree/controller";
 import type { HostRecord, ProjectRecord } from "./sidebar-types";
 
+const auth = useAuthStore();
 const catalog = useGatewayCatalogStore();
 const navigation = useGatewayNavigationStore();
 withDefaults(defineProps<{ workspaceToolbar?: boolean }>(), { workspaceToolbar: true });
@@ -165,6 +168,17 @@ async function openHostMonitor(hostId: number) {
       >
         <SettingsIcon class="size-4" />
         {{ t("app.settings") }}
+      </Button>
+      <Button
+        v-if="auth.isAdmin"
+        data-testid="admin-console-entry"
+        variant="ghost"
+        class="h-10 w-full justify-start gap-3 rounded-lg px-3 text-[0.9375rem] font-normal hover:bg-surface"
+        as="a"
+        :href="gatewayPath('admin')"
+      >
+        <ShieldIcon class="size-4" />
+        {{ t("app.adminConsole") }}
       </Button>
     </SidebarFooter>
 

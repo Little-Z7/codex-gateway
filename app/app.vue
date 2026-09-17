@@ -4,6 +4,8 @@ import { storeToRefs } from "pinia";
 import { Toaster } from "@codex-gateway/ui/sonner";
 import LoginScreen from "@/components/auth/LoginScreen.vue";
 import { useAuthStore } from "@/stores/auth";
+import { gatewayPath } from "@/utils/gateway-url";
+import AdminConsole from "@/components/admin/AdminConsole.vue";
 import { useGatewayBootstrapStore } from "@/stores/gateway-bootstrap";
 import { refreshGatewayClient } from "@/stores/gateway-bootstrap/refresh";
 import { resetGatewayClientSession } from "@/stores/gateway-bootstrap/session-reset";
@@ -21,10 +23,13 @@ const device = useDevice();
 const { initializing } = storeToRefs(bootstrap);
 const { selectedThreadId } = storeToRefs(navigation);
 const { currentThread } = storeToRefs(threadView);
-const { initialized, isAuthenticated, token } = storeToRefs(auth);
+const { initialized, isAuthenticated, isAdmin, token } = storeToRefs(auth);
 const mounted = ref(false);
 let activeSessionToken = "";
 const layoutName = computed(() => (device.isMobileOrTablet ? "mobile" : "default"));
+const requestPath = useRequestURL().pathname;
+const appBase = useRuntimeConfig().app.baseURL;
+const isAdminRoute = requestPath.replace(new RegExp(`^${appBase}`), "").startsWith("admin");
 const pageTitle = computed(() => {
   if (!selectedThreadId.value || !currentThread.value) {
     return "Codex Gateway";
@@ -35,11 +40,11 @@ const pageTitle = computed(() => {
 useHead({
   title: pageTitle,
   link: [
-    { rel: "apple-touch-icon", sizes: "180x180", href: "/apple-touch-icon.png" },
-    { rel: "icon", type: "image/png", sizes: "32x32", href: "/favicon-32x32.png" },
-    { rel: "icon", type: "image/png", sizes: "16x16", href: "/favicon-16x16.png" },
-    { rel: "manifest", href: "/site.webmanifest" },
-    { rel: "shortcut icon", href: "/favicon.ico" },
+    { rel: "apple-touch-icon", sizes: "180x180", href: gatewayPath("apple-touch-icon.png") },
+    { rel: "icon", type: "image/png", sizes: "32x32", href: gatewayPath("favicon-32x32.png") },
+    { rel: "icon", type: "image/png", sizes: "16x16", href: gatewayPath("favicon-16x16.png") },
+    { rel: "manifest", href: gatewayPath("site.webmanifest") },
+    { rel: "shortcut icon", href: gatewayPath("favicon.ico") },
   ],
   meta: [
     { name: "theme-color", content: "#ffffff" },
@@ -52,6 +57,12 @@ useHead({
 onMounted(() => {
   mounted.value = true;
   auth.hydrate();
+});
+
+watch([initialized, isAdmin], ([ready, admin]) => {
+  if (isAdminRoute && ready && !admin) {
+    window.location.replace(gatewayPath(""));
+  }
 });
 
 watch(
@@ -87,5 +98,6 @@ watch(
   >
   <Toaster rich-colors position="top-right" />
   <LoginScreen v-if="mounted && !isAuthenticated" />
+  <AdminConsole v-else-if="isAdminRoute && isAdmin" />
   <NuxtLayout v-else :name="layoutName" />
 </template>

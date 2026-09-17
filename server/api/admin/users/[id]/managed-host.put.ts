@@ -7,8 +7,10 @@ import { requireRecord } from "../../../../utils/gateway/http/validation/common"
 import { hostCreateSchema } from "../../../../utils/gateway/http/validation/hosts-projects";
 import { hostStore } from "../../../../utils/gateway/state/hosts";
 
+import { auditLog } from "../../../../utils/gateway/audit/audit-log";
+
 export default defineGatewayEventHandler(async (event) => {
-  requireAdmin(event);
+  const admin = requireAdmin(event);
   const id = Number(getRouterParam(event, "id"));
   const input = await readValidatedBody(event, (body) => hostCreateSchema.parse(body));
   requireRecord(userStore.findById(id), "User not found");
@@ -38,5 +40,11 @@ export default defineGatewayEventHandler(async (event) => {
   });
 
   userStore.upsertManagedHost(id, host.id, { status: "ready", lastError: null });
+  auditLog.record(
+    admin,
+    "managed-host.save",
+    { type: "host", id: host.id, label: String(id) },
+    { hostName: host.name },
+  );
   return { host };
 });

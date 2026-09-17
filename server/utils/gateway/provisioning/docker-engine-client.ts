@@ -1,4 +1,5 @@
 import http from "node:http";
+import { recordFromUnknown } from "~~/shared/utils/records";
 
 const DOCKER_API_VERSION = "v1.43";
 
@@ -97,6 +98,135 @@ export class DockerEngineClient {
   inspectContainer(id: string) {
     return this.request("GET", `/containers/${encodeURIComponent(id)}/json`);
   }
+
+  async requestRaw(method: string, path: string, timeoutMs = 10_000): Promise<Buffer> {
+    return await new Promise((resolve, reject) => {
+      const request = http.request(
+        { socketPath: this.socketPath, method, path: `/${DOCKER_API_VERSION}${path}` },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on("data", (chunk: Buffer) => chunks.push(chunk));
+          res.on("end", () => resolve(Buffer.concat(chunks)));
+        },
+      );
+      request.setTimeout(timeoutMs, () => request.destroy(new Error("Docker request timed out")));
+      request.on("error", reject);
+      request.end();
+    });
+  }
+
+  async containerStats(id: string, timeoutMs = 3_000): Promise<DockerContainerStats | null> {
+    const body = await this.requestRaw(
+      "GET",
+      `/containers/${encodeURIComponent(id)}/stats?stream=false&one-shot=true`,
+      timeoutMs,
+    );
+    return statsFromUnknown(JSON.parse(body.toString()));
+  }
+
+  async containerLogs(id: string, tail: number, timeoutMs = 10_000) {
+    const body = await this.requestRaw(
+      "GET",
+      `/containers/${encodeURIComponent(id)}/logs?stdout=1&stderr=1&tail=${tail}&timestamps=1`,
+      timeoutMs,
+    );
+    return demuxDockerLogFrames(body);
+  }
+
+  async systemDf(): Promise<{ Volumes?: DockerVolumeInfo[] } | null> {
+    return await this.request("GET", "/system/df");
+  }
+}
+
+export interface DockerContainerStats {
+  cpu_stats?: {
+    cpu_usage?: { total_usage?: number; percpu_usage?: number[] };
+    system_cpu_usage?: number;
+    online_cpus?: number;
+  };
+  precpu_stats?: {
+    cpu_usage?: { total_usage?: number };
+    system_cpu_usage?: number;
+  };
+  memory_stats?: { usage?: number; limit?: number };
+}
+
+function numberOrUndefined(value: unknown) {
+  return typeof value === "number" ? value : undefined;
+}
+
+function statsFromUnknown(value: unknown): DockerContainerStats {
+  const root = recordFromUnknown(value) ?? {};
+  const cpu = recordFromUnknown(root.cpu_stats);
+  const preCpu = recordFromUnknown(root.precpu_stats);
+  const cpuUsage = recordFromUnknown(cpu?.cpu_usage);
+  const preCpuUsage = recordFromUnknown(preCpu?.cpu_usage);
+  const memory = recordFromUnknown(root.memory_stats);
+  return {
+    cpu_stats:
+      cpu === null
+        ? undefined
+        : {
+            cpu_usage:
+              cpuUsage === null
+                ? undefined
+                : {
+                    total_usage: numberOrUndefined(cpuUsage.total_usage),
+                    percpu_usage: Array.isArray(cpuUsage.percpu_usage)
+                      ? cpuUsage.percpu_usage.filter(
+                          (item): item is number => typeof item === "number",
+                        )
+                      : undefined,
+                  },
+            system_cpu_usage: numberOrUndefined(cpu.system_cpu_usage),
+            online_cpus: numberOrUndefined(cpu.online_cpus),
+          },
+    precpu_stats:
+      preCpu === null
+        ? undefined
+        : {
+            cpu_usage:
+              preCpuUsage === null
+                ? undefined
+                : { total_usage: numberOrUndefined(preCpuUsage.total_usage) },
+            system_cpu_usage: numberOrUndefined(preCpu.system_cpu_usage),
+          },
+    memory_stats:
+      memory === null
+        ? undefined
+        : {
+            usage: numberOrUndefined(memory.usage),
+            limit: numberOrUndefined(memory.limit),
+          },
+  };
+}
+
+export interface DockerVolumeInfo {
+  Name?: string;
+  UsageData?: { Size?: number };
+}
+
+/** Docker multiplexes log streams into frames: [stream(1), 0,0,0, length(4 BE)] + payload. */
+export function demuxDockerLogFrames(buffer: Buffer) {
+  const lines: Buffer[] = [];
+  let offset = 0;
+  while (offset + 8 <= buffer.length) {
+    const length = buffer.readUInt32BE(offset + 4);
+    const end = offset + 8 + length;
+    if (end > buffer.length) {
+      break;
+    }
+    lines.push(buffer.subarray(offset + 8, end));
+    offset = end;
+  }
+  // If the buffer was not framed (e.g. TTY container), treat it as plain text.
+  if (offset === 0) {
+    return buffer.toString();
+  }
+  if (offset < buffer.length) {
+    lines.push(buffer.subarray(offset));
+  }
+  return Buffer.concat(lines).toString();
 }
 
 export function defaultDockerSocket() {

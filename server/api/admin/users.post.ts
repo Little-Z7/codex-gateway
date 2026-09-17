@@ -5,6 +5,7 @@ import { userStore } from "../../utils/gateway/auth/users";
 import { userContainerProvisioner } from "../../utils/gateway/provisioning/user-container-provisioner";
 import { provisioningConfig } from "../../utils/gateway/provisioning/provisioning-config";
 import { defineGatewayEventHandler } from "../../utils/gateway/http/errors";
+import { auditLog } from "../../utils/gateway/audit/audit-log";
 
 const createUserSchema = z
   .object({
@@ -19,7 +20,7 @@ const createUserSchema = z
   .strict();
 
 export default defineGatewayEventHandler(async (event) => {
-  requireAdmin(event);
+  const admin = requireAdmin(event);
   const input = await readValidatedBody(event, (body) => createUserSchema.parse(body));
   if (userStore.findByUsername(input.username)) {
     throw createError({
@@ -29,6 +30,12 @@ export default defineGatewayEventHandler(async (event) => {
     });
   }
   const user = userStore.createUser(input.username, input.password, input.role);
+  auditLog.record(
+    admin,
+    "user.create",
+    { type: "user", id: user!.id, label: input.username },
+    { role: input.role, provision: input.provision !== false },
+  );
   // Provision the workspace container in the background; the users list surfaces the status.
   if (provisioningConfig().enabled && input.provision !== false) {
     void userContainerProvisioner.provision(user!.id).catch(() => {});

@@ -132,6 +132,21 @@ function migrate(db: DatabaseSync) {
       ON tmux_monitors(user_id, host_id, session_name, window_index, pane_index)
       WHERE status = 'active';
 
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      actor_user_id INTEGER,
+      actor_username TEXT NOT NULL,
+      action TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      target_id TEXT,
+      target_label TEXT,
+      detail_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(actor_user_id, created_at DESC);
+
     CREATE TABLE IF NOT EXISTS managed_hosts (
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       host_id INTEGER NOT NULL,

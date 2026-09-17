@@ -6,8 +6,10 @@ import { userStore } from "../../../../utils/gateway/auth/users";
 import { userContainerProvisioner } from "../../../../utils/gateway/provisioning/user-container-provisioner";
 import { provisioningConfig } from "../../../../utils/gateway/provisioning/provisioning-config";
 
+import { auditLog } from "../../../../utils/gateway/audit/audit-log";
+
 export default defineGatewayEventHandler(async (event) => {
-  requireAdmin(event);
+  const admin = requireAdmin(event);
   if (!provisioningConfig().enabled) {
     throw createError({ statusCode: 400, statusMessage: "Provisioning is disabled" });
   }
@@ -25,5 +27,10 @@ export default defineGatewayEventHandler(async (event) => {
   }
   // Runs in the background; the users list surfaces status transitions.
   void userContainerProvisioner.provision(id).catch(() => {});
+  auditLog.record(admin, recreate ? "container.recreate" : "container.create", {
+    type: "container",
+    id,
+    label: user.username,
+  });
   return { ok: true, username: user.username };
 });

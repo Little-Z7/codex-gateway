@@ -7,6 +7,7 @@ import { requireRecord } from "../../../utils/gateway/http/validation/common";
 import { hostStore } from "../../../utils/gateway/state/hosts";
 import { dropGatewayMemoryState } from "../../../utils/gateway/state/memory";
 import { userContainerProvisioner } from "../../../utils/gateway/provisioning/user-container-provisioner";
+import { auditLog } from "../../../utils/gateway/audit/audit-log";
 
 export default defineGatewayEventHandler(async (event) => {
   const admin = requireAdmin(event);
@@ -46,5 +47,6 @@ export default defineGatewayEventHandler(async (event) => {
   });
   dropGatewayMemoryState(id);
   userStore.deleteUser(id);
+  auditLog.record(admin, "user.delete", { type: "user", id, label: target.username });
   return { ok: true };
 });
