@@ -37,10 +37,19 @@ CONFIG="${HOME_DIR}/.codex/config.toml"
 touch "${CONFIG}"
 
 PROVIDER_ID="${CODEX_GATEWAY_MODEL_PROVIDER_ID:-ollama-cloud}"
-PROVIDER_TABLE="model_providers.${PROVIDER_ID}"
+# Openai mode only manages the two gateway keys — user-set model/effort/provider lines must
+# survive restarts (config/read is the source of project defaults). Custom mode owns all six
+# keys and the provider table so user edits cannot create duplicate keys.
+if [ "${CODEX_GATEWAY_MODEL_PROVIDER:-openai}" = "custom" ]; then
+  TOPKEYS='cli_auth_credentials_store|sandbox_mode|model|model_provider|model_reasoning_effort|web_search'
+  PROVIDER_TABLE="model_providers.${PROVIDER_ID}"
+else
+  TOPKEYS='cli_auth_credentials_store|sandbox_mode'
+  PROVIDER_TABLE=''
+fi
 
 FILTERED="$(mktemp)"
-awk -v topkeys='cli_auth_credentials_store|sandbox_mode|model|model_provider|model_reasoning_effort|web_search' \
+awk -v topkeys="${TOPKEYS}" \
     -v ptable="${PROVIDER_TABLE}" '
   BEGIN { intop=1 }
   /# >>> codex-gateway managed/ { inblock=1; next }
@@ -48,7 +57,7 @@ awk -v topkeys='cli_auth_credentials_store|sandbox_mode|model|model_provider|mod
   inblock { next }
   /^\[/ {
     header=$0; gsub(/[ \t]/, "", header)
-    intable = (header == "["ptable"]")
+    intable = (ptable != "" && header == "["ptable"]")
     intop = 0
     if (!intable) print
     next

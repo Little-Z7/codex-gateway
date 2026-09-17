@@ -72,7 +72,7 @@ export class ThreadCatalogService {
               isDefault: true,
               defaultReasoningEffort: configRead.config.model_reasoning_effort,
             },
-            ...page.data,
+            ...page.data.map((record) => ({ ...record, isDefault: false })),
           ],
         };
       }
