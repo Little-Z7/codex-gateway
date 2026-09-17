@@ -279,6 +279,7 @@ test("usage statistics capture a real turn", async ({ page, browser }) => {
     const projectRow = member.locator('[data-testid^="project-button-"]').first();
     if (await projectRow.isVisible()) await projectRow.click();
     await member.getByTestId("sidebar-new-thread").click();
+    await expect(member.getByTestId("new-thread-hero")).toBeVisible({ timeout: 30_000 });
     await member.locator('[data-testid="composer-input"]').fill("reply with ok");
     await expect(member.getByTestId("send-turn-button")).toBeEnabled({ timeout: 60_000 });
     await member.getByTestId("send-turn-button").click();
