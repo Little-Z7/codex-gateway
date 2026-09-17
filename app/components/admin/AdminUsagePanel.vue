@@ -24,9 +24,17 @@ const errorLabels = computed(() => errorMessageLabels(t, te));
 
 // Theme-aware palette: --chart-1..5 are recomputed on light/dark switch by useCssVar.
 const chartRoot = ref<HTMLElement | null>(null);
-const chartPalette = computed(() =>
-  [1, 2, 3, 4, 5].map((index) => useCssVar(`--chart-${index}`, chartRoot).value ?? undefined),
-);
+const chartVars = [
+  useCssVar("--chart-1", chartRoot),
+  useCssVar("--chart-2", chartRoot),
+  useCssVar("--chart-3", chartRoot),
+  useCssVar("--chart-4", chartRoot),
+  useCssVar("--chart-5", chartRoot),
+];
+const chartPalette = computed(() => {
+  const colors = chartVars.map((v) => v.value).filter((v): v is string => !!v);
+  return colors.length > 0 ? colors : undefined;
+});
 const inkMuted = useCssVar("--ink-muted", chartRoot);
 const hairline = useCssVar("--hairline", chartRoot);
 const axisStyle = computed(() => ({
