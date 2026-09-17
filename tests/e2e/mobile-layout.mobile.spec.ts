@@ -823,15 +823,6 @@ printf '%s\n' '# Mobile File Workspace' 'Rendered from the remote tree.' > ${she
   await expect(page.getByText("当前工作区不在 Git 仓库中", { exact: true })).toBeVisible();
 });
 
-async function openIntermediateSteps(page: Page) {
-  const toggle = page.getByRole("button", { name: /中间过程/ }).first();
-  await expect(toggle).toBeVisible();
-  if ((await toggle.getAttribute("data-state")) !== "open") {
-    await toggle.click();
-  }
-  await expect(toggle).toHaveAttribute("data-state", "open");
-}
-
 async function createConfiguredHostAndProject(
   page: Page,
   remote: RemoteCodexEnv,
