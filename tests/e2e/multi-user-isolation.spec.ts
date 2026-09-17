@@ -152,7 +152,7 @@ test("provisioned members only see and reach their own workspace", async ({ page
       z.array(z.object({ id: z.number() }).loose()).parse(value),
     );
     await a.page.getByTestId(`project-button-${aProjects[0]!.id}`).click({ button: "right" });
-    await a.page.getByRole("menuitem", { name: /新建/ }).click();
+    await a.page.getByRole("menuitem", { name: /新建|新对话|New/ }).click();
     await a.page.waitForFunction(
       () => new URLSearchParams(window.location.search).get("threadId") !== null,
       undefined,

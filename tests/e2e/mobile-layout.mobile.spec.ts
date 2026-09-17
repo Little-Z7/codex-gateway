@@ -591,7 +591,7 @@ test("opens sidebar context actions with long press on mobile", async ({
   }
   await expect(page.getByTestId(`project-button-${project.id}`)).toBeVisible();
   await longPress(page, page.getByTestId(`project-button-${project.id}`));
-  await page.getByRole("menuitem", { name: /新建/ }).click();
+  await page.getByRole("menuitem", { name: /新建|新对话|New/ }).click();
   const threadId = await waitForSelectedThreadId(page);
 
   await page.getByTestId("mobile-sidebar-toggle").click();

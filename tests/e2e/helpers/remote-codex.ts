@@ -225,7 +225,7 @@ export async function startRemoteThreadFromProjectMenu(
   projectId: number,
 ) {
   await page.getByTestId(`project-button-${projectId}`).click({ button: "right" });
-  await page.getByRole("menuitem", { name: /新建/ }).click();
+  await page.getByRole("menuitem", { name: /新建|新对话|New/ }).click();
   const threadId = await waitForSelectedThreadId(page);
   await expect(page.getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/)).toBeEnabled();
   await expect(page.getByTestId(`thread-button-${threadId}`)).toBeVisible({ timeout: 30_000 });

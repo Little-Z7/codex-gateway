@@ -556,7 +556,7 @@ test("groups projects whose remote directories were deleted", async ({ page, rem
     .filter({ has: page.getByRole("menuitem", { name: /编辑项目/ }) });
   await expect(menu.getByRole("menuitem", { name: /编辑项目/ })).toBeVisible();
   await expect(menu.getByRole("menuitem", { name: /删除项目/ })).toBeVisible();
-  await expect(menu.getByRole("menuitem", { name: /新建/ })).toBeHidden();
+  await expect(menu.getByRole("menuitem", { name: /新建|新对话|New/ })).toBeHidden();
   await menu.getByRole("menuitem", { name: /编辑项目/ }).click();
 
   const updateResponse = page.waitForResponse(
