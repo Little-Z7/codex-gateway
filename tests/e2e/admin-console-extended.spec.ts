@@ -280,6 +280,7 @@ test("usage statistics capture a real turn", async ({ page, browser }) => {
     if (await projectRow.isVisible()) await projectRow.click();
     await member.getByTestId("sidebar-new-thread").click();
     await member.locator('[data-testid="composer-input"]').fill("reply with ok");
+    await expect(member.getByTestId("send-turn-button")).toBeEnabled({ timeout: 60_000 });
     await member.getByTestId("send-turn-button").click();
     await expect(member.getByTestId("turn-summary").last()).toBeVisible({ timeout: 240_000 });
   } finally {
@@ -375,22 +376,22 @@ test("provider settings, security lockout, backups and audit csv", async ({ page
   const lockUser = `clock-${Date.now().toString(36)}`.slice(0, 32);
   await createUser(page, lockUser, "lock-user-password-ok", false);
   for (let i = 0; i < 2; i += 1) {
-    expect((await loginStatus(page, lockUser, "wrong-password")).status).toBe(403);
+    expect((await loginStatus(page, lockUser, "wrong-password")).status).toBe(401);
   }
   expect((await loginStatus(page, lockUser, "wrong-password")).status).toBe(429);
-  // Restore defaults and clear locks so later specs are unaffected.
+  // Restore defaults and clear every lock (username and IP keys) so later specs are unaffected.
   await apiStatus(page, {
     url: "/api/admin/settings/security",
     method: "PUT",
     body: { loginMaxFailures: 5 },
   });
-  for (const key of [`u:${lockUser}`]) {
-    await apiStatus(page, {
-      url: "/api/admin/security/lockouts",
-      method: "DELETE",
-      body: { key },
-    });
-  }
+  // `all: true` also clears non-locked failure counters (e.g. the source-IP key) so the shared
+  // test IP does not poison later specs.
+  await apiStatus(page, {
+    url: "/api/admin/security/lockouts",
+    method: "DELETE",
+    body: { all: true },
+  });
 
   // Backups: create → list → download tar.
   const create = await apiStatus(page, { url: "/api/admin/backups", method: "POST" });

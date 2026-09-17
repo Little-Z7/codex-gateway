@@ -5,15 +5,23 @@ import { requireAdmin } from "../../../utils/gateway/auth/context";
 import { loginLockout } from "../../../utils/gateway/auth/login-lockout";
 import { defineGatewayEventHandler } from "../../../utils/gateway/http/errors";
 
-const unlockSchema = z.object({ key: z.string().min(1) });
+// `key` unlocks one entry; `{ all: true }` clears every counter, including not-yet-locked ones.
+const unlockSchema = z.union([
+  z.object({ key: z.string().min(1) }),
+  z.object({ all: z.literal(true) }),
+]);
 
 export default defineGatewayEventHandler(async (event) => {
   const admin = requireAdmin(event);
-  const { key } = await readValidatedBody(event, (body) => unlockSchema.parse(body));
-  loginLockout.reset(key);
+  const body = await readValidatedBody(event, (raw) => unlockSchema.parse(raw));
+  if ("all" in body) {
+    loginLockout.resetAll();
+  } else {
+    loginLockout.reset(body.key);
+  }
   auditLog.record({ id: admin.id, username: admin.username }, "session.lockout.clear", {
     type: "session",
-    label: key,
+    label: "all" in body ? "*" : body.key,
   });
   return { ok: true };
 });

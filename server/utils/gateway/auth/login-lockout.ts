@@ -41,6 +41,11 @@ export const loginLockout = {
     entries.delete(key);
   },
 
+  /** Drops every counter and lock — used by admin tooling that must also clear non-locked keys. */
+  resetAll() {
+    entries.clear();
+  },
+
   list() {
     const now = Date.now();
     return [...entries.entries()]
