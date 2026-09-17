@@ -241,6 +241,10 @@ test("sub-agent activity opens workspace tabs with sub-agent timelines", async (
     passThroughNonInterrupt: true,
   });
   await subAgentTab(page, "Atlas [explorer]").click();
+  // Reasoning items collapse into the intermediate-steps group in the sub-agent panel too.
+  const subToggle = panel.getByRole("button", { name: /中间过程/ }).first();
+  await expect(subToggle).toBeVisible();
+  await subToggle.click();
   await expect(panel.getByText("Sub-agent is still running")).toBeVisible();
   await page.getByRole("button", { name: "停止子代理" }).click();
   await expect
