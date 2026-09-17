@@ -52,6 +52,14 @@ const notificationsForm = ref({ barkServerUrl: "" });
 const notificationsSaving = ref(false);
 const notificationsInitialized = ref(false);
 
+// Custom providers disable web search by default; switching modes re-derives the toggle.
+watch(
+  () => providerForm.value.mode,
+  (mode) => {
+    providerForm.value.webSearch = mode === "custom";
+  },
+);
+
 const auditRetentionDays = ref(180);
 const auditRetentionInitialized = ref(false);
 
@@ -399,10 +407,7 @@ const runtimeRows = computed(() => {
           <Input v-model="providerForm.model" data-testid="admin-provider-model" />
         </label>
         <label class="flex items-center gap-2 self-end text-xs text-ink-muted">
-          <Switch
-            v-model:checked="providerForm.webSearch"
-            data-testid="admin-provider-web-search"
-          />
+          <Switch v-model="providerForm.webSearch" data-testid="admin-provider-web-search" />
           {{ t("app.adminCfgProviderWebSearch") }}
         </label>
       </div>
@@ -566,7 +571,7 @@ const runtimeRows = computed(() => {
         </label>
         <label class="flex items-center gap-2 self-end text-xs text-ink-muted">
           <Switch
-            v-model:checked="securityForm.allowSelfPasswordChange"
+            v-model="securityForm.allowSelfPasswordChange"
             data-testid="admin-security-self-password"
           />
           {{ t("app.adminSecuritySelfPassword") }}

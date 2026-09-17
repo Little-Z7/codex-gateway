@@ -9,7 +9,11 @@
 - `server/utils/gateway/`：后端 gateway 核心，包括 SSH、Codex app-server RPC、thread broker、运行时索引。
 - `server/nitro/node-entry.mjs`：自定义 Nitro entry，`/gw/` 之外的请求与 WS upgrade 全部走按 cookie 路由的同源预览代理。
 - `server/utils/gateway/provisioning/`：直连 Docker Engine API 的用户容器 provisioning（不引入新依赖）。
-- `server/api/admin/`：admin 角色专用接口（用户管理、托管 host、容器生命周期）。
+- `server/api/admin/`：admin 角色专用接口（用户管理、托管 host、容器生命周期、用量、设置、备份、审计导出）。
+- `server/api/setup/`：首次运行引导接口（`users` 表为空时允许创建首个 admin，之后一律 409）。
+- `server/utils/gateway/settings/`：DB 优先的持久化设置层（DB > env > 默认，带内存缓存）；`server/utils/gateway/audit/`：审计日志存储/查询/导出/清理。
+- `app/components/admin/`：后台管理台组件（`/gw/admin`，六个 tab：总览/用户/容器/用量/会话/系统）。
+- SQLite 主要表：`users`/`sessions` 账号与会话；`managed_hosts` 用户托管工作区（含配额覆盖）；`audit_log` 管理员写操作审计；`usage_daily` 按（用户×天×模型）聚合的 turn/token 用量；`gateway_settings` 持久化设置；`tmux_monitors` 监控绑定。
 - `deploy/`：用户工作区镜像（`deploy/user-container/`）与部署脚本/手册（`deploy/scripts/`、`deploy/README.zh-CN.md`）。
 - Gateway UI 与 API 位于 `app.baseURL=/gw/` 之下，前端拼 URL 统一用 `app/utils/gateway-url.ts` 的 `gatewayPath`。
 - `shared/types.ts`：前后端共享 DTO 和类型。
@@ -59,6 +63,8 @@
 - 前端业务界面必须全局响应式布局；业务组件和业务样式禁止使用 `px` 级固定宽高、固定列宽、固定弹窗尺寸或固定字体，优先使用 Tailwind scale、`rem`、`clamp()`、`min()/max()`、`minmax()` 和容器约束。`packages/gateway-ui/`、`packages/gateway-ai-elements/` 的上游基础组件除非任务明确要求，不作为业务布局清理范围。
 - 业务组件按领域拆分；通用能力沉到 `app/components/common/` 或对应领域目录。避免单文件持续膨胀。
 - Markdown、diff、图片查看、上传、模型/审批/推理设置等功能必须使用真实 app-server 语义和真实数据。
+- 新增 admin 写操作必须写审计（`auditLog.record`），detail 不得包含密钥/密码等敏感字段。
+- 新增服务端 `createError` 必须通过 `gatewayApiError` 携带 `data.code`，并在 `i18n/locales` 的 `errors.*` 下补齐中英文文案。
 - 使用成熟库处理协议、SSH、WebSocket、Markdown、拖拽/弹层等复杂行为；不要手写脆弱协议解析。
 - 当用户要求“全项目”“系统性”“重构”级别修改时，必须先用搜索列出完整影响范围，再逐个文件按语义手动修改；禁止用机械替换、局部修补或只处理截图可见位置来冒充完成。
 - 保持 ASCII 代码为主；只有 UI 文案、中文注释或现有文件语境需要时才加入非 ASCII。

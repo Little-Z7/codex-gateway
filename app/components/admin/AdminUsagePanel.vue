@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { storeToRefs } from "pinia";
+import { useCssVar } from "@vueuse/core";
 import { Button } from "@codex-gateway/ui/button";
 import { Input } from "@codex-gateway/ui/input";
 import {
@@ -20,6 +21,19 @@ const admin = useGatewayAdminStore();
 const auth = useAuthStore();
 const { usageRows } = storeToRefs(admin);
 const errorLabels = computed(() => errorMessageLabels(t, te));
+
+// Theme-aware palette: --chart-1..5 are recomputed on light/dark switch by useCssVar.
+const chartRoot = ref<HTMLElement | null>(null);
+const chartPalette = computed(() =>
+  [1, 2, 3, 4, 5].map((index) => useCssVar(`--chart-${index}`, chartRoot).value ?? undefined),
+);
+const inkMuted = useCssVar("--ink-muted", chartRoot);
+const hairline = useCssVar("--hairline", chartRoot);
+const axisStyle = computed(() => ({
+  axisLabel: { color: inkMuted.value },
+  axisLine: { lineStyle: { color: hairline.value } },
+  splitLine: { lineStyle: { color: hairline.value } },
+}));
 
 const presets = [7, 30, 90] as const;
 const presetDays = ref<number>(30);
@@ -88,11 +102,17 @@ const hasData = computed(
 );
 
 const userChart = computed(() => ({
+  animation: false,
+  color: chartPalette.value,
   tooltip: { trigger: "axis" as const },
   grid: { left: "3%", right: "3%", top: 30, bottom: 20, containLabel: true },
-  legend: { top: 0 },
-  xAxis: { type: "category" as const, data: byUser.value.map((r) => r.label) },
-  yAxis: { type: "value" as const, min: 0 },
+  legend: { top: 0, textStyle: { color: inkMuted.value } },
+  xAxis: {
+    type: "category" as const,
+    data: byUser.value.map((r) => r.label),
+    ...axisStyle.value,
+  },
+  yAxis: { type: "value" as const, min: 0, ...axisStyle.value },
   series: [
     {
       name: t("app.adminUsageTurns"),
@@ -108,13 +128,32 @@ const userChart = computed(() => ({
 }));
 
 const dayChart = computed(() => ({
+  animation: false,
+  color: chartPalette.value,
   tooltip: { trigger: "axis" as const },
   grid: { left: "3%", right: "7%", top: 30, bottom: 20, containLabel: true },
-  legend: { top: 0 },
-  xAxis: { type: "category" as const, data: byDay.value.map((r) => r.bucket) },
+  legend: { top: 0, textStyle: { color: inkMuted.value } },
+  xAxis: {
+    type: "category" as const,
+    data: byDay.value.map((r) => r.bucket),
+    ...axisStyle.value,
+  },
   yAxis: [
-    { type: "value" as const, min: 0, name: t("app.adminUsageTurns") },
-    { type: "value" as const, min: 0, name: t("app.adminUsageTokens"), splitLine: { show: false } },
+    {
+      type: "value" as const,
+      min: 0,
+      name: t("app.adminUsageTurns"),
+      nameTextStyle: { color: inkMuted.value },
+      ...axisStyle.value,
+    },
+    {
+      type: "value" as const,
+      min: 0,
+      name: t("app.adminUsageTokens"),
+      nameTextStyle: { color: inkMuted.value },
+      axisLabel: { color: inkMuted.value },
+      splitLine: { show: false },
+    },
   ],
   series: [
     {
@@ -132,8 +171,10 @@ const dayChart = computed(() => ({
 }));
 
 const modelChart = computed(() => ({
+  animation: false,
+  color: chartPalette.value,
   tooltip: { trigger: "item" as const },
-  legend: { bottom: 0 },
+  legend: { bottom: 0, textStyle: { color: inkMuted.value } },
   series: [
     {
       type: "pie" as const,
@@ -148,7 +189,7 @@ const modelChart = computed(() => ({
 </script>
 
 <template>
-  <div class="space-y-4" data-testid="admin-usage">
+  <div ref="chartRoot" class="space-y-4" data-testid="admin-usage">
     <div class="flex flex-wrap items-end gap-3">
       <div class="flex gap-1">
         <Button

@@ -87,12 +87,39 @@ docker compose up -d codex-gateway
 
 ## 管理员操作
 
-浏览器打开 `http://<host>:3000` → 管理员登录 → 设置 → 用户管理：
+管理员登录后打开 `http://<host>:3000/gw/admin`（或工作区侧栏入口）。后台分六个 tab：
 
-- 新建用户时勾选"自动创建工作区容器"，或事后点"创建容器"。
-- 容器状态徽标（运行中 / 已停止 / provisioning 转圈 / error 悬停看原因）；支持启动、停止、重建、删除（可选保留数据卷）。
-- 删除用户可选择保留其 home 数据卷。
-- provisioning 关闭时，"配置托管 host"仍可手动指向任意 SSH 主机。
+- **总览**：用户/在线会话/容器状态/用户卷容量，以及"今日 turn 数""今日 token"两张用量卡；磁盘超过阈值（`CODEX_GATEWAY_VOLUME_WARN_BYTES`，默认 20 GiB）的工作区在此汇总。
+- **用户**：列表支持角色/状态/容器筛选、多选批量启用/禁用/删除（可选保留数据卷）、导出 CSV。点用户名进入详情页：基本信息、在线会话（可逐个或批量撤销）、托管 host、容器资源、对话统计（来自运行时缓存，重启后为空）、该用户最近 50 条审计。
+- **容器**：每行显示容器状态、镜像 digest（短 12 位）、容器内 Codex 版本（与 `SUPPORTED_CODEX_VERSION` 不一致时黄色徽标）、CPU/内存（无内存限制显示"不限"）；支持多选批量启动/停止/重建（保留卷）、日志弹窗（可开"跟随"每 2s 追加）。
+- **用量**：按用户/天/模型的 turn 与 token 聚合图表 + 明细表 + CSV 导出。
+- **会话**：全部在线会话（可撤销）与审计日志（筛选 + CSV 导出，显示保留天数）。
+- **系统**：运行态指标（WS/SSH/RPC/事件缓存/内存）、模型 provider 编辑、共享登录、安全设置与锁定列表、通知默认值、备份、审计保留天数。
+
+### 用户配额
+
+`managed_hosts` 支持每用户 `memory_limit`/`cpu_limit` 覆盖（详情页「配额」卡），优先于全局 `CODEX_GATEWAY_USER_CONTAINER_MEMORY/CPUS`；保存后需「立即重建（保留数据卷）」生效。
+
+### 镜像与滚动重建
+
+容器页顶部「镜像」卡：显示用户镜像 tag/digest/镜像内 Codex 版本（来自 image label）；"检查 Codex 新版本"对比 npm latest；"重建镜像"用 Docker API 直接构建 `deploy/user-container`（实时日志弹窗，同时只允许一个构建）；"滚动重建全部容器"逐个 deprovision+provision（保留卷），可配置间隔、可取消。
+
+### 系统设置
+
+`gateway_settings` 表持久化设置，优先级 **DB > env > 默认**：
+
+- **模型 provider**：系统页可编辑（mode/id/name/baseUrl/wireApi/model/webSearch），API key 只写不读（界面只显示末 4 位）。保存后需重启 Gateway 容器并重启/重建用户容器才生效——页面提供"重启全部用户容器"按钮。
+- **安全**：登录失败上限、锁定时长、会话有效期、是否允许成员自助改密码。
+- **通知**：全局默认 Bark 服务器地址（用户未填时用它）。
+- **审计**：审计日志保留天数（默认 180），每天 03:00 自动清理并写 `audit.prune` 审计。
+
+### 用量统计口径
+
+`usage_daily` 按（用户 × 天 × 模型）UPSERT 聚合：`thread/started` 计对话数、`turn/completed` 计 turn 数，input/output token 取 app-server 事件里的 `tokenUsage.last`（`thread/tokenUsage/updated`，Codex 0.153.x）。统计只反映 Gateway 运行时事件，容器内绕过 Gateway 的直接调用不计入。
+
+### 备份（后台按钮）
+
+系统页「备份」卡可点"立即备份"：与 `deploy/scripts/backup.sh` 等价的 Node 实现（SQLite `VACUUM INTO` 快照 + 共享 auth 目录 + 每个用户卷 alpine tar），输出到 `data/backups/<timestamp>/`，支持列表/下载（tar）/删除。要求 Gateway 容器挂载 `./data:/data`（compose 已带）。
 
 ## 成员体验
 
@@ -135,4 +162,11 @@ docker compose up -d codex-gateway
 ./deploy/scripts/restore.sh data/backups/<ts>  # 恢复：先停 gateway，再回写 db/auth/卷
 ```
 
-restore 会停掉 `codex-gateway` 服务、回写 SQLite（清掉 wal/shm）、共享 auth 目录，并为每个备份卷重建 `docker volume` 后解包。恢复完成后 `docker compose up -d codex-gateway` 重启即可。数据库快照是离线的但备份过程不要求停机；恢复必须先停 Gateway 避免 WAL 覆盖。
+restore 会停掉 `codex-gateway` 服务、回写 SQLite（清掉 wal/shm）、共享 auth 目录，并为每个备份卷重建 `docker volume` 后解包。恢复完成后 `docker compose up -d codex-gateway` 重启即可。数据库快照是离线的但备份过程不要求停机；恢复必须先停 Gateway 避免 WAL 覆盖。后台系统页的「备份」卡与脚本产出相同格式，二选一。
+
+## 已知限制
+
+- **同源预览单活跃**：浏览器预览由 HttpOnly cookie 路由，同一浏览器同时只有一个活跃预览；在新面板打开会替换旧会话。
+- **仅 HTTP/WebSocket**：预览代理只转发 HTTP 请求与 WS upgrade，非 HTTP 端口（数据库直连、grpc 等）不能通过预览暴露。
+- **docker.sock 风险**：Gateway 挂载 `/var/run/docker.sock`，能控制宿主机所有容器；仅限受信管理员账号访问后台。
+- **API key 在容器内可见**：custom provider 的 key 以环境变量注入用户容器，`docker inspect` 可读——只用于内部受信拓扑。

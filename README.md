@@ -148,6 +148,16 @@ Core rules:
 - **Mobile layout**: responsive sidebar, composer, long-press context actions, and sub-agent panels.
 - **Real E2E coverage**: Playwright tests run against a real Nuxt server, real SSH Docker target, and real Codex app-server.
 
+This fork adds multi-user and operations capabilities on top:
+
+- **Per-user container workspaces**: admins provision an isolated Docker container per member (dedicated home volume, SSH access, per-user memory/CPU quotas); members only see their own managed workspace.
+- **Admin console `/gw/admin`**: user/session/container management with bulk actions, user detail pages, image rebuild and rolling recreate, usage statistics (daily turn/token aggregation), audit log (filters + CSV export + retention), system settings, and one-click backups.
+- **Same-origin browser previews**: previews share the Gateway port and origin, routed by an HttpOnly cookie — no wildcard DNS or extra ports.
+- **Shared model provider**: members share a ChatGPT login or a shared API-key provider; the provider is editable in the console (DB overrides env).
+- **First-run setup**: opening the app on an empty database offers admin creation directly.
+
+Deployment and operations guide: [`deploy/README.zh-CN.md`](deploy/README.zh-CN.md).
+
 ## Project Structure
 
 ```text
