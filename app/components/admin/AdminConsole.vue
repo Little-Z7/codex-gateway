@@ -4,6 +4,7 @@ import {
   BoxesIcon,
   LayoutDashboardIcon,
   ScrollTextIcon,
+  ChartColumnIcon,
   ServerIcon,
   UsersIcon,
 } from "@lucide/vue";
@@ -13,16 +14,18 @@ import AdminUsersPanel from "./users/AdminUsersPanel.vue";
 import AdminUserDetailPanel from "./AdminUserDetailPanel.vue";
 import AdminContainersPanel from "./AdminContainersPanel.vue";
 import AdminSessionsPanel from "./AdminSessionsPanel.vue";
+import AdminUsagePanel from "./AdminUsagePanel.vue";
 import AdminSystemPanel from "./AdminSystemPanel.vue";
 import { gatewayPath } from "@/utils/gateway-url";
 
 const { t } = useI18n();
 
-type AdminTab = "overview" | "users" | "containers" | "sessions" | "system";
+type AdminTab = "overview" | "users" | "containers" | "usage" | "sessions" | "system";
 const tabs: { id: AdminTab; label: string; icon: Component }[] = [
   { id: "overview", label: "app.adminNavOverview", icon: LayoutDashboardIcon },
   { id: "users", label: "app.adminNavUsers", icon: UsersIcon },
   { id: "containers", label: "app.adminNavContainers", icon: BoxesIcon },
+  { id: "usage", label: "app.adminNavUsage", icon: ChartColumnIcon },
   { id: "sessions", label: "app.adminNavSessions", icon: ScrollTextIcon },
   { id: "system", label: "app.adminNavSystem", icon: ServerIcon },
 ];
@@ -111,6 +114,7 @@ onMounted(() => {
         />
         <AdminUsersPanel v-else-if="activeTab === 'users'" extended @open-user="openUser" />
         <AdminContainersPanel v-else-if="activeTab === 'containers'" />
+        <AdminUsagePanel v-else-if="activeTab === 'usage'" />
         <AdminSessionsPanel v-else-if="activeTab === 'sessions'" />
         <AdminSystemPanel v-else-if="activeTab === 'system'" />
       </main>

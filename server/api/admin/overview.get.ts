@@ -7,6 +7,9 @@ import { provisioningDiagnostics } from "../../utils/gateway/provisioning/provis
 import { provisioningConfig } from "../../utils/gateway/provisioning/provisioning-config";
 import { defineGatewayEventHandler } from "../../utils/gateway/http/errors";
 import { trimmedOrNull } from "~~/shared/utils/strings";
+import { usageStore } from "../../utils/gateway/usage/usage-store";
+import { volumeWarnBytes } from "../../utils/gateway/provisioning/container-inventory";
+import { DockerEngineClient } from "../../utils/gateway/provisioning/docker-engine-client";
 
 const ONLINE_WINDOW_MS = 5 * 60_000;
 
@@ -50,6 +53,25 @@ export default defineGatewayEventHandler(async (event) => {
       total: Number(sessionRows?.total ?? 0),
     },
     containers: containerCounts,
+    usage: { today: usageStore.todayTotals() },
+    volumes: await (async () => {
+      if (!provisioningConfig().enabled) return { warnBytes: volumeWarnBytes(), overThreshold: 0 };
+      try {
+        const docker = new DockerEngineClient();
+        const df = await docker.systemDf();
+        const warnBytes = volumeWarnBytes();
+        const overThreshold = (df?.Volumes ?? []).filter(
+          (volume) =>
+            typeof volume.Name === "string" &&
+            volume.Name.endsWith("-home") &&
+            typeof volume.UsageData?.Size === "number" &&
+            volume.UsageData.Size > warnBytes,
+        ).length;
+        return { warnBytes, overThreshold };
+      } catch {
+        return { warnBytes: volumeWarnBytes(), overThreshold: null };
+      }
+    })(),
     gateway: {
       version: trimmedOrNull(process.env.CODEX_GATEWAY_VERSION) ?? "unknown",
       nodeVersion: process.version,

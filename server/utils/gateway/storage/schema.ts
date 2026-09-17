@@ -92,6 +92,26 @@ export function migrateGatewaySchema(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(actor_user_id, created_at DESC);
 
+    CREATE TABLE IF NOT EXISTS usage_daily (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      day TEXT NOT NULL,
+      model TEXT NOT NULL,
+      threads INTEGER NOT NULL DEFAULT 0,
+      turns INTEGER NOT NULL DEFAULT 0,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, day, model)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_usage_daily_day ON usage_daily(day);
+
+    CREATE TABLE IF NOT EXISTS gateway_settings (
+      key TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS managed_hosts (
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       host_id INTEGER NOT NULL,

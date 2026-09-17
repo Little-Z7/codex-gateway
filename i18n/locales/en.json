@@ -1014,7 +1014,22 @@
     "adminNoOnlineSessions": "No online sessions",
     "adminOtherSessionsToggle": "Other sessions ({count}) {state}",
     "adminRevokeOtherSessions": "Revoke all other sessions ({count})",
-    "adminSessionsRevokedAll": "Other sessions revoked"
+    "adminSessionsRevokedAll": "Other sessions revoked",
+    "adminNavUsage": "Usage",
+    "adminUsageLoadFailed": "Failed to load usage data",
+    "adminUsageEmpty": "No usage data in the selected range",
+    "adminUsagePresetDays": "{days} days",
+    "adminUsageByUser": "By user",
+    "adminUsageByDay": "By day",
+    "adminUsageByModel": "By model",
+    "adminUsageTurns": "turns",
+    "adminUsageTokens": "tokens",
+    "adminUsageThreads": "threads",
+    "adminUsageInputTokens": "input tokens",
+    "adminUsageOutputTokens": "output tokens",
+    "adminExportFailed": "Export failed",
+    "adminStatTodayTurns": "Turns today",
+    "adminStatTodayTokens": "Tokens today"
   },
   "errors": {
     "auth.invalidCredentials": "Invalid username or password",

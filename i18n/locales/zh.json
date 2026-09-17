@@ -1014,7 +1014,22 @@
     "adminNoOnlineSessions": "当前无在线会话",
     "adminOtherSessionsToggle": "其他会话（{count}） {state}",
     "adminRevokeOtherSessions": "撤销全部其他会话（{count}）",
-    "adminSessionsRevokedAll": "已撤销其他会话"
+    "adminSessionsRevokedAll": "已撤销其他会话",
+    "adminNavUsage": "用量",
+    "adminUsageLoadFailed": "用量数据加载失败",
+    "adminUsageEmpty": "所选范围内暂无用量数据",
+    "adminUsagePresetDays": "{days} 天",
+    "adminUsageByUser": "按用户",
+    "adminUsageByDay": "按天",
+    "adminUsageByModel": "按模型",
+    "adminUsageTurns": "turn 数",
+    "adminUsageTokens": "token",
+    "adminUsageThreads": "对话数",
+    "adminUsageInputTokens": "输入 token",
+    "adminUsageOutputTokens": "输出 token",
+    "adminExportFailed": "导出失败",
+    "adminStatTodayTurns": "今日 turn 数",
+    "adminStatTodayTokens": "今日 token"
   },
   "errors": {
     "auth.invalidCredentials": "用户名或密码错误",

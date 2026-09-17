@@ -24,7 +24,7 @@ export default defineNuxtConfig({
   modules: ["@pinia/nuxt", "@nuxtjs/device", "@nuxtjs/i18n", "nuxt-echarts"],
   echarts: {
     renderer: "canvas",
-    charts: ["LineChart"],
+    charts: ["LineChart", "BarChart", "PieChart"],
     components: ["GridComponent", "TooltipComponent", "LegendComponent"],
   },
   vite: {

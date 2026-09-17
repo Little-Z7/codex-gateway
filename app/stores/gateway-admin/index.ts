@@ -55,6 +55,48 @@ export interface ProvisioningDiagnostics {
   error: string | null;
 }
 
+export interface AdminUsageRow {
+  bucket: string;
+  label: string;
+  threads: number;
+  turns: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export interface AdminSecuritySettings {
+  loginMaxFailures: number;
+  lockoutMinutes: number;
+  sessionDays: number;
+  allowSelfPasswordChange: boolean;
+}
+
+export interface AdminSettingsSnapshot {
+  modelProvider: {
+    mode: string;
+    id: string;
+    displayName: string;
+    baseUrl: string | null;
+    wireApi: string;
+    model: string | null;
+    webSearch: string | null;
+    apiKeyConfigured: boolean;
+    apiKeyLast4: string | null;
+    valid: boolean;
+    error: string | null;
+    persisted: boolean;
+  };
+  security: AdminSecuritySettings;
+  notifications: { barkServerUrl: string | null };
+  audit: { retentionDays: number };
+}
+
+export interface AdminBackupInfo {
+  name: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
 export interface AdminOverview {
   users: { total: number; active: number; admins: number };
   sessions: { online: number; total: number };
@@ -65,6 +107,8 @@ export interface AdminOverview {
     provisioning: number;
     error: number;
   };
+  usage: { today: { turns: number; tokens: number } };
+  volumes: { warnBytes: number; overThreshold: number | null };
   gateway: {
     version: string;
     nodeVersion: string;
@@ -153,11 +197,27 @@ export interface AdminSystemInfo {
     model: string | null;
     webSearch: string | null;
     apiKeyConfigured: boolean;
+    apiKeyLast4: string | null;
     valid: boolean;
     error: string | null;
   };
+  settings: {
+    security: AdminSecuritySettings;
+    notifications: { barkServerUrl: string | null };
+    audit: { retentionDays: number };
+  };
   paths: { database: string };
-  runtime: { port: number; nodeVersion: string; version: string; supportedCodexVersion: string };
+  runtime: {
+    port: number;
+    nodeVersion: string;
+    version: string;
+    supportedCodexVersion: string;
+    websocketPeers: number;
+    sshConnections: number;
+    rpcSessions: number;
+    gatewayEvents: number;
+    memory: { rssBytes: number; heapUsedBytes: number };
+  };
   sharedLogin: { present: boolean; accountEmail: string | null; lastRefresh: string | null };
 }
 
@@ -428,6 +488,75 @@ export const useGatewayAdminStore = defineStore("gateway-admin", () => {
   }
 
   const lockouts = ref<AdminLockout[]>([]);
+
+  const usageRows = ref<AdminUsageRow[]>([]);
+  async function loadUsage(options: { from?: string; to?: string; groupBy?: string } = {}) {
+    const params = new URLSearchParams();
+    if (options.from !== undefined) params.set("from", options.from);
+    if (options.to !== undefined) params.set("to", options.to);
+    if (options.groupBy !== undefined) params.set("groupBy", options.groupBy);
+    const response = await gatewayApi<{ rows: AdminUsageRow[] }>(`/api/admin/usage?${params}`);
+    usageRows.value = response.rows;
+    return usageRows.value;
+  }
+
+  const settings = ref<AdminSettingsSnapshot | null>(null);
+  async function loadSettings() {
+    settings.value = await gatewayApi<AdminSettingsSnapshot>("/api/admin/settings");
+    return settings.value;
+  }
+
+  async function saveModelProvider(input: Record<string, unknown>) {
+    await gatewayApi("/api/admin/settings/model-provider", { method: "PUT", body: input });
+    await Promise.all([loadSettings(), loadSystem()]);
+  }
+
+  async function saveSecurity(input: Record<string, unknown>) {
+    await gatewayApi("/api/admin/settings/security", { method: "PUT", body: input });
+    await Promise.all([loadSettings(), loadSystem()]);
+  }
+
+  async function saveNotifications(input: Record<string, unknown>) {
+    await gatewayApi("/api/admin/settings/notifications", { method: "PUT", body: input });
+    await Promise.all([loadSettings(), loadSystem()]);
+  }
+
+  async function saveAuditRetention(retentionDays: number) {
+    await gatewayApi("/api/admin/settings/audit", {
+      method: "PUT",
+      body: { retentionDays },
+    });
+    await Promise.all([loadSettings(), loadSystem()]);
+  }
+
+  const backups = ref<AdminBackupInfo[]>([]);
+  async function loadBackups() {
+    backups.value = (
+      await gatewayApi<{ backups: AdminBackupInfo[] }>("/api/admin/backups")
+    ).backups;
+    return backups.value;
+  }
+
+  async function createBackup() {
+    const result = await gatewayApi<{ name: string; files: string[] }>("/api/admin/backups", {
+      method: "POST",
+    });
+    await loadBackups();
+    return result;
+  }
+
+  async function deleteBackup(name: string) {
+    await gatewayApi(`/api/admin/backups/${encodeURIComponent(name)}`, { method: "DELETE" });
+    await loadBackups();
+  }
+
+  async function restartAllContainers() {
+    return await gatewayApi<{ restarted: number; failures: { userId: number; error: string }[] }>(
+      "/api/admin/containers/restart-all",
+      { method: "POST" },
+    );
+  }
+
   async function loadLockouts() {
     lockouts.value = (
       await gatewayApi<{ lockouts: AdminLockout[] }>("/api/admin/security/lockouts")
@@ -458,6 +587,19 @@ export const useGatewayAdminStore = defineStore("gateway-admin", () => {
     loadUserContainer,
     loadUserThreadStats,
     lockouts,
+    usageRows,
+    loadUsage,
+    settings,
+    loadSettings,
+    saveModelProvider,
+    saveSecurity,
+    saveNotifications,
+    saveAuditRetention,
+    backups,
+    loadBackups,
+    createBackup,
+    deleteBackup,
+    restartAllContainers,
     loadLockouts,
     unlockLockout,
     users,
