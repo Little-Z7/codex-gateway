@@ -234,3 +234,186 @@ test("containers page shows codex versions and recreate-all completes", async ({
 function resBody(res: { body: string }) {
   return res.body.slice(0, 300);
 }
+
+const usageSchema = z.looseObject({
+  rows: z.array(
+    z.looseObject({
+      bucket: z.string(),
+      label: z.string(),
+      turns: z.number(),
+      threads: z.number(),
+    }),
+  ),
+});
+
+async function loginStatus(
+  page: Page,
+  username: string,
+  password: string,
+): Promise<{ status: number; body: string }> {
+  return apiStatus(page, {
+    url: "/api/auth/login",
+    method: "POST",
+    body: { username, password },
+  });
+}
+
+test("usage statistics capture a real turn", async ({ page, browser }) => {
+  test.setTimeout(420_000);
+  const suffix = Date.now().toString(36);
+  const usageUser = `cu-${suffix}`;
+  const usagePassword = "usage-password-ok-1234";
+
+  await openApp(page);
+  await createUser(page, usageUser, usagePassword, true);
+  await waitContainerRunning(page, usageUser);
+
+  // A real provider-backed turn from the member's workspace.
+  const ctx = await browser.newContext();
+  const member = await ctx.newPage();
+  try {
+    await openApp(member, {
+      resetConfig: false,
+      credentials: { username: usageUser, password: usagePassword },
+    });
+    const projectRow = member.locator('[data-testid^="project-button-"]').first();
+    if (await projectRow.isVisible()) await projectRow.click();
+    await member.getByTestId("sidebar-new-thread").click();
+    await member.locator('[data-testid="composer-input"]').fill("reply with ok");
+    await member.getByTestId("send-turn-button").click();
+    await expect(member.getByTestId("turn-summary").last()).toBeVisible({ timeout: 240_000 });
+  } finally {
+    await ctx.close();
+  }
+
+  await expect
+    .poll(
+      async () => {
+        const res = await apiStatus(page, { url: "/api/admin/usage?groupBy=user" });
+        const rows = usageSchema.parse(JSON.parse(res.body)).rows;
+        return rows.find((row) => row.label === usageUser)?.turns ?? 0;
+      },
+      { timeout: 30_000, intervals: [1_000, 2_000] },
+    )
+    .toBeGreaterThanOrEqual(1);
+
+  const csv = await apiStatus(page, {
+    url: "/api/admin/usage/export.csv?groupBy=user",
+  });
+  expect(csv.status).toBe(200);
+  expect(csv.body.split("\n")[0]).toBe("bucket,threads,turns,input_tokens,output_tokens");
+});
+
+test("provider settings, security lockout, backups and audit csv", async ({ page }) => {
+  test.setTimeout(240_000);
+  await openApp(page);
+  await page.goto("/gw/admin?tab=system");
+  await expect(page.getByTestId("admin-provider-card")).toBeVisible({ timeout: 30_000 });
+
+  // Provider: save the effective env-driven config back with the real provider key so the
+  // persisted row is byte-identical in behaviour; assert write-only semantics (last4 only).
+  const providerKey = process.env.E2E_MODEL_PROVIDER_API_KEY ?? "";
+  const before = await apiStatus(page, { url: "/api/admin/settings" });
+  expect(before.status).toBe(200);
+  const beforeSettings = z
+    .looseObject({
+      modelProvider: z.looseObject({
+        mode: z.string(),
+        id: z.string(),
+        displayName: z.string(),
+        baseUrl: z.string().nullable(),
+        wireApi: z.string(),
+        model: z.string().nullable(),
+        webSearch: z.string().nullable(),
+      }),
+    })
+    .parse(JSON.parse(before.body));
+  const saveRes = await apiStatus(page, {
+    url: "/api/admin/settings/model-provider",
+    method: "PUT",
+    body: {
+      mode: beforeSettings.modelProvider.mode,
+      id: beforeSettings.modelProvider.id,
+      name: beforeSettings.modelProvider.displayName,
+      baseUrl: beforeSettings.modelProvider.baseUrl,
+      apiKey: providerKey === "" ? null : providerKey,
+      wireApi: beforeSettings.modelProvider.wireApi,
+      model: beforeSettings.modelProvider.model,
+      webSearch: beforeSettings.modelProvider.webSearch,
+    },
+  });
+  expect(saveRes.status, resBody(saveRes)).toBe(200);
+  const after = await apiStatus(page, { url: "/api/admin/settings" });
+  const afterSettings = z
+    .looseObject({
+      modelProvider: z.looseObject({
+        apiKeyConfigured: z.boolean(),
+        apiKeyLast4: z.string().nullable(),
+      }),
+    })
+    .parse(JSON.parse(after.body));
+  // In "openai" mode the API key is not used by provisioning (shared Codex auth), so a
+  // configured key is only expected for custom providers.
+  const expectsKey = beforeSettings.modelProvider.mode === "custom" && providerKey !== "";
+  expect(afterSettings.modelProvider.apiKeyConfigured).toBe(expectsKey);
+  if (expectsKey) {
+    expect(afterSettings.modelProvider.apiKeyLast4).toBe(providerKey.slice(-4));
+    expect(after.body).not.toContain(providerKey);
+  }
+  // Audit must not leak the key.
+  const auditRes = await apiStatus(page, { url: "/api/admin/audit?limit=10" });
+  expect(auditRes.status).toBe(200);
+  if (providerKey !== "") expect(auditRes.body).not.toContain(providerKey);
+
+  // Security: threshold 2 → third consecutive failure returns 429.
+  const secSave = await apiStatus(page, {
+    url: "/api/admin/settings/security",
+    method: "PUT",
+    body: { loginMaxFailures: 2 },
+  });
+  expect(secSave.status, resBody(secSave)).toBe(200);
+  const lockUser = `clock-${Date.now().toString(36)}`.slice(0, 32);
+  await createUser(page, lockUser, "lock-user-password-ok", false);
+  for (let i = 0; i < 2; i += 1) {
+    expect((await loginStatus(page, lockUser, "wrong-password")).status).toBe(403);
+  }
+  expect((await loginStatus(page, lockUser, "wrong-password")).status).toBe(429);
+  // Restore defaults and clear locks so later specs are unaffected.
+  await apiStatus(page, {
+    url: "/api/admin/settings/security",
+    method: "PUT",
+    body: { loginMaxFailures: 5 },
+  });
+  for (const key of [`u:${lockUser}`]) {
+    await apiStatus(page, {
+      url: "/api/admin/security/lockouts",
+      method: "DELETE",
+      body: { key },
+    });
+  }
+
+  // Backups: create → list → download tar.
+  const create = await apiStatus(page, { url: "/api/admin/backups", method: "POST" });
+  expect(create.status, resBody(create)).toBe(200);
+  const backupName = z.looseObject({ name: z.string() }).parse(JSON.parse(create.body)).name;
+  const list = await apiStatus(page, { url: "/api/admin/backups" });
+  expect(
+    z
+      .looseObject({ backups: z.array(z.looseObject({ name: z.string() })) })
+      .parse(JSON.parse(list.body))
+      .backups.some((b) => b.name === backupName),
+  ).toBe(true);
+  const download = await apiStatus(page, {
+    url: `/api/admin/backups/${backupName}/download`,
+  });
+  expect(download.status).toBe(200);
+  // ustar magic at offset 257.
+  expect(download.body.slice(257, 262)).toBe("ustar");
+
+  // Audit CSV export: first line is the stable header.
+  const auditCsv = await apiStatus(page, { url: "/api/admin/audit/export.csv" });
+  expect(auditCsv.status).toBe(200);
+  expect(auditCsv.body.split("\n")[0]).toBe(
+    "id,created_at,actor_user_id,actor_username,action,target_type,target_id,target_label,detail",
+  );
+});

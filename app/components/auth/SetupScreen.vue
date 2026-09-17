@@ -4,19 +4,9 @@ import { Button } from "@codex-gateway/ui/button";
 import { Input } from "@codex-gateway/ui/input";
 import { useAuthStore } from "@/stores/auth";
 import { gatewayErrorPayload, gatewayErrorMessage } from "@/utils/gateway-error";
-import SetupScreen from "./SetupScreen.vue";
 
 const auth = useAuthStore();
 const { t, te } = useI18n();
-const needsSetup = ref<boolean | null>(null);
-
-onMounted(async () => {
-  try {
-    needsSetup.value = (await $fetch<{ needsSetup: boolean }>("/api/setup/status")).needsSetup;
-  } catch {
-    needsSetup.value = false;
-  }
-});
 const username = ref("");
 const password = ref("");
 const loading = ref(false);
@@ -26,17 +16,17 @@ async function submit() {
   error.value = "";
   loading.value = true;
   try {
+    await $fetch("/api/setup/admin", {
+      method: "POST",
+      body: { username: username.value, password: password.value },
+    });
     await auth.login({ username: username.value, password: password.value });
   } catch (caught: unknown) {
     const payload = gatewayErrorPayload(caught);
-    if (payload.code === "auth.locked" && typeof payload.retryAfterSeconds === "number") {
-      error.value = t("errors.auth.locked", {
-        minutes: Math.ceil(payload.retryAfterSeconds / 60),
-      });
-    } else if (payload.code !== undefined && te(`errors.${payload.code}`)) {
+    if (payload.code !== undefined && te(`errors.${payload.code}`)) {
       error.value = t(`errors.${payload.code}`);
     } else {
-      error.value = gatewayErrorMessage(caught, t("app.loginFailed"));
+      error.value = gatewayErrorMessage(caught, t("app.setupFailed"));
     }
   } finally {
     loading.value = false;
@@ -45,30 +35,29 @@ async function submit() {
 </script>
 
 <template>
-  <SetupScreen v-if="needsSetup" />
-  <main v-else class="flex min-h-dvh items-center justify-center bg-canvas px-4 py-10">
+  <main class="flex min-h-dvh items-center justify-center bg-canvas px-4 py-10">
     <form
       class="w-full max-w-sm rounded-2xl border border-hairline bg-surface p-6 shadow-xl"
-      data-testid="login-form"
+      data-testid="setup-form"
       @submit.prevent="submit"
     >
       <div class="space-y-2">
-        <h1 class="text-xl font-semibold text-ink">{{ t("app.loginTitle") }}</h1>
-        <p class="text-sm leading-6 text-ink-muted">{{ t("app.loginDescription") }}</p>
+        <h1 class="text-xl font-semibold text-ink">{{ t("app.setupTitle") }}</h1>
+        <p class="text-sm leading-6 text-ink-muted">{{ t("app.setupDescription") }}</p>
       </div>
       <div class="mt-6 space-y-3">
         <Input
           v-model="username"
           autocomplete="username"
-          :placeholder="t('app.username')"
-          data-testid="login-username"
+          :placeholder="t('app.setupAdminUsername')"
+          data-testid="setup-username"
         />
         <Input
           v-model="password"
           type="password"
-          autocomplete="current-password"
-          :placeholder="t('app.password')"
-          data-testid="login-password"
+          autocomplete="new-password"
+          :placeholder="t('app.setupAdminPassword')"
+          data-testid="setup-password"
         />
       </div>
       <div
@@ -81,10 +70,10 @@ async function submit() {
         type="submit"
         class="mt-5 w-full gap-2"
         :disabled="loading"
-        data-testid="login-submit"
+        data-testid="setup-submit"
       >
         <Loader2Icon v-if="loading" class="size-4 animate-spin" />
-        {{ t("app.login") }}
+        {{ t("app.setupSubmit") }}
       </Button>
     </form>
   </main>

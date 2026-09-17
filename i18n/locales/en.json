@@ -1062,7 +1062,13 @@
     "adminRuntimeMemory": "Memory (heap/rss)",
     "passwordChangeDisabled": "Self-service password change is disabled by the administrator",
     "adminAuditRetention": "Audit log retained for {days} days",
-    "adminAuditRetentionEdit": "Change on system page"
+    "adminAuditRetentionEdit": "Change on system page",
+    "setupTitle": "Initialize Codex Gateway",
+    "setupDescription": "Create the first administrator account to get started",
+    "setupAdminUsername": "Admin username",
+    "setupAdminPassword": "Admin password (8+ characters)",
+    "setupSubmit": "Create and sign in",
+    "setupFailed": "Initialization failed"
   },
   "errors": {
     "auth.invalidCredentials": "Invalid username or password",
@@ -1085,6 +1091,7 @@
     "admin.recreateBusy": "A rolling recreate is already running",
     "admin.nothingToRecreate": "No containers to recreate",
     "auth.passwordChangeDisabled": "Self-service password change is disabled",
-    "admin.backupNotFound": "Backup not found"
+    "admin.backupNotFound": "Backup not found",
+    "setup.completed": "Gateway is already initialized"
   }
 }

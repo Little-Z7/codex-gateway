@@ -36,9 +36,22 @@ CODEX_CLI_VERSION=$(grep -oE 'SUPPORTED_CODEX_VERSION = "[^"]+"' \
   server/utils/gateway/infra/codex/codex-version.ts | cut -d'"' -f2)
 docker compose --profile build-only build codex-gateway-user
 docker compose build codex-gateway
-docker compose run --rm codex-gateway node scripts/create-user.mjs --admin admin '<密码>'
 docker compose up -d codex-gateway
 ```
+
+### 创建管理员
+
+二选一：
+
+- **页面初始化（推荐）**：数据库为空时首次打开 `http://<host>:<port>/gw/` 会显示「初始化 Codex
+  Gateway」页面，填写用户名和密码即可创建首个管理员并自动登录。初始化完成后该入口自动关闭。
+- **CLI**：容器启动后执行
+
+  ```bash
+  docker compose exec codex-gateway node scripts/create-user.mjs --admin admin '<密码>'
+  ```
+
+  （容器未运行时可用 `docker compose run --rm codex-gateway ...`，同上一条命令格式。）
 
 ## 模型接入：共享登录 或 共享 API-key provider
 

@@ -1062,7 +1062,13 @@
     "adminRuntimeMemory": "内存（heap/rss）",
     "passwordChangeDisabled": "管理员已关闭自助修改密码",
     "adminAuditRetention": "审计日志保留 {days} 天",
-    "adminAuditRetentionEdit": "在系统页修改"
+    "adminAuditRetentionEdit": "在系统页修改",
+    "setupTitle": "初始化 Codex Gateway",
+    "setupDescription": "创建第一个管理员账号以开始使用",
+    "setupAdminUsername": "管理员用户名",
+    "setupAdminPassword": "管理员密码（至少 8 位）",
+    "setupSubmit": "创建并登录",
+    "setupFailed": "初始化失败"
   },
   "errors": {
     "auth.invalidCredentials": "用户名或密码错误",
@@ -1085,6 +1091,7 @@
     "admin.recreateBusy": "滚动重建任务正在进行中",
     "admin.nothingToRecreate": "没有可重建的容器",
     "auth.passwordChangeDisabled": "管理员已关闭自助修改密码",
-    "admin.backupNotFound": "备份不存在"
+    "admin.backupNotFound": "备份不存在",
+    "setup.completed": "Gateway 已完成初始化"
   }
 }

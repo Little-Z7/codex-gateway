@@ -129,12 +129,41 @@ services:
       timeout: 3s
       retries: 60
 
+  # Fresh-instance gateway with its own empty data volume — used by setup.spec.ts for first-run
+  # initialization coverage. No provider env needed; the test only exercises setup/login.
+  gateway-fresh:
+    image: codex-gateway-e2e-runner
+    mem_limit: 1g
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3101"
+      CODEX_GATEWAY_CONFIG_SECRET: e2e-config-secret
+      CODEX_GATEWAY_DB_PATH: /data-fresh/codex-gateway.db
+      BROWSER_PREVIEW_SCHEME: http
+    volumes:
+      - build-output:/e2e-output:ro
+      - e2e-data-fresh:/data-fresh
+    command: ["node", "/e2e-output/server/index.mjs"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "const s=require('node:net').connect(3101,'127.0.0.1',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1))",
+        ]
+      interval: 1s
+      timeout: 3s
+      retries: 60
+
   test-runner:
     image: codex-gateway-e2e-runner
     mem_limit: 2g
     network_mode: service:gateway-under-test
     depends_on:
       gateway-under-test:
+        condition: service_healthy
+      gateway-fresh:
         condition: service_healthy
     environment:
       CI: ${CI:-}
@@ -176,4 +205,5 @@ volumes:
   bark-requests:
   build-output:
   e2e-data:
+  e2e-data-fresh:
   runner-home:
