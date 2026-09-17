@@ -115,10 +115,10 @@ export class DockerEngineClient {
     });
   }
 
-  async containerStats(id: string, timeoutMs = 3_000): Promise<DockerContainerStats | null> {
+  async containerStats(id: string, timeoutMs = 5_000): Promise<DockerContainerStats | null> {
     const body = await this.requestRaw(
       "GET",
-      `/containers/${encodeURIComponent(id)}/stats?stream=false&one-shot=true`,
+      `/containers/${encodeURIComponent(id)}/stats?stream=false`,
       timeoutMs,
     );
     return statsFromUnknown(JSON.parse(body.toString()));

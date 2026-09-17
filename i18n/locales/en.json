@@ -920,6 +920,7 @@
     "adminSharedLoginFailed": "Shared login action failed",
     "adminCopied": "Copied",
     "adminCopyFailed": "Copy failed",
-    "provisioningModelProvider": "Provider"
+    "provisioningModelProvider": "Provider",
+    "adminContainerMemory": "Memory (usage/limit)"
   }
 }

@@ -132,7 +132,7 @@ onUnmounted(() => {
             <TableHead>{{ t("app.container") }}</TableHead>
             <TableHead>{{ t("app.adminContainerState") }}</TableHead>
             <TableHead>CPU</TableHead>
-            <TableHead>{{ t("app.adminMemory") }}</TableHead>
+            <TableHead>{{ t("app.adminContainerMemory") }}</TableHead>
             <TableHead>{{ t("app.adminContainerStarted") }}</TableHead>
             <TableHead>{{ t("app.adminVolume") }}</TableHead>
             <TableHead class="text-right">{{ t("app.adminUserActions") }}</TableHead>

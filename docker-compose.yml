@@ -9,6 +9,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        CODEX_GATEWAY_VERSION: ${CODEX_GATEWAY_VERSION:-dev}
     container_name: codex-gateway
     restart: unless-stopped
     logging: *default-logging

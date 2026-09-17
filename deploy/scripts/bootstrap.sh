@@ -57,6 +57,8 @@ if grep -q '^CODEX_GATEWAY_SHARED_DATA_DIR=\.' .env; then
   set_env CODEX_GATEWAY_SHARED_DATA_DIR "$SHARED_DATA_DIR"
 fi
 
+set_env CODEX_GATEWAY_VERSION "$(git rev-parse --short HEAD 2>/dev/null || echo dev)"
+
 docker network inspect codex-gateway >/dev/null 2>&1 || docker network create codex-gateway
 
 docker compose --profile build-only build codex-gateway-user codex-gateway

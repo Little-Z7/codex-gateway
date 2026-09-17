@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { z } from "zod";
 import {
   authenticatedFetch,
   E2E_MEMBER_PASSWORD,
@@ -6,11 +7,7 @@ import {
   openApp,
 } from "./helpers/app";
 
-interface OverviewResponse {
-  users: { total: number; active: number; admins: number };
-  sessions: { online: number; total: number };
-  containers: Record<string, number>;
-}
+const overviewSchema = z.object({ users: z.object({ total: z.number() }).loose() }).loose();
 
 async function api<T>(page: Page, url: string, parse: (value: unknown) => T): Promise<T> {
   return authenticatedFetch(page, { url }, parse);
@@ -36,34 +33,22 @@ test("admin console exposes overview, users, sessions, audit and system", async 
   await openConsole(page);
 
   // Overview numbers match the API.
-  const overview = await api(
-    page,
-    "/api/admin/overview",
-    (value) => value as OverviewResponse,
-  );
+  const overview = await api(page, "/api/admin/overview", (value) => overviewSchema.parse(value));
   await expect(page.getByTestId("admin-overview")).toBeVisible();
   const cards = page.getByTestId("admin-overview").locator("div.rounded-lg").first();
-  await expect(page.getByTestId("admin-overview")).toContainText(
-    String(overview.users.total),
-  );
+  await expect(page.getByTestId("admin-overview")).toContainText(String(overview.users.total));
   await expect(page.getByTestId("admin-gateway-info")).toBeVisible();
   void cards;
 
   // Users tab: search finds the member.
   await openConsoleTab(page, "users");
   await page.getByTestId("admin-users-search").fill(E2E_MEMBER_USERNAME);
-  await expect(
-    page.getByTestId(`admin-user-row-${E2E_MEMBER_USERNAME}`),
-  ).toBeVisible();
+  await expect(page.getByTestId(`admin-user-row-${E2E_MEMBER_USERNAME}`)).toBeVisible();
 
   // Sessions tab: own session is marked current and cannot be revoked here.
   await openConsoleTab(page, "sessions");
   await expect(page.getByTestId("admin-sessions")).toBeVisible();
-  await expect(
-    page
-      .getByTestId("admin-sessions")
-      .getByText(/当前|Current/),
-  ).toBeVisible();
+  await expect(page.getByTestId("admin-sessions").getByText(/当前|Current/)).toBeVisible();
 
   // A member login creates a revocable session.
   const memberContext = await browser.newContext();
@@ -80,9 +65,7 @@ test("admin console exposes overview, users, sessions, audit and system", async 
       .locator("tr", { hasText: E2E_MEMBER_USERNAME })
       .first();
     await expect(memberRow).toBeVisible();
-    const revokeButton = memberRow.locator(
-      `button[data-testid^="admin-session-revoke-"]`,
-    );
+    const revokeButton = memberRow.locator(`button[data-testid^="admin-session-revoke-"]`);
     await revokeButton.click();
 
     // The revoked member can no longer call the API.

@@ -920,6 +920,7 @@
     "adminSharedLoginFailed": "共享登录操作失败",
     "adminCopied": "已复制",
     "adminCopyFailed": "复制失败",
-    "provisioningModelProvider": "Provider"
+    "provisioningModelProvider": "Provider",
+    "adminContainerMemory": "内存（用量/上限）"
   }
 }
