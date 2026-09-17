@@ -53,7 +53,8 @@ test("uses the mobile layout with hidden sidebar and usable composer shell", asy
   await expect(page.getByTestId("settings-toggle")).toBeHidden();
 
   await expect(page.getByTestId("chat-scroll-area")).toBeVisible();
-  await expect(page.getByText("先选择一个项目")).toBeVisible();
+  // The e2e admin has no workspace hosts yet, so the pane shows the no-hosts empty state.
+  await expect(page.getByTestId("no-hosts-empty")).toBeVisible();
 });
 
 test("shows effort and compact context usage without mobile approval controls", async ({
@@ -274,6 +275,12 @@ test("virtualizes a large running turn in one agent timeline", async ({ page }, 
   const commandRow = commandTitle.locator("xpath=ancestor::*[@data-index][1]");
   const commandRowHandle = await commandRow.elementHandle();
   if (commandRowHandle === null) throw new Error("Expected mounted command row");
+
+  // Intermediate work renders inside a collapsed group; expand it so the file-change rows mount.
+  const intermediateToggle = page.getByRole("button", { name: /中间过程/ }).first();
+  await expect(intermediateToggle).toHaveAttribute("data-state", "closed");
+  await intermediateToggle.click();
+  await expect(intermediateToggle).toHaveAttribute("data-state", "open");
 
   const fileChange = page.getByRole("button", { name: /src\/large_file_/ }).first();
   await expect(fileChange).toBeVisible();
@@ -694,7 +701,8 @@ test("opens and closes the subagent side panel on mobile", async ({ page }) => {
     },
   });
 
-  await openIntermediateSteps(page);
+  // The seeded turn only contains a subAgentActivity item, which stays inline — there is no
+  // intermediate-steps group to open here.
   await page.getByTestId("open-subagent-panel").click();
   const panel = page.getByTestId("workspace-subagent-panel");
   await expect(panel).toBeVisible();

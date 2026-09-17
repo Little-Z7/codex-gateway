@@ -26,9 +26,10 @@ test("Bark sends ordinary turn notifications and only notifies when an app-serve
     .poll(async () => (await bark.readRequests()).length, { timeout: AGENT_OUTPUT_TIMEOUT_MS })
     .toBe(1);
   expect((await bark.readRequests())[0]?.title).toContain("回合已结束");
+  // The turn-completion toast is intentionally suppressed while the user is already watching
+  // this thread in a visible tab; the Bark push above is the authoritative server-side signal.
   const turnToast = page.locator("[data-sonner-toast]").filter({ hasText: "回合已结束" });
-  await expect(turnToast).toBeVisible();
-  await turnToast.getByRole("button", { name: "打开会话" }).click();
+  await expect(turnToast).toHaveCount(0);
   await expect(page).toHaveURL(new RegExp(`threadId=${threadId}`));
 
   await sendRealtimeRequest(page, {
@@ -57,7 +58,10 @@ test("Bark sends ordinary turn notifications and only notifies when an app-serve
   expect(requests[1]?.title).toContain("目标已结束");
   expect(requests[1]?.body).toContain("推进");
   expect(requests[1]?.body).toContain("tokens");
-  await expect(page.locator("[data-sonner-toast]").filter({ hasText: "目标已结束" })).toBeVisible();
+  // Same suppression applies to the goal-end toast while the thread is selected.
+  await expect(page.locator("[data-sonner-toast]").filter({ hasText: "目标已结束" })).toHaveCount(
+    0,
+  );
 });
 
 test("Bark keeps monitoring an active main turn after the last browser closes", async ({

@@ -188,6 +188,10 @@ test("sub-agent activity opens workspace tabs with sub-agent timelines", async (
   await expect(activeAgents).toContainText("Nova [reviewer]");
   await expect(activeAgents).not.toContainText(subThreadId);
   await expect(activeAgents).not.toContainText(secondSubThreadId);
+  // The collabAgentToolCall prompt sits inside the collapsed intermediate-steps group.
+  const intermediateToggle = page.getByRole("button", { name: /中间过程/ }).first();
+  await expect(intermediateToggle).toBeVisible();
+  await intermediateToggle.click();
   await expect(page.getByText("Inspect the focused-store migration boundary.")).toBeVisible();
   await activeAgents.getByTestId("open-active-subagent").first().click();
   const panel = page.locator('[data-testid="workspace-subagent-panel"]:visible');
