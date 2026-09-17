@@ -1,7 +1,13 @@
 import { defineEventHandler } from "h3";
 import { authenticateEvent } from "../utils/gateway/auth/context";
 
-const PUBLIC_API_PATHS = new Set(["/api/auth/login", "/api/realtime"]);
+const PUBLIC_API_PATHS = new Set([
+  "/api/auth/login",
+  "/api/realtime",
+  // First-run bootstrap; the admin-creation endpoint itself rejects calls once a user exists.
+  "/api/setup/status",
+  "/api/setup/admin",
+]);
 
 export default defineEventHandler((event) => {
   // h3 mounts middleware under app.baseURL (/gw/) and strips that prefix from event.path before
