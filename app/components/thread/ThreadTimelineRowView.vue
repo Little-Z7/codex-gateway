@@ -2,6 +2,7 @@
 import IntermediateStepsToggle from "@/components/thread/IntermediateStepsToggle.vue";
 import ThreadItemView from "@/components/thread/ThreadItemView.vue";
 import TurnDurationLabel from "@/components/thread/TurnDurationLabel.vue";
+import TurnSummaryRow from "@/components/thread/TurnSummaryRow.vue";
 import TurnUsageAmountLabel from "@/components/thread/TurnUsageAmountLabel.vue";
 import type { ThreadTimelineRow } from "@/components/thread/timeline-rows";
 
@@ -13,6 +14,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   intermediateToggle: [turnId: string, open: boolean];
+  jumpToItem: [turnId: string, itemId: string];
 }>();
 
 // Read the reactive row directly. App-server stream reducers update nested item proxies in place;
@@ -26,7 +28,15 @@ const emit = defineEmits<{
     :open="props.row.open"
     :count="props.row.count"
     :loading="props.row.loading"
+    :active-label="props.row.activeLabel"
     @toggle="emit('intermediateToggle', props.row.turnId, $event)"
+  />
+  <TurnSummaryRow
+    v-else-if="props.row.type === 'turnSummary'"
+    :file-items="props.row.fileItems"
+    :command-count="props.row.commandCount"
+    :duration-ms="props.row.durationMs"
+    @jump-to-item="emit('jumpToItem', props.row.turnId, $event)"
   />
   <ThreadItemView
     v-else-if="props.row.type === 'item'"

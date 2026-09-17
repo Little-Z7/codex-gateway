@@ -840,6 +840,13 @@ test("streaming output does not force scroll when the user is reading earlier co
     .toBeLessThanOrEqual(visibleAnchor.top + 2);
 
   await scrollChatViewportToBottom(page);
+  // Process artifacts (command runs, diffs) collapse into the steps group while the turn runs;
+  // expand it to reach the command card.
+  const stepsToggle = page.getByRole("button", { name: /中间过程/ }).first();
+  if (await stepsToggle.isVisible()) {
+    if ((await stepsToggle.getAttribute("data-state")) !== "open") await stepsToggle.click();
+    await expect(stepsToggle).toHaveAttribute("data-state", "open");
+  }
   await expect(page.getByRole("button", { name: /node long-output\.js/ })).toBeVisible();
   await page.getByRole("button", { name: /node long-output\.js/ }).click();
   // Expanding an outer timeline card is allowed to move the latest edge: that interaction changes

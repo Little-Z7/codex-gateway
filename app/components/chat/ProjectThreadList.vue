@@ -1,11 +1,5 @@
 <script setup lang="ts">
-import {
-  Clock3Icon,
-  FolderIcon,
-  MessageSquareTextIcon,
-  PlusIcon,
-  RefreshCwIcon,
-} from "@lucide/vue";
+import { Clock3Icon, FolderIcon, MessageSquareTextIcon, PlusIcon } from "@lucide/vue";
 import { storeToRefs } from "pinia";
 import { computed } from "vue";
 import { Badge } from "@codex-gateway/ui/badge";
@@ -76,23 +70,16 @@ function openThread(threadId: string) {
           <FolderIcon class="size-4" />
           {{ t("app.projectThreads") }}
         </div>
-        <h2 class="truncate text-2xl font-semibold text-ink">{{ selectedProject?.name }}</h2>
+        <h2 class="truncate text-[clamp(1.25rem,4vw,1.5rem)] font-semibold text-ink">
+          {{ selectedProject?.name }}
+        </h2>
         <p class="mt-2 truncate text-sm text-ink-muted">{{ selectedProject?.remotePath }}</p>
         <p class="mt-4 max-w-2xl text-[0.9375rem] leading-7 text-ink-secondary">
           {{ t("app.projectThreadsHint") }}
         </p>
       </div>
       <div class="flex shrink-0 items-center gap-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          :disabled="loading"
-          @click="navigation.listThreads('')"
-        >
-          <RefreshCwIcon class="size-4" />
-          {{ t("app.refresh") }}
-        </Button>
-        <Button size="sm" @click="threadView.startThread()">
+        <Button data-testid="project-new-thread" size="sm" @click="threadView.startThread()">
           <PlusIcon class="size-4" />
           {{ t("app.newThread") }}
         </Button>

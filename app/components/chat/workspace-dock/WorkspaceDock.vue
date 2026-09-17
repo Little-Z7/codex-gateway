@@ -17,6 +17,7 @@ import { useWorkspaceDockLifecycle } from "./useWorkspaceDockLifecycle";
 import { useWorkspaceDockPanels } from "./useWorkspaceDockPanels";
 import { useWorkspacePanels } from "./useWorkspacePanels";
 import "dockview-vue/dist/styles/dockview.css";
+import { gatewayDomainEvents } from "@/stores/gateway/domain-events";
 
 const props = defineProps<WorkspaceDockProps>();
 const refs = toRefs(props);
@@ -119,6 +120,7 @@ function tabContextMenu({ panel, api }: GetTabContextMenuItemsParams) {
       v-if="layout === 'mobile'"
       :can-open-terminal="workspace.canOpenTerminal.value"
       :tmux-active-count="tmuxLauncher.activeCount.value"
+      @new-thread="gatewayDomainEvents.emit('new-thread-requested', {})"
       @open-tmux="tmuxLauncher.open"
       @open-terminal="workspaceActions.openTerminal"
       @open-browser="browserDialogOpen = true"

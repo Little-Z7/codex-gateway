@@ -12,6 +12,7 @@ import type { ThreadListResponse } from "@/stores/gateway/types";
 import { messageFromError, sortThreads } from "@/stores/gateway/thread-utils/identity";
 import { runtimeStatusFromAppThreadStatus } from "@/stores/gateway/thread-utils/status";
 import { isAppServerSubAgentThread } from "~~/shared/runtime/app-server";
+import { firstNonEmptyString } from "~~/shared/utils/strings";
 import { captureSessionEpoch } from "@/utils/session-epoch";
 
 export function createThreadListActions() {
@@ -124,6 +125,22 @@ function applyProjectDirectoryAvailability(response: ThreadListResponse) {
     ...catalog.projectDirectoryAvailability,
     ...response.projectDirectoryAvailability,
   };
+}
+
+// A brand-new thread reaches the sidebar before app-server supplies name/preview; without this
+// the row shows a raw UUID until the next list refresh. The first user message is the honest
+// fallback title — it is replaced as soon as the server-provided name or preview arrives.
+export function applyThreadPreviewFallback(hostId: number, threadId: string, text: string) {
+  const navigation = useGatewayNavigationStore();
+  const index = navigation.threads.findIndex(
+    (thread) => thread.hostId === hostId && String(thread.id) === threadId,
+  );
+  const thread = navigation.threads[index];
+  if (thread === undefined) return;
+  if (firstNonEmptyString([thread.title, thread.name, thread.preview]) !== null) return;
+  const preview = text.replace(/\s+/g, " ").trim().slice(0, 40);
+  if (preview === "") return;
+  navigation.threads = navigation.threads.with(index, { ...thread, preview });
 }
 
 function syncThreadStatusesFromList(hostId: number, threads: GatewayThread[]) {

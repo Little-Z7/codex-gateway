@@ -1,6 +1,7 @@
 import type { ThreadResponseUsage, ThreadTimelineItem, ThreadTimelineTurn } from "~~/shared/types";
 import type { DisplayedTurnTiming } from "@/utils/turn-timing";
 import { itemKey, userMessageVariant, type ThreadTurnSections } from "./thread-turn-sections";
+import { collapsibleIntermediateItem, intermediateItemSummary } from "@/utils/intermediate-summary";
 
 export type { ThreadTimelineTurn } from "~~/shared/types";
 
@@ -22,6 +23,7 @@ export type ThreadTimelineRow =
       count: number;
       open: boolean;
       loading: boolean;
+      activeLabel: string | null;
     }
   | {
       key: string;
@@ -43,6 +45,14 @@ export type ThreadTimelineRow =
       durationMs: number | null;
       active: boolean;
       responseUsage: ThreadResponseUsage[] | undefined;
+    }
+  | {
+      key: string;
+      type: "turnSummary";
+      turnId: string;
+      fileItems: { itemId: string | null; path: string }[];
+      commandCount: number;
+      durationMs: number | null;
     };
 
 export interface ThreadTimelineTurnState {
@@ -66,14 +76,25 @@ export function buildThreadTimelineRows(input: {
     const timingTarget = sections.finalItems.findLast((item) => item.type === "agentMessage");
     appendItemRows(rows, input.threadId, turn.id, "user", sections.userItems, sections);
 
-    if (sections.intermediateItems.length || turn.itemsView !== "full") {
+    // Only process artifacts collapse into "intermediate steps"; actionable items (approvals,
+    // requests, notifications) stay visible even while the group is closed.
+    const collapsedItems = sections.intermediateItems.filter(collapsibleIntermediateItem);
+    const inlineItems = sections.intermediateItems.filter(
+      (item) => !collapsibleIntermediateItem(item),
+    );
+    if (collapsedItems.length || turn.itemsView !== "full") {
+      // The latest-step preview only matters while the group is collapsed; when open it would
+      // also duplicate the item's own title in the header's accessible name.
+      const activeItem =
+        sections.turnIsActive && !intermediateOpen ? collapsedItems.at(-1) : undefined;
       rows.push({
         key: `${input.threadId}:turn-${turn.id}:intermediate-header`,
         type: "intermediateHeader",
         turnId: turn.id,
-        count: sections.intermediateItems.length,
+        count: collapsedItems.length,
         open: intermediateOpen,
         loading: intermediateLoading,
+        activeLabel: activeItem === undefined ? null : intermediateItemSummary(activeItem),
       });
       if (intermediateOpen) {
         appendItemRows(
@@ -84,7 +105,11 @@ export function buildThreadTimelineRows(input: {
           sections.intermediateItems,
           sections,
         );
+      } else {
+        appendItemRows(rows, input.threadId, turn.id, "intermediate", inlineItems, sections);
       }
+    } else {
+      appendItemRows(rows, input.threadId, turn.id, "intermediate", inlineItems, sections);
     }
 
     appendItemRows(
@@ -99,6 +124,37 @@ export function buildThreadTimelineRows(input: {
       input.agentActionsAvailable,
       turn.responseUsage,
     );
+    if (turn.status === "completed") {
+      const fileItems: { itemId: string | null; path: string }[] = [];
+      let commandCount = 0;
+      for (const item of turn.items ?? []) {
+        if (item?.type === "commandExecution") commandCount += 1;
+        if (item?.type === "fileChange") {
+          const changes = Array.isArray(item.changes) ? item.changes : [];
+          for (const change of changes) {
+            const record =
+              typeof change === "object" && change !== null
+                ? (change as Record<string, unknown>)
+                : {};
+            const path = record.path ?? record.filePath ?? record.pathAfter ?? record.pathBefore;
+            if (typeof path === "string" && path !== "") {
+              fileItems.push({ itemId: item.id == null ? null : String(item.id), path });
+            }
+          }
+        }
+      }
+      const uniqueFiles = [...new Map(fileItems.map((f) => [f.path, f])).values()];
+      if (uniqueFiles.length > 0 || commandCount > 0 || timing.durationMs !== null) {
+        rows.push({
+          key: `${input.threadId}:turn-${turn.id}:summary`,
+          type: "turnSummary",
+          turnId: turn.id,
+          fileItems: uniqueFiles,
+          commandCount,
+          durationMs: timing.durationMs,
+        });
+      }
+    }
     // Completed turns normally render timing beside the final answer's copy action. Keep a
     // standalone row only for interrupted/error turns that never produced an Agent answer.
     if (
@@ -134,6 +190,7 @@ export function estimateThreadTimelineRow(row: ThreadTimelineRow | undefined) {
   if (row === undefined) return 96;
   if (row.type === "intermediateHeader") return 48;
   if (row.type === "turnDuration") return 28;
+  if (row.type === "turnSummary") return 32;
   return estimatedItemHeights[row.item.type] ?? 96;
 }
 
@@ -184,7 +241,8 @@ function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
       left.count === right.count &&
       left.open === right.open &&
       left.loading === right.loading &&
-      left.turnId === right.turnId
+      left.turnId === right.turnId &&
+      left.activeLabel === right.activeLabel
     );
   }
   if (left.type === "item" && right.type === "item") {
@@ -210,6 +268,19 @@ function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
       left.durationMs === right.durationMs &&
       left.active === right.active &&
       sameResponseUsage(left.responseUsage, right.responseUsage)
+    );
+  }
+  if (left.type === "turnSummary" && right.type === "turnSummary") {
+    return (
+      left.turnId === right.turnId &&
+      left.commandCount === right.commandCount &&
+      left.durationMs === right.durationMs &&
+      left.fileItems.length === right.fileItems.length &&
+      left.fileItems.every(
+        (file, index) =>
+          file.path === right.fileItems[index]?.path &&
+          file.itemId === right.fileItems[index]?.itemId,
+      )
     );
   }
   return false;

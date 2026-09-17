@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { FolderIcon, Loader2Icon } from "@lucide/vue";
+import { Button } from "@codex-gateway/ui/button";
 import { computed } from "vue";
 import ChatComposer from "@/components/chat/ChatComposer.vue";
 import ChatPanelScrollArea from "@/components/chat/ChatPanelScrollArea.vue";
@@ -7,8 +8,12 @@ import ProjectThreadList from "@/components/chat/ProjectThreadList.vue";
 import ThreadVirtualTimeline from "@/components/thread/ThreadVirtualTimeline.vue";
 import ActiveSubAgentsBar from "@/components/thread/subagent/ActiveSubAgentsBar.vue";
 import MisalignmentRecoveryCard from "@/components/thread/MisalignmentRecoveryCard.vue";
+import NewThreadHero from "@/components/chat/NewThreadHero.vue";
 import McpRuntimeStatusBar from "@/components/thread/McpRuntimeStatusBar.vue";
 import { useGatewayThreadTurnsStore } from "@/stores/gateway-thread-turns";
+import { useAuthStore } from "@/stores/auth";
+import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
+import { gatewayPath } from "@/utils/gateway-url";
 import { useChatWorkspaceState } from "./chat-workspace-state";
 
 const {
@@ -28,6 +33,9 @@ const {
   selectedThreadViewReady,
 } = useChatWorkspaceState();
 const threadTurns = useGatewayThreadTurnsStore();
+const auth = useAuthStore();
+const catalog = useGatewayCatalogStore();
+const hasNoHosts = computed(() => catalog.hosts.length === 0);
 
 const { t } = useI18n();
 const showThreadLoading = computed(
@@ -62,6 +70,11 @@ const showThreadLoading = computed(
         </div>
       </ChatPanelScrollArea>
 
+      <NewThreadHero
+        v-else-if="selectedThreadId && historyTurns.length === 0 && !visibleError"
+        class="overflow-y-auto"
+      />
+
       <ThreadVirtualTimeline
         v-else-if="selectedThreadId"
         :thread-id="selectedThreadId"
@@ -81,8 +94,27 @@ const showThreadLoading = computed(
         <ProjectThreadList />
       </ChatPanelScrollArea>
 
-      <ChatPanelScrollArea v-else class="flex items-start">
+      <ChatPanelScrollArea v-else class="flex items-center justify-center">
         <div
+          v-if="hasNoHosts"
+          data-testid="no-hosts-empty"
+          class="mx-auto flex max-w-md flex-col items-center gap-3 px-4 text-center"
+        >
+          <FolderIcon class="size-5 text-ink-muted" />
+          <p class="text-[0.9375rem] leading-7 text-ink">
+            {{ auth.isAdmin ? t("app.noWorkspaceAdminHint") : t("app.noWorkspaceMemberHint") }}
+          </p>
+          <Button
+            v-if="auth.isAdmin"
+            as="a"
+            :href="gatewayPath('admin?tab=users')"
+            data-testid="empty-goto-admin"
+          >
+            {{ t("app.gotoAdminConsole") }}
+          </Button>
+        </div>
+        <div
+          v-else
           class="max-w-3xl rounded-2xl bg-canvas-soft px-4 py-3 text-[0.9375rem] leading-7 text-ink md:ml-auto md:px-5 md:py-4"
         >
           <div class="mb-2 flex items-center gap-2 text-ink-muted">

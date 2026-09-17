@@ -1,4 +1,5 @@
 import { useGatewayBootstrapStore } from "@/stores/gateway-bootstrap";
+import { protocolDebugEvents } from "@/stores/ui-preferences";
 import { gatewayDomainEvents } from "../domain-events";
 import { emitNotificationItem } from "./notification-item";
 import { formatNotification, isVisibleNotificationMethod } from "./notification-formatters";
@@ -36,6 +37,9 @@ export const notificationEventHandlers: GatewayEventHandlerRegistry = {
     if (canonical.type !== "notice") return;
     const method = canonical.source;
     if (!isVisibleNotificationMethod(method)) return;
+    // Protocol-level response envelopes are developer diagnostics; they are opt-in via the
+    // appearance settings toggle rather than timeline noise by default.
+    if (method === "rawResponseItem/completed" && !protocolDebugEvents.value) return;
     const params = canonical.params;
     const turnId = idFromUnknown(params.turnId);
     if (turnId === null) return;

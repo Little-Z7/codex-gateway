@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import ComposerShell from "@/components/chat/composer/ComposerShell.vue";
+import { computed } from "vue";
 import { useComposerController } from "@/composables/composer/useComposerController";
+import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
 
 const {
   activeEffortCompactLabel,
@@ -60,10 +62,13 @@ const {
   uploadingAttachments,
   handleFileReferenceLimit,
 } = useComposerController();
+const threadView = useGatewayThreadViewStore();
+const emptyThread = computed(() => threadView.timelineTurns.length === 0);
 </script>
 
 <template>
   <ComposerShell
+    :empty-thread="emptyThread"
     v-model="turnText"
     v-model:file-references="fileReferences"
     :attached-files="attachedFiles"

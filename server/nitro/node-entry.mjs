@@ -55,7 +55,8 @@ server.on("error", (error) => {
 const listener = server.listen(
   path !== undefined && path !== "" ? { path } : { port, host },
   () => {
-    const protocol = cert !== undefined && cert !== "" && key !== undefined && key !== "" ? "https" : "http";
+    const protocol =
+      cert !== undefined && cert !== "" && key !== undefined && key !== "" ? "https" : "http";
     const addressInfo = listener.address();
     if (addressInfo === null) return;
     if (typeof addressInfo === "string") {

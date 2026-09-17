@@ -299,6 +299,7 @@ test("switching threads keeps asynchronously rendered diff content in normal flo
   await page.getByTestId(`thread-button-${shortThreadId}`).click();
   await expect(page.getByText("short thread content")).toBeVisible();
   await page.getByTestId(`thread-button-${diffThreadId}`).click();
+  await openIntermediateSteps(page);
   await expect(page.getByRole("button", { name: /src\/async\.py/ })).toHaveAttribute(
     "data-state",
     "open",

@@ -14,9 +14,17 @@ const text = computed(() => threadItemText(props.item));
 const inProgress = computed(() => isItemInProgress(props.item));
 const startedAt = computed(() => itemStartedAtMs(props.item));
 const completedAt = computed(() => itemCompletedAtMs(props.item));
+// The duration is only honest when both lifecycle timestamps exist: reasoning items buffered by
+// the provider can arrive with startedAt ≈ completedAt, so sub-second results are hidden rather
+// than shown as a misleading "0.01s". While in progress the live elapsed time is real.
 const elapsedMs = computed(() => {
   if (startedAt.value === null) return null;
-  return (inProgress.value ? now.value : (completedAt.value ?? now.value)) - startedAt.value;
+  if (inProgress.value) {
+    return now.value - startedAt.value;
+  }
+  if (completedAt.value === null) return null;
+  const delta = completedAt.value - startedAt.value;
+  return delta >= 500 ? delta : null;
 });
 const timeLabel = computed(() =>
   elapsedMs.value === null ? null : formatDurationMs(elapsedMs.value),

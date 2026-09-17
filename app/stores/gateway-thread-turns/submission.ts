@@ -3,6 +3,7 @@ import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
 import { useGatewayBootstrapStore } from "@/stores/gateway-bootstrap";
 import { useGatewayComposerStore } from "@/stores/gateway-composer";
 import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
+import { applyThreadPreviewFallback } from "@/stores/gateway-navigation/actions/thread-list";
 import { useGatewayThreadRuntimeStore } from "@/stores/gateway-thread-runtime";
 import { useGatewayThreadTurnsStore } from "@/stores/gateway-thread-turns";
 import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
@@ -59,6 +60,7 @@ export async function sendTurn(
   } else {
     insertOptimisticNewTurnMessage(threadId, clientUserMessageId, optimisticContent);
   }
+  applyThreadPreviewFallback(hostId, threadId, text);
 
   const projectId = navigation.selectedProjectId;
   if (projectId === null) {

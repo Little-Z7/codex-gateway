@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { SettingsIcon, ShieldIcon } from "@lucide/vue";
-import { computed, nextTick, ref } from "vue";
+import { SettingsIcon, ShieldIcon, SquarePenIcon } from "@lucide/vue";
+import { computed, nextTick, onScopeDispose, ref } from "vue";
+import { useEventListener } from "@vueuse/core";
 import { Button } from "@codex-gateway/ui/button";
 import {
   Dialog,
@@ -17,6 +18,7 @@ import { useAuthStore } from "@/stores/auth";
 import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
 import { gatewayPath } from "@/utils/gateway-url";
 import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
+import { gatewayDomainEvents } from "@/stores/gateway/domain-events";
 import AddProjectDialog from "./AddProjectDialog.vue";
 import HostTree from "./host-tree/HostTree.vue";
 import HostMfaDialog from "./host-tree/HostMfaDialog.vue";
@@ -98,6 +100,35 @@ function openAddProject(host: HostRecord) {
   projectEditor.value = { host, project: null };
 }
 
+const singleManagedHost = computed(() => {
+  const list = hosts.value;
+  return list.length === 1 && list[0]?.managed === true ? list[0] : null;
+});
+const selectedProject = computed(
+  () => catalog.projects.find((project) => project.id === navigation.selectedProjectId) ?? null,
+);
+
+function startNewThread() {
+  if (selectedProject.value !== null) {
+    sidebarTree.startThreadInProject(selectedProject.value);
+    return;
+  }
+  const host = singleManagedHost.value ?? hosts.value[0] ?? null;
+  if (host !== null) {
+    // No project selected: guide the user into the project creation dialog instead of failing.
+    openAddProject(host);
+  }
+}
+
+onScopeDispose(gatewayDomainEvents.on("new-thread-requested", () => startNewThread()));
+
+useEventListener(window, "keydown", (event) => {
+  if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key === "n") {
+    event.preventDefault();
+    startNewThread();
+  }
+});
+
 function openEditProject(project: ProjectRecord) {
   const host = hosts.value.find((item) => item.id === project.hostId);
   if (!host) {
@@ -128,6 +159,12 @@ async function openHostMonitor(hostId: number) {
       @open-browser="showBrowserDialog = true"
       @open-host-monitor="workspaceActions.openHostMonitor"
     />
+    <div class="px-3 pb-1">
+      <Button data-testid="sidebar-new-thread" class="w-full gap-2" @click="startNewThread">
+        <SquarePenIcon class="size-4" />
+        {{ t("app.newThread") }}
+      </Button>
+    </div>
     <div class="flex min-h-0 flex-1 overflow-hidden px-3 py-3">
       <SidebarScrollArea>
         <div class="min-w-0 max-w-full space-y-4 overflow-hidden pr-1">

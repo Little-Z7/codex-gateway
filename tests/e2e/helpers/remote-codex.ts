@@ -227,7 +227,7 @@ export async function startRemoteThreadFromProjectMenu(
   await page.getByTestId(`project-button-${projectId}`).click({ button: "right" });
   await page.getByRole("menuitem", { name: /新建/ }).click();
   const threadId = await waitForSelectedThreadId(page);
-  await expect(page.getByPlaceholder("输入后续修改要求")).toBeEnabled();
+  await expect(page.getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/)).toBeEnabled();
   await expect(page.getByTestId(`thread-button-${threadId}`)).toBeVisible({ timeout: 30_000 });
   if (remote.testModel !== undefined && remote.testModel !== "") {
     await page.evaluate(async (model) => {
@@ -261,7 +261,9 @@ export async function sendTextTurn(
       .poll(async () => (await currentRouteSelection(page)).threadId, { timeout: 10_000 })
       .toBe(context.threadId);
   }
-  await page.getByPlaceholder("输入后续修改要求").fill(`用一句话回复：${marker}`);
+  await page
+    .getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/)
+    .fill(`用一句话回复：${marker}`);
   await page.getByTestId("send-turn-button").click();
 }
 
@@ -284,7 +286,9 @@ export async function selectSidebarThread(page: Page, threadId: string) {
 }
 
 export async function sendSteerText(page: Page, marker: string) {
-  await page.getByPlaceholder("输入后续修改要求").fill(`追加要求：${marker}`);
+  await page
+    .getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/)
+    .fill(`追加要求：${marker}`);
   await page.getByTestId("send-turn-button").click();
 }
 

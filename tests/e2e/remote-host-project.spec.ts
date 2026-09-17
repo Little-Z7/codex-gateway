@@ -62,7 +62,7 @@ test("new threads display and inherit the remote Codex defaults", async ({
   await page.getByTestId("model-selector-close").click();
 
   const offset = await realtimeClientMessageCount(page);
-  await page.getByPlaceholder("输入后续修改要求").fill("/");
+  await page.getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/).fill("/");
   await page.getByTestId("slash-command-new").click();
   const threadStart = z
     .object({
@@ -112,7 +112,7 @@ test("references real project files as structured turn context", async ({
     `mkdir -p -- ${shellQuote(`${project.remotePath}/${directory}`)} && printf '%s\\n' ${shellQuote(marker)} > ${shellQuote(`${project.remotePath}/${path}`)} && printf '%s\\n' root > ${shellQuote(`${project.remotePath}/${rootFileName}`)}`,
   );
 
-  const composer = page.getByPlaceholder("输入后续修改要求");
+  const composer = page.getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/);
   await composer.fill(`@reference-${suffix}`);
   const menu = page.getByTestId("file-mention-menu");
   await expect(menu).toBeVisible();
@@ -232,7 +232,7 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
   await installRealtimeSocketProbe(page);
 
   await openApp(page);
-  await expect(page.getByPlaceholder("输入后续修改要求")).toBeHidden();
+  await expect(page.getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/)).toBeHidden();
   await expect.poll(() => activeRealtimeSocketCount(page), { timeout: 10_000 }).toBe(1);
 
   const hostName = `docker-codex-${Date.now()}`;
@@ -309,7 +309,7 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
     .click();
   await expect(page.getByRole("tab", { name: project.name })).toBeHidden();
 
-  await page.getByPlaceholder("输入后续修改要求").fill("/");
+  await page.getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/).fill("/");
   await expect(page.getByTestId("slash-command-menu")).toBeVisible();
   await expect(page.getByTestId("slash-command-new")).toBeVisible();
   await expect(page.getByTestId("slash-command-plan")).toBeHidden();
@@ -318,7 +318,7 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
   await expect(page.getByTestId(`thread-button-${slashNewThreadId}`)).toBeVisible({
     timeout: 30_000,
   });
-  await page.getByPlaceholder("输入后续修改要求").fill("/");
+  await page.getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/).fill("/");
   await expect(page.getByTestId("slash-command-menu")).toBeVisible();
   await expect(page.getByTestId("slash-command-plan")).toBeVisible();
   const planSettingsResponsePromise = page.waitForResponse(
@@ -346,7 +346,9 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
   });
   await expect(page.getByTestId("composer-mode-strip").getByText("计划模式").first()).toBeVisible();
   const planTurnOffset = await realtimeClientMessageCount(page);
-  await page.getByPlaceholder("输入后续修改要求").fill("请为当前项目制定一个简短计划，不要执行。");
+  await page
+    .getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/)
+    .fill("请为当前项目制定一个简短计划，不要执行。");
   await page.getByTestId("send-turn-button").click();
   const planTurnStart = z
     .object({
@@ -367,18 +369,24 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
   const firstDraft = `E2E 草稿一 ${Date.now()}`;
   const secondDraft = `E2E 草稿二 ${Date.now()}`;
   await selectSidebarThread(page, threadId);
-  await page.getByPlaceholder("输入后续修改要求").fill(firstDraft);
+  await page.getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/).fill(firstDraft);
   await selectSidebarThread(page, secondThreadId);
-  await expect(page.getByPlaceholder("输入后续修改要求")).toHaveAttribute("data-value", "");
-  await page.getByPlaceholder("输入后续修改要求").fill(secondDraft);
+  await expect(page.getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/)).toHaveAttribute(
+    "data-value",
+    "",
+  );
+  await page.getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/).fill(secondDraft);
   await selectSidebarThread(page, threadId);
-  await expect(page.getByPlaceholder("输入后续修改要求")).toHaveAttribute("data-value", firstDraft);
+  await expect(page.getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/)).toHaveAttribute(
+    "data-value",
+    firstDraft,
+  );
   await selectSidebarThread(page, secondThreadId);
-  await expect(page.getByPlaceholder("输入后续修改要求")).toHaveAttribute(
+  await expect(page.getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/)).toHaveAttribute(
     "data-value",
     secondDraft,
   );
-  await page.getByPlaceholder("输入后续修改要求").fill("");
+  await page.getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/).fill("");
 
   await selectSidebarThread(page, threadId);
   await selectSidebarThread(page, secondThreadId);
@@ -424,7 +432,9 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
   );
   await expect(page.getByTestId("send-turn-button")).toHaveAttribute("aria-label", "已完成");
   const afterReloadMarker = `E2E 刷新后新轮 ${Date.now()}`;
-  await page.getByPlaceholder("输入后续修改要求").fill(`用一句话回复：${afterReloadMarker}`);
+  await page
+    .getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/)
+    .fill(`用一句话回复：${afterReloadMarker}`);
   await page.getByTestId("send-turn-button").click();
   await expect.poll(() => chatViewportBottomDistance(page)).toBeLessThanOrEqual(2);
   await expect(page.getByTestId("chat-scroll-area").getByText(afterReloadMarker)).toBeVisible({

@@ -21,6 +21,7 @@ import SlashCommandMenu from "@/components/chat/composer/SlashCommandMenu.vue";
 import ComposerEditor from "@/components/chat/composer/ComposerEditor.vue";
 
 const props = defineProps<{
+  emptyThread?: boolean;
   modelValue: string;
   fileReferences: ComposerFileReference[];
   attachedFiles: ComposerAttachment[];
@@ -148,7 +149,7 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
           :host-id="selectedHostId"
           :project-id="selectedProjectId"
           :disabled="!composerInputEnabled"
-          :placeholder="$t('app.askFollowUp')"
+          :placeholder="$t(emptyThread ? 'app.newThreadPlaceholder' : 'app.askFollowUp')"
           :limit-message="$t('app.fileReferenceLimit', { count: 10 })"
           @update:model-value="updateModelValue"
           @update:references="updateFileReferences"

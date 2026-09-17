@@ -19,6 +19,9 @@ export function useIntermediateStepsDisclosure(input: {
   // coupling expansion to virtualizer measurements or a global store.
   const openByTurnId = reactive(new Map<string, boolean>());
   const touchedByUser = new Set<string>();
+  // Turns observed while running are the only ones that may re-expand when a detached reader is
+  // parked mid-scroll; freshly loaded historical turns stay collapsed.
+  const seenActive = new Set<string>();
 
   watch(
     () => [
@@ -36,17 +39,29 @@ export function useIntermediateStepsDisclosure(input: {
         if (!liveTurnIds.has(turnId)) {
           openByTurnId.delete(turnId);
           touchedByUser.delete(turnId);
+          seenActive.delete(turnId);
         }
       }
 
       for (const turn of input.turns.value) {
+        // Live work stays collapsed by default; the header surfaces the newest step's summary
+        // instead of a streaming wall. The user can still open it explicitly.
         if (input.threadIsRunning.value && turn.turnIsActive) {
           touchedByUser.delete(turn.id);
-          openByTurnId.set(turn.id, true);
+          seenActive.add(turn.id);
+          if (!openByTurnId.has(turn.id)) openByTurnId.set(turn.id, false);
           continue;
         }
         if (input.autoCollapseIntermediate.value && !touchedByUser.has(turn.id)) {
           openByTurnId.set(turn.id, false);
+        } else if (
+          !touchedByUser.has(turn.id) &&
+          seenActive.has(turn.id) &&
+          openByTurnId.get(turn.id) === false
+        ) {
+          // A detached reader was mid-scroll when the turn finished: expand the completed work so
+          // their anchor stays visible instead of collapsing the row out from under them.
+          openByTurnId.set(turn.id, true);
         } else if (!openByTurnId.has(turn.id)) {
           openByTurnId.set(turn.id, false);
         }

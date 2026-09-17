@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { ActivityIcon, ChartNoAxesCombinedIcon, GlobeIcon, TerminalIcon } from "@lucide/vue";
+import {
+  ActivityIcon,
+  ChartNoAxesCombinedIcon,
+  GlobeIcon,
+  SquarePenIcon,
+  TerminalIcon,
+} from "@lucide/vue";
 import { Button } from "@codex-gateway/ui/button";
 
 defineProps<{
@@ -8,6 +14,7 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
+  newThread: [];
   openTerminal: [];
   openBrowser: [];
   openTmux: [];
@@ -23,6 +30,16 @@ const emit = defineEmits<{
       <slot name="start" />
     </div>
     <div class="relative z-10 ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
+      <Button
+        data-testid="new-thread-mobile-button"
+        variant="ghost"
+        size="sm"
+        class="h-8 shrink-0 rounded-md px-2 text-ink-muted hover:bg-canvas-soft hover:text-ink"
+        :aria-label="$t('app.newThread')"
+        @click="emit('newThread')"
+      >
+        <SquarePenIcon class="size-4" />
+      </Button>
       <Button
         data-testid="open-tmux-mobile-button"
         variant="ghost"

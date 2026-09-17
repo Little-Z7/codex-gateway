@@ -4,6 +4,8 @@ import LanguageSwitcher from "@/components/common/LanguageSwitcher.vue";
 import { Badge } from "@codex-gateway/ui/badge";
 import { Button } from "@codex-gateway/ui/button";
 import { useAuthStore } from "@/stores/auth";
+import { Switch } from "@codex-gateway/ui/switch";
+import { protocolDebugEvents } from "@/stores/ui-preferences";
 
 const emit = defineEmits<{ close: [] }>();
 const auth = useAuthStore();
@@ -39,6 +41,18 @@ async function logout() {
           </p>
         </div>
         <LanguageSwitcher />
+      </div>
+    </div>
+
+    <div class="rounded-xl border border-hairline bg-canvas-soft/70 p-4">
+      <div class="flex items-center justify-between gap-4">
+        <div class="min-w-0">
+          <div class="text-sm font-medium">{{ $t("app.protocolDebugEvents") }}</div>
+          <p class="text-sm text-ink-secondary">
+            {{ $t("app.protocolDebugEventsDescription") }}
+          </p>
+        </div>
+        <Switch v-model="protocolDebugEvents" data-testid="protocol-debug-events-toggle" />
       </div>
     </div>
 

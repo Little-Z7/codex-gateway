@@ -28,6 +28,8 @@ export type GatewayDomainEventMap = {
   "host-removed": { hostId: number };
   "pinned-threads-invalidated": Record<never, never>;
   "realtime-reconnected": Record<never, never>;
+  "composer-fill-requested": { text: string };
+  "new-thread-requested": Record<never, never>;
   "realtime-error-reported": {
     message: string;
     hostId: number | null;

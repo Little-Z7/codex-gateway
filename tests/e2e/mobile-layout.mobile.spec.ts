@@ -158,7 +158,7 @@ test("gives the Goal objective most of the mobile details dialog", async ({ page
   await installSelectedThreadGoalSubmitMock(page, { hostId: 1, threadId });
 
   const longObjective = "移动端目标正文需要保留足够的阅读空间。".repeat(40);
-  const composer = page.getByPlaceholder("输入后续修改要求");
+  const composer = page.getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/);
   await composer.fill(`/goal ${longObjective}`);
   await page.keyboard.press("Enter");
   await page.getByTestId("composer-goal-summary").click();

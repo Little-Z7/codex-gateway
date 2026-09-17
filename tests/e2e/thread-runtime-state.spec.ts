@@ -99,12 +99,13 @@ test("opening completed history does not show fake thinking", async ({ page }) =
   });
 
   await expect(page.getByText("completed history")).toBeVisible();
+  // Live work collapses into the steps group by default; the header still marks it as running.
   await expect(page.getByRole("button", { name: /中间过程/ })).toHaveAttribute(
     "data-state",
-    "open",
+    "closed",
   );
   await expect(page.getByTestId("agent-message-actions")).toHaveCount(0);
-  await expect(page.getByText(/本轮用时/)).toHaveCount(0);
+  await expect(page.getByText(/用时/)).toHaveCount(0);
 
   for (const usageEvent of usageEvents) await applyGatewayLiveEvent(page, usageEvent);
   await applyGatewayLiveEvent(page, completedEvent);
@@ -119,7 +120,7 @@ test("opening completed history does not show fake thinking", async ({ page }) =
   await expect
     .poll(() => agentActions.evaluate((element) => getComputedStyle(element).opacity))
     .toBe("1");
-  await expect(agentActions.getByText("本轮用时 2.50s")).toBeVisible();
+  await expect(agentActions.getByText("用时 2.50s")).toBeVisible();
   await expect(agentActions.getByText("用量 0.0046")).toBeVisible();
   await expect(agentActions.getByRole("button", { name: "复制输出" })).toBeAttached();
   await expect(page.getByText("思考中")).toBeHidden();
