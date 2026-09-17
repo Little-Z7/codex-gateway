@@ -27,13 +27,12 @@ const emit = defineEmits<{
           <Button
             data-testid="open-tmux-button"
             variant="ghost"
-            class="relative h-8 shrink-0 gap-1.5 px-2"
+            class="relative size-8 shrink-0"
             :disabled="!canLaunch"
             :aria-label="$t('app.openTmuxMonitor')"
             @click="emit('openTmux')"
           >
             <ActivityIcon class="size-4" />
-            <span class="hidden text-xs xl:inline">{{ $t("app.openTmuxMonitor") }}</span>
             <span
               v-if="tmuxActiveCount"
               class="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[0.625rem] font-semibold leading-4 text-primary-foreground"
@@ -49,13 +48,12 @@ const emit = defineEmits<{
           <Button
             data-testid="open-host-monitor-button"
             variant="ghost"
-            class="h-8 shrink-0 gap-1.5 px-2"
+            class="size-8 shrink-0"
             :disabled="!canLaunch"
             :aria-label="$t('app.openHostMonitor')"
             @click="emit('openHostMonitor')"
           >
             <ChartNoAxesCombinedIcon class="size-4" />
-            <span class="hidden text-xs xl:inline">{{ $t("app.openHostMonitor") }}</span>
           </Button>
         </TooltipTrigger>
         <TooltipContent>{{ $t("app.openHostMonitor") }}</TooltipContent>
@@ -65,13 +63,12 @@ const emit = defineEmits<{
           <Button
             data-testid="open-terminal-button"
             variant="ghost"
-            class="h-8 shrink-0 gap-1.5 px-2"
+            class="size-8 shrink-0"
             :disabled="!canLaunch"
             :aria-label="$t('app.openTerminal')"
             @click="emit('openTerminal')"
           >
             <TerminalIcon class="size-4" />
-            <span class="hidden text-xs xl:inline">{{ $t("app.openTerminal") }}</span>
           </Button>
         </TooltipTrigger>
         <TooltipContent>{{ $t("app.openTerminal") }}</TooltipContent>
@@ -81,13 +78,12 @@ const emit = defineEmits<{
           <Button
             data-testid="open-browser-button"
             variant="ghost"
-            class="h-8 shrink-0 gap-1.5 px-2"
+            class="size-8 shrink-0"
             :disabled="!canLaunch"
             :aria-label="$t('app.openBrowser')"
             @click="emit('openBrowser')"
           >
             <GlobeIcon class="size-4" />
-            <span class="hidden text-xs xl:inline">{{ $t("app.openBrowser") }}</span>
           </Button>
         </TooltipTrigger>
         <TooltipContent>{{ $t("app.openBrowser") }}</TooltipContent>

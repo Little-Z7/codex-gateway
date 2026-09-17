@@ -55,9 +55,7 @@ async function waitForContainerReady(page: import("@playwright/test").Page, user
   await expect
     .poll(
       async () => {
-        const { users } = await api(page, { url: "/api/admin/users" }, (v) =>
-          usersSchema.parse(v),
-        );
+        const { users } = await api(page, { url: "/api/admin/users" }, (v) => usersSchema.parse(v));
         const user = users.find((u) => u.username === username);
         return { state: user?.container?.state ?? null, host: user?.managedHost?.status ?? null };
       },
@@ -126,6 +124,12 @@ test("new thread UX: hero, title fallback, completion summary, Ctrl+N", async ({
       hasText: prompt.slice(0, 20),
     });
     await expect(sidebarRow.first()).toBeVisible({ timeout: 15_000 });
+
+    // The "recent activity" list must show the same fallback title, never a bare UUID.
+    const recentRow = member.locator('[data-testid^="recent-thread-button-"]').first();
+    await expect(recentRow).toBeVisible({ timeout: 15_000 });
+    await expect(recentRow).toContainText(prompt.slice(0, 20));
+    await expect(recentRow).not.toContainText(/[0-9a-f]{8}-[0-9a-f]{4}-/);
 
     // Completion summary appears once the turn settles.
     await expect(member.getByTestId("turn-summary").last()).toBeVisible({ timeout: 240_000 });

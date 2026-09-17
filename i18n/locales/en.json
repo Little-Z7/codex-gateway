@@ -248,7 +248,7 @@
     "composerPlaceholder": "Ask for follow-up changes",
     "send": "Send",
     "interruptTurn": "Stop generation",
-    "newThread": "New",
+    "newThread": "New chat",
     "refresh": "Refresh",
     "ctrlEnter": "Enter sends, Shift Enter inserts a new line",
     "selectThreadFirst": "Select a thread first",

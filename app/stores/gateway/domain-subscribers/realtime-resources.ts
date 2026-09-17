@@ -8,6 +8,7 @@ import { useGatewayTmuxStore } from "@/stores/gateway-tmux";
 import { useGatewayHostMfaStore } from "@/stores/gateway-host-mfa";
 import { gatewayDomainEvents } from "../domain-events";
 import { notificationAction, projectPublishedNotification } from "../notifications/actions";
+import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
 
 export function registerRealtimeResourceSubscribers() {
   gatewayDomainEvents.on("realtime-tmux-sessions", (snapshot) => {
@@ -75,6 +76,17 @@ export function registerRealtimeResourceSubscribers() {
   });
   gatewayDomainEvents.on("realtime-notification-published", ({ notification, actionLabel }) => {
     projectPublishedNotification(notification);
+    // A "turn finished" toast for the thread the user is already watching is redundant; only
+    // surface it when the thread is not selected or the tab is hidden. Server-side Bark pushes
+    // are independent of this in-app toast.
+    const target = notification.target;
+    if (
+      target.kind === "thread" &&
+      document.visibilityState === "visible" &&
+      useGatewayNavigationStore().selectedThreadId === target.threadId
+    ) {
+      return;
+    }
     const action = notificationAction(notification);
     toast.info(notification.title, {
       id: notification.key,

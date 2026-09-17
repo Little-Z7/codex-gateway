@@ -87,8 +87,13 @@ export function titleForThread(
   const label = firstNonEmptyString([thread.title, thread.name, thread.preview]);
   if (label !== null) return label;
   const identity = thread.id ?? thread.threadId;
-  return identity === undefined ? "Untitled" : String(identity);
+  if (identity === undefined) return "Untitled";
+  const label2 = String(identity);
+  return MACHINE_ID_RE.test(label2) ? "Untitled" : label2;
 }
+
+// App-server thread ids are UUIDs; rendering one as a title leaks implementation detail.
+const MACHINE_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function sortThreads(threads: GatewayThread[]) {
   return [...threads].sort((left, right) => {

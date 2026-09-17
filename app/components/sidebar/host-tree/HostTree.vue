@@ -36,7 +36,12 @@ const flatHostStatus = computed(() =>
       <HostTreeProjects :host="flatHost" />
     </template>
     <template v-else>
-      <div class="px-2 pb-2 text-sm text-ink-muted">{{ t("app.hosts") }}</div>
+      <div
+        v-if="auth.isAdmin || controller.hosts.length > 0"
+        class="px-2 pb-2 text-sm text-ink-muted"
+      >
+        {{ t("app.hosts") }}
+      </div>
       <div class="min-w-0 space-y-1 overflow-hidden">
         <HostTreeNode v-for="host in controller.hosts" :key="host.id" :host="host" />
       </div>

@@ -34,7 +34,7 @@ function isSelectedPinnedThread(thread: PinnedThreadRecord) {
 </script>
 
 <template>
-  <section class="flex min-w-0 max-w-full flex-col overflow-hidden">
+  <section v-if="threads.length" class="flex min-w-0 max-w-full flex-col overflow-hidden">
     <div class="flex h-8 items-center justify-between gap-2 px-2 pb-2 text-sm text-ink-muted">
       <span>{{ $t("app.pinned") }}</span>
       <slot name="header-action" />

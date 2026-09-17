@@ -9,7 +9,7 @@ import { useGatewayThreadActivityStore } from "@/stores/gateway-thread-activity"
 import { useGatewayThreadRuntimeStore } from "@/stores/gateway-thread-runtime";
 import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
 import type { ThreadListResponse } from "@/stores/gateway/types";
-import { messageFromError, sortThreads } from "@/stores/gateway/thread-utils/identity";
+import { messageFromError, pinnedKey, sortThreads } from "@/stores/gateway/thread-utils/identity";
 import { runtimeStatusFromAppThreadStatus } from "@/stores/gateway/thread-utils/status";
 import { isAppServerSubAgentThread } from "~~/shared/runtime/app-server";
 import { firstNonEmptyString } from "~~/shared/utils/strings";
@@ -141,6 +141,14 @@ export function applyThreadPreviewFallback(hostId: number, threadId: string, tex
   const preview = text.replace(/\s+/g, " ").trim().slice(0, 40);
   if (preview === "") return;
   navigation.threads = navigation.threads.with(index, { ...thread, preview });
+  // The "recent activity" list renders ThreadActivitySummary, not navigation.threads; mirror the
+  // fallback there too or that row keeps showing the UUID until app-server supplies a name.
+  const activity = useGatewayThreadActivityStore();
+  const key = pinnedKey(hostId, threadId);
+  const summary = activity.summariesByKey[key];
+  if (summary !== undefined && summary.title === summary.threadId) {
+    activity.updateTitle(hostId, threadId, preview);
+  }
 }
 
 function syncThreadStatusesFromList(hostId: number, threads: GatewayThread[]) {
