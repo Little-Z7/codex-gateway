@@ -47,6 +47,7 @@ services:
       - ./data:/data
       - /var/run/docker.sock:/var/run/docker.sock
       - ${CODEX_GATEWAY_SHARED_AUTH_DIR:?CODEX_GATEWAY_SHARED_AUTH_DIR is required}:/srv/codex-auth:ro
+      - ./deploy/user-container:/app/deploy/user-container:ro
     # Keep liveness probes side-effect free. Nitro owns periodic GC so probe retries or Docker
     # daemon pauses cannot change application memory lifecycle.
     healthcheck:

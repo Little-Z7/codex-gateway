@@ -10,8 +10,11 @@ export interface AdminLockout {
 export interface AdminManagedHostSummary {
   hostId: number;
   hostName: string | null;
-  status: "ready" | "provisioning" | "error" | "removed";
+  status: "ready" | "provisioning" | "error" | "missing" | "removed";
   lastError: string | null;
+  containerName?: string | null;
+  volumeName?: string | null;
+  quota?: { memory: string | null; cpus: string | null };
 }
 
 export interface AdminContainerSummary {
@@ -102,11 +105,41 @@ export interface AdminContainerRow {
   state: string;
   startedAt: string | null;
   image: string | null;
+  imageDigest: string | null;
+  codexVersion: string | null;
   cpuPercent: number | null;
   memoryUsageBytes: number | null;
   memoryLimitBytes: number | null;
   volumeName: string | null;
   volumeSizeBytes: number | null;
+}
+
+export interface AdminUserImageInfo {
+  image: string;
+  present: boolean;
+  digest: string | null;
+  created: string | null;
+  codexVersion: string | null;
+  builtAt: string | null;
+  supportedCodexVersion: string;
+}
+
+export interface ImageRebuildStatus {
+  status: "idle" | "running" | "success" | "error";
+  lines: string[];
+  startedAt: string | null;
+  finishedAt: string | null;
+  message: string | null;
+}
+
+export interface RecreateAllStatus {
+  status: "idle" | "running" | "done" | "cancelled" | "error";
+  total: number;
+  completed: number;
+  currentUser: string | null;
+  failures: { username: string; error: string }[];
+  startedAt: string | null;
+  finishedAt: string | null;
 }
 
 export interface AdminSystemInfo {
@@ -281,10 +314,17 @@ export const useGatewayAdminStore = defineStore("gateway-admin", () => {
     return containers.value;
   }
 
+  const volumeWarnBytes = ref<number>(Infinity);
+  const volumesOverThreshold = ref<number | null>(null);
+
   async function loadContainerVolumes() {
     const response = await gatewayApi<{
       volumes: { userId: number; volumeName: string; sizeBytes: number | null }[];
+      warnBytes: number;
+      overThreshold: number;
     }>("/api/admin/containers/volumes");
+    volumeWarnBytes.value = response.warnBytes;
+    volumesOverThreshold.value = response.overThreshold;
     const sizes = new Map(response.volumes.map((volume) => [volume.userId, volume.sizeBytes]));
     containers.value = containers.value.map((row) => ({
       ...row,
@@ -318,6 +358,75 @@ export const useGatewayAdminStore = defineStore("gateway-admin", () => {
     await loadSharedLogin();
   }
 
+  const image = ref<AdminUserImageInfo | null>(null);
+  const rebuildStatus = ref<ImageRebuildStatus | null>(null);
+  const recreateAll = ref<RecreateAllStatus | null>(null);
+
+  async function loadImage() {
+    image.value = await gatewayApi<AdminUserImageInfo>("/api/admin/images");
+    return image.value;
+  }
+
+  async function checkCodexLatest() {
+    return await gatewayApi<{ version: string | null; current: string; error: string | null }>(
+      "/api/admin/images/codex-latest",
+    );
+  }
+
+  async function loadRebuildStatus() {
+    rebuildStatus.value = await gatewayApi<ImageRebuildStatus>("/api/admin/images/rebuild");
+    return rebuildStatus.value;
+  }
+
+  async function startImageRebuild(codexVersion?: string) {
+    rebuildStatus.value = await gatewayApi<ImageRebuildStatus>("/api/admin/images/rebuild", {
+      method: "POST",
+      body: codexVersion === undefined ? {} : { codexVersion },
+    });
+    return rebuildStatus.value;
+  }
+
+  async function loadRecreateAll() {
+    recreateAll.value = await gatewayApi<RecreateAllStatus>("/api/admin/containers/recreate-all");
+    return recreateAll.value;
+  }
+
+  async function startRecreateAll(intervalSeconds = 10) {
+    recreateAll.value = await gatewayApi<RecreateAllStatus>("/api/admin/containers/recreate-all", {
+      method: "POST",
+      body: { intervalSeconds },
+    });
+    return recreateAll.value;
+  }
+
+  async function cancelRecreateAll() {
+    recreateAll.value = await gatewayApi<RecreateAllStatus>("/api/admin/containers/recreate-all", {
+      method: "DELETE",
+    });
+    return recreateAll.value;
+  }
+
+  async function setUserQuota(
+    userId: number,
+    quota: { memory?: string | null; cpus?: string | null },
+  ) {
+    await gatewayApi(`/api/admin/users/${userId}/quota`, { method: "PATCH", body: quota });
+    await listUsers();
+  }
+
+  async function loadUserContainer(userId: number) {
+    return await gatewayApi<{
+      container: AdminContainerRow | null;
+      managedHost: Record<string, unknown> | null;
+    }>(`/api/admin/containers/${userId}`);
+  }
+
+  async function loadUserThreadStats(userId: number) {
+    return await gatewayApi<{
+      threads: { count: number; lastActiveAt: string | null; cached: boolean };
+    }>(`/api/admin/users/${userId}/threads`);
+  }
+
   const lockouts = ref<AdminLockout[]>([]);
   async function loadLockouts() {
     lockouts.value = (
@@ -333,6 +442,21 @@ export const useGatewayAdminStore = defineStore("gateway-admin", () => {
   }
 
   return {
+    image,
+    rebuildStatus,
+    recreateAll,
+    volumeWarnBytes,
+    volumesOverThreshold,
+    loadImage,
+    checkCodexLatest,
+    loadRebuildStatus,
+    startImageRebuild,
+    loadRecreateAll,
+    startRecreateAll,
+    cancelRecreateAll,
+    setUserQuota,
+    loadUserContainer,
+    loadUserThreadStats,
     lockouts,
     loadLockouts,
     unlockLockout,

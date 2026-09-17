@@ -309,8 +309,12 @@ async function provisionContainer(userId: number) {
         },
       },
     };
-    if (config.memory !== null) hostConfig.Memory = parseMemoryLimit(config.memory);
-    if (config.cpus !== null) hostConfig.NanoCpus = Math.round(Number(config.cpus) * 1e9);
+    // Per-user quota overrides stored on the managed_hosts row beat the global env limits.
+    const quota = userStore.getManagedHost(userId);
+    const memory = quota?.memoryLimit ?? config.memory;
+    const cpus = quota?.cpuLimit ?? config.cpus;
+    if (memory !== null) hostConfig.Memory = parseMemoryLimit(memory);
+    if (cpus !== null) hostConfig.NanoCpus = Math.round(Number(cpus) * 1e9);
 
     const created = await docker.createContainer(containerName, {
       Image: config.userImage,
@@ -388,7 +392,18 @@ async function removeContainer(userId: number, keepVolume: boolean) {
   if (managed !== null && managed.hostId !== 0) {
     await runAsUserConfigMutation(userId, () => hostStore.delete(managed.hostId));
   }
-  userStore.deleteManagedHost(userId);
+  if (keepVolume && managed !== null) {
+    // Keep the row (and its quota overrides) so a later recreate can rebuild from it; only the
+    // container identity is cleared.
+    userStore.upsertManagedHost(userId, managed.hostId, {
+      status: "removed",
+      containerName: null,
+      containerId: null,
+      sshPublicKey: null,
+    });
+  } else {
+    userStore.deleteManagedHost(userId);
+  }
 }
 
 function isAlreadyStopped(error: unknown) {
@@ -459,7 +474,7 @@ function ignoreIfExists(error: unknown) {
   throw error;
 }
 
-function parseMemoryLimit(value: string) {
+export function parseMemoryLimit(value: string) {
   const match = /^(\d+(?:\.\d+)?)\s*([kmg]i?b?)?$/i.exec(value.trim());
   if (match === null) return undefined;
   const amount = Number(match[1]);

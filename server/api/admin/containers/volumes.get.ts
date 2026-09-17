@@ -1,6 +1,7 @@
 import { requireAdmin } from "../../../utils/gateway/auth/context";
 import { userStore } from "../../../utils/gateway/auth/users";
 import { DockerEngineClient } from "../../../utils/gateway/provisioning/docker-engine-client";
+import { volumeWarnBytes } from "../../../utils/gateway/provisioning/container-inventory";
 import { defineGatewayEventHandler } from "../../../utils/gateway/http/errors";
 
 export default defineGatewayEventHandler(async (event) => {
@@ -20,5 +21,12 @@ export default defineGatewayEventHandler(async (event) => {
       volumeName: managed.volumeName,
       sizeBytes: managed.volumeName === null ? null : (sizes.get(managed.volumeName) ?? null),
     }));
-  return { volumes };
+  const warnBytes = volumeWarnBytes();
+  return {
+    volumes,
+    warnBytes,
+    overThreshold: volumes.filter(
+      (volume) => volume.sizeBytes !== null && volume.sizeBytes > warnBytes,
+    ).length,
+  };
 });

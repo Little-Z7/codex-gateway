@@ -84,8 +84,9 @@ export const auditLog = {
       params.push(options.cursor);
     }
     if (options.userId !== undefined) {
-      where.push("actor_user_id = ?");
-      params.push(options.userId);
+      // Actor-side and target-side entries both belong to a user's audit trail.
+      where.push("(actor_user_id = ? OR (target_type = 'user' AND target_id = ?))");
+      params.push(options.userId, String(options.userId));
     }
     if (options.action !== undefined && options.action !== "") {
       where.push("action = ?");

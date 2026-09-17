@@ -101,6 +101,8 @@ export function migrateGatewaySchema(db: DatabaseSync) {
       volume_name TEXT,
       ssh_public_key TEXT,
       last_error TEXT,
+      memory_limit TEXT,
+      cpu_limit TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -141,5 +143,14 @@ export function migrateGatewaySchema(db: DatabaseSync) {
       ALTER TABLE managed_hosts_new RENAME TO managed_hosts;
       COMMIT;
     `);
+  }
+
+  // Per-user resource quota overrides; NULL means fall back to the global env limits.
+  const managedColumns = db.prepare("PRAGMA table_info(managed_hosts)").all();
+  if (!managedColumns.some((column) => column.name === "memory_limit")) {
+    db.exec("ALTER TABLE managed_hosts ADD COLUMN memory_limit TEXT");
+  }
+  if (!managedColumns.some((column) => column.name === "cpu_limit")) {
+    db.exec("ALTER TABLE managed_hosts ADD COLUMN cpu_limit TEXT");
   }
 }

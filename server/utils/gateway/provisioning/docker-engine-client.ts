@@ -104,20 +104,25 @@ export class DockerEngineClient {
     path: string,
     timeoutMs = 10_000,
     body?: Buffer,
+    contentType = "application/json",
+    onChunk?: (chunk: Buffer) => void,
   ): Promise<Buffer> {
     return await new Promise((resolve, reject) => {
       const request = http.request(
         { socketPath: this.socketPath, method, path: `/${DOCKER_API_VERSION}${path}` },
         (res) => {
           const chunks: Buffer[] = [];
-          res.on("data", (chunk: Buffer) => chunks.push(chunk));
+          res.on("data", (chunk: Buffer) => {
+            chunks.push(chunk);
+            onChunk?.(chunk);
+          });
           res.on("end", () => resolve(Buffer.concat(chunks)));
         },
       );
       request.setTimeout(timeoutMs, () => request.destroy(new Error("Docker request timed out")));
       request.on("error", reject);
       if (body !== undefined) {
-        request.setHeader("content-type", "application/json");
+        request.setHeader("content-type", contentType);
         request.end(body);
       } else {
         request.end();
@@ -174,6 +179,33 @@ export class DockerEngineClient {
 
   async systemDf(): Promise<{ Volumes?: DockerVolumeInfo[] } | null> {
     return await this.request("GET", "/system/df");
+  }
+
+  /**
+   * Streams `POST /build` with a tar context. Returns the raw newline-delimited JSON stream the
+   * daemon emits; callers parse `{stream|error}` progress lines themselves.
+   */
+  async buildImage(options: {
+    tag: string;
+    contextTar: Buffer;
+    buildArgs: Record<string, string>;
+    timeoutMs?: number;
+    onChunk?: (chunk: Buffer) => void;
+  }): Promise<string> {
+    const params = new URLSearchParams({
+      t: options.tag,
+      buildargs: JSON.stringify(options.buildArgs),
+      rm: "1",
+    });
+    const body = await this.requestRaw(
+      "POST",
+      `/build?${params}`,
+      options.timeoutMs ?? 20 * 60_000,
+      options.contextTar,
+      "application/x-tar",
+      options.onChunk,
+    );
+    return body.toString("utf8");
   }
 }
 

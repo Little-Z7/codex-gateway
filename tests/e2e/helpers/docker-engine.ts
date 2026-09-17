@@ -58,6 +58,8 @@ export async function dockerRestartContainer(name: string) {
 const containerInspectSchema = z.looseObject({
   HostConfig: z.looseObject({
     LogConfig: z.looseObject({ Type: z.string(), Config: z.record(z.string(), z.string()) }),
+    Memory: z.number().optional(),
+    NanoCpus: z.number().optional(),
   }),
 });
 

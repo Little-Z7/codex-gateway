@@ -48,6 +48,12 @@ export default defineGatewayEventHandler(async (event) => {
                 hostName,
                 status: managed.status,
                 lastError: managed.lastError,
+                containerName: managed.containerName,
+                volumeName: managed.volumeName,
+                quota: {
+                  memory: managed.memoryLimit,
+                  cpus: managed.cpuLimit,
+                },
               },
         container,
         lastLoginAt: sessionStats.get(user.id)?.lastLoginAt ?? null,

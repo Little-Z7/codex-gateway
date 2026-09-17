@@ -10,6 +10,11 @@ RUN test -n "${CODEX_CLI_VERSION}" \
 
 FROM debian:bookworm-slim
 
+ARG CODEX_CLI_VERSION
+ARG CODEX_GATEWAY_BUILT_AT
+LABEL codex-gateway.codex-version="${CODEX_CLI_VERSION}" \
+      codex-gateway.built-at="${CODEX_GATEWAY_BUILT_AT}"
+
 ARG USER_UID=1000
 ARG USER_GID=1000
 

@@ -6,12 +6,13 @@ import { messageFromError, errorMessageLabels } from "@/stores/gateway/thread-ut
 
 const { t, te } = useI18n();
 const admin = useGatewayAdminStore();
-const { overview, audit } = storeToRefs(admin);
+const { overview, audit, volumesOverThreshold } = storeToRefs(admin);
 const errorLabels = computed(() => errorMessageLabels(t, te));
 
 onMounted(async () => {
   try {
     await Promise.all([admin.loadOverview(), admin.loadAudit({})]);
+    admin.loadContainerVolumes().catch(() => {});
   } catch (error) {
     toast.error(messageFromError(error, t("app.adminOverviewLoadFailed"), errorLabels.value));
   }
@@ -52,6 +53,10 @@ const statCards = computed(() => {
           info.containers.provisioning +
           info.containers.error,
       ),
+    },
+    {
+      label: t("app.adminVolumesOverThreshold"),
+      value: volumesOverThreshold.value === null ? "—" : String(volumesOverThreshold.value),
     },
   ];
 });

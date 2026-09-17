@@ -10,6 +10,7 @@ import {
 import { Button } from "@codex-gateway/ui/button";
 import AdminOverviewPanel from "./AdminOverviewPanel.vue";
 import AdminUsersPanel from "./users/AdminUsersPanel.vue";
+import AdminUserDetailPanel from "./AdminUserDetailPanel.vue";
 import AdminContainersPanel from "./AdminContainersPanel.vue";
 import AdminSessionsPanel from "./AdminSessionsPanel.vue";
 import AdminSystemPanel from "./AdminSystemPanel.vue";
@@ -27,16 +28,38 @@ const tabs: { id: AdminTab; label: string; icon: Component }[] = [
 ];
 
 const activeTab = ref<AdminTab>("overview");
+const detailUserId = ref<number | null>(null);
 
 function readTabFromLocation(): AdminTab {
-  const tab = new URLSearchParams(window.location.search).get("tab");
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get("tab");
+  const user = params.get("user");
+  detailUserId.value =
+    user !== null && user !== "" && Number.isFinite(Number(user)) ? Number(user) : null;
   return tabs.some((item) => item.id === tab) ? (tab as AdminTab) : "overview";
 }
 
 function selectTab(tab: AdminTab) {
   activeTab.value = tab;
+  detailUserId.value = null;
   const url = new URL(window.location.href);
   url.searchParams.set("tab", tab);
+  url.searchParams.delete("user");
+  window.history.replaceState(null, "", url);
+}
+
+function openUser(userId: number) {
+  detailUserId.value = userId;
+  const url = new URL(window.location.href);
+  url.searchParams.set("tab", "users");
+  url.searchParams.set("user", String(userId));
+  window.history.replaceState(null, "", url);
+}
+
+function closeUser() {
+  detailUserId.value = null;
+  const url = new URL(window.location.href);
+  url.searchParams.delete("user");
   window.history.replaceState(null, "", url);
 }
 
@@ -81,7 +104,12 @@ onMounted(() => {
 
       <main class="min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
         <AdminOverviewPanel v-if="activeTab === 'overview'" />
-        <AdminUsersPanel v-else-if="activeTab === 'users'" extended />
+        <AdminUserDetailPanel
+          v-else-if="activeTab === 'users' && detailUserId !== null"
+          :user-id="detailUserId"
+          @back="closeUser"
+        />
+        <AdminUsersPanel v-else-if="activeTab === 'users'" extended @open-user="openUser" />
         <AdminContainersPanel v-else-if="activeTab === 'containers'" />
         <AdminSessionsPanel v-else-if="activeTab === 'sessions'" />
         <AdminSystemPanel v-else-if="activeTab === 'system'" />

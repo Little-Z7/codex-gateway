@@ -45,6 +45,8 @@ export interface ManagedHostRecord {
   volumeName: string | null;
   sshPublicKey: string | null;
   lastError: string | null;
+  memoryLimit: string | null;
+  cpuLimit: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -251,6 +253,19 @@ export const userStore = {
       );
   },
 
+  setManagedHostQuota(
+    userId: number,
+    quota: { memoryLimit: string | null; cpuLimit: string | null },
+  ) {
+    const now = new Date().toISOString();
+    const result = gatewayDatabase()
+      .prepare(
+        `UPDATE managed_hosts SET memory_limit = ?, cpu_limit = ?, updated_at = ? WHERE user_id = ?`,
+      )
+      .run(quota.memoryLimit, quota.cpuLimit, now, userId);
+    return Number(result.changes) > 0;
+  },
+
   deleteManagedHost(userId: number) {
     gatewayDatabase().prepare("DELETE FROM managed_hosts WHERE user_id = ?").run(userId);
   },
@@ -435,6 +450,8 @@ function managedHostFromRow(row: SqlRow): ManagedHostRecord {
     volumeName: rowText(row.volume_name),
     sshPublicKey: rowText(row.ssh_public_key),
     lastError: rowText(row.last_error),
+    memoryLimit: rowText(row.memory_limit),
+    cpuLimit: rowText(row.cpu_limit),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };

@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
 } from "@codex-gateway/ui/alert-dialog";
 import { Badge } from "@codex-gateway/ui/badge";
+import { Checkbox } from "@codex-gateway/ui/checkbox";
 import { Button } from "@codex-gateway/ui/button";
 import {
   Dialog,
@@ -46,6 +47,7 @@ import {
   hostConnectionPayload,
 } from "@/components/settings/host-connection/form";
 import { useGatewayAdminStore, type AdminUserSummary } from "@/stores/gateway-admin";
+import { useAuthStore } from "@/stores/auth";
 import { gatewayApi } from "@/utils/gateway-api";
 import { messageFromError, errorMessageLabels } from "@/stores/gateway/thread-utils/identity";
 
@@ -53,6 +55,7 @@ import ProvisioningDiagnosticsCard from "../ProvisioningDiagnosticsCard.vue";
 import { SearchIcon, LogOutIcon } from "@lucide/vue";
 
 const props = withDefaults(defineProps<{ extended?: boolean }>(), { extended: false });
+const emit = defineEmits<{ openUser: [userId: number] }>();
 const { t, te } = useI18n();
 const admin = useGatewayAdminStore();
 const { users, provisioning } = storeToRefs(admin);
@@ -83,11 +86,141 @@ const removeManagedSaving = ref(false);
 
 const busy = ref<number | null>(null);
 const search = ref("");
+const roleFilter = ref("all");
+const statusFilter = ref("all");
+const containerFilter = ref("all");
 const filteredUsers = computed(() => {
   const term = search.value.trim().toLowerCase();
-  if (term === "") return users.value;
-  return users.value.filter((user) => user.username.includes(term));
+  return users.value.filter((user) => {
+    if (term !== "" && !user.username.includes(term)) return false;
+    if (roleFilter.value !== "all" && user.role !== roleFilter.value) return false;
+    if (statusFilter.value === "active" && !user.isActive) return false;
+    if (statusFilter.value === "disabled" && user.isActive) return false;
+    const state = user.container?.state ?? "none";
+    if (containerFilter.value === "none" && state !== "none") return false;
+    if (
+      (containerFilter.value === "running" ||
+        containerFilter.value === "exited" ||
+        containerFilter.value === "missing") &&
+      state !== containerFilter.value
+    ) {
+      return false;
+    }
+    return true;
+  });
 });
+
+// --- selection + bulk actions (extended/admin-console only) ---
+const selected = ref<Set<number>>(new Set());
+const bulkBusy = ref(false);
+const bulkDeleteOpen = ref(false);
+const bulkKeepVolume = ref(false);
+
+function isSelected(id: number) {
+  return selected.value.has(id);
+}
+function toggleSelected(id: number, checked: boolean) {
+  const next = new Set(selected.value);
+  if (checked) next.add(id);
+  else next.delete(id);
+  selected.value = next;
+}
+const allFilteredSelected = computed(
+  () =>
+    filteredUsers.value.length > 0 && filteredUsers.value.every((u) => selected.value.has(u.id)),
+);
+function toggleAllFiltered(checked: boolean) {
+  const next = new Set(selected.value);
+  for (const user of filteredUsers.value) {
+    if (checked) next.add(user.id);
+    else next.delete(user.id);
+  }
+  selected.value = next;
+}
+
+const auth = useAuthStore();
+const currentUsername = computed(() => auth.username);
+const activeAdminCount = computed(
+  () => users.value.filter((u) => u.role === "admin" && u.isActive).length,
+);
+// A user is a safe bulk target: never self, and never the last active admin.
+function bulkEligible(user: AdminUserSummary) {
+  if (user.username === currentUsername.value) return false;
+  if (user.role === "admin" && user.isActive && activeAdminCount.value <= 1) return false;
+  return true;
+}
+const selectedUsers = computed(() => users.value.filter((u) => selected.value.has(u.id)));
+const bulkTargets = computed(() => selectedUsers.value.filter(bulkEligible));
+const bulkSkipped = computed(() => selectedUsers.value.length - bulkTargets.value.length);
+
+async function bulkSetActive(isActive: boolean) {
+  if (bulkBusy.value) return;
+  bulkBusy.value = true;
+  let ok = 0;
+  let failed = 0;
+  for (const user of bulkTargets.value) {
+    try {
+      await admin.updateUser(user.id, { isActive });
+      ok += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  bulkBusy.value = false;
+  selected.value = new Set();
+  toast.success(t("app.adminBulkResult", { ok, failed, skipped: bulkSkipped.value }));
+  if (failed > 0) toast.error(t("app.adminBulkPartial", { count: failed }));
+}
+
+async function bulkDelete() {
+  if (bulkBusy.value) return;
+  bulkBusy.value = true;
+  let ok = 0;
+  let failed = 0;
+  for (const user of bulkTargets.value) {
+    try {
+      await admin.deleteUser(user.id, { keepVolume: bulkKeepVolume.value });
+      ok += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  bulkBusy.value = false;
+  bulkDeleteOpen.value = false;
+  selected.value = new Set();
+  toast.success(t("app.adminBulkResult", { ok, failed, skipped: bulkSkipped.value }));
+  if (failed > 0) toast.error(t("app.adminBulkPartial", { count: failed }));
+}
+
+function exportCsv() {
+  const header = [
+    t("app.username"),
+    t("app.adminUserRole"),
+    t("app.adminUserStatus"),
+    t("app.adminUserLastLogin"),
+    t("app.adminUserOnlineSessions"),
+    t("app.adminContainerState"),
+    t("app.adminUserCreatedAt"),
+  ];
+  const rows = filteredUsers.value.map((user) => [
+    user.username,
+    user.role,
+    user.isActive ? "active" : "disabled",
+    user.lastLoginAt ?? "",
+    String(user.onlineSessions),
+    user.container?.state ?? "",
+    user.createdAt,
+  ]);
+  const escape = (cell: string) => `"${cell.replace(/"/g, '""')}"`;
+  const csv = [header, ...rows].map((row) => row.map(escape).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `codex-gateway-users-${new Date().toISOString().slice(0, 10)}.csv`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
 
 async function forceOffline(user: AdminUserSummary) {
   busy.value = user.id;
@@ -303,16 +436,47 @@ async function removeManagedHost() {
         <div class="font-medium">{{ t("app.adminUsersTitle") }}</div>
         <p class="text-sm text-ink-secondary">{{ t("app.adminUsersDescription") }}</p>
       </div>
-      <div v-if="props.extended" class="relative min-w-0 flex-1 md:max-w-xs">
-        <SearchIcon
-          class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint"
-        />
-        <Input
-          v-model="search"
-          class="pl-9"
-          :placeholder="t('app.adminUsersSearch')"
-          data-testid="admin-users-search"
-        />
+      <div v-if="props.extended" class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+        <div class="relative min-w-0 md:max-w-xs md:flex-1">
+          <SearchIcon
+            class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint"
+          />
+          <Input
+            v-model="search"
+            class="pl-9"
+            :placeholder="t('app.adminUsersSearch')"
+            data-testid="admin-users-search"
+          />
+        </div>
+        <Select v-model="roleFilter" data-testid="admin-users-filter-role">
+          <SelectTrigger class="w-28"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{{ t("app.adminFilterAllRoles") }}</SelectItem>
+            <SelectItem value="admin">{{ t("app.roleAdmin") }}</SelectItem>
+            <SelectItem value="user">{{ t("app.roleUser") }}</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select v-model="statusFilter">
+          <SelectTrigger class="w-28"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{{ t("app.adminFilterAllStatus") }}</SelectItem>
+            <SelectItem value="active">{{ t("app.adminUserActive") }}</SelectItem>
+            <SelectItem value="disabled">{{ t("app.adminUserDisabled") }}</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select v-model="containerFilter" data-testid="admin-users-filter-container">
+          <SelectTrigger class="w-28"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{{ t("app.adminFilterAllContainers") }}</SelectItem>
+            <SelectItem value="running">{{ t("app.containerRunning") }}</SelectItem>
+            <SelectItem value="exited">{{ t("app.containerExited") }}</SelectItem>
+            <SelectItem value="missing">{{ t("app.containerMissing") }}</SelectItem>
+            <SelectItem value="none">{{ t("app.adminFilterNoContainer") }}</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button variant="outline" size="sm" data-testid="admin-users-export-csv" @click="exportCsv">
+          {{ t("app.adminExportCsv") }}
+        </Button>
       </div>
       <Button data-testid="admin-create-user" @click="createOpen = true">
         <PlusIcon class="size-4" />
@@ -322,10 +486,56 @@ async function removeManagedHost() {
 
     <ProvisioningDiagnosticsCard :provisioning="provisioning" />
 
+    <div
+      v-if="props.extended && selected.size > 0"
+      class="flex items-center gap-2 rounded-lg border border-hairline bg-surface p-2 text-sm"
+      data-testid="admin-users-bulk-bar"
+    >
+      <span class="text-ink-secondary">
+        {{ t("app.adminBulkSelected", { count: selected.size, skipped: bulkSkipped }) }}
+      </span>
+      <Button
+        variant="outline"
+        size="sm"
+        :disabled="bulkBusy || bulkTargets.length === 0"
+        data-testid="admin-bulk-enable"
+        @click="bulkSetActive(true)"
+      >
+        {{ t("app.adminBulkEnable") }}
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        :disabled="bulkBusy || bulkTargets.length === 0"
+        data-testid="admin-bulk-disable"
+        @click="bulkSetActive(false)"
+      >
+        {{ t("app.adminBulkDisable") }}
+      </Button>
+      <Button
+        variant="destructive"
+        size="sm"
+        :disabled="bulkBusy || bulkTargets.length === 0"
+        data-testid="admin-bulk-delete"
+        @click="bulkDeleteOpen = true"
+      >
+        {{ t("app.adminBulkDelete") }}
+      </Button>
+    </div>
+
     <div class="hidden md:block">
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead v-if="props.extended" class="w-8">
+              <Checkbox
+                :model-value="allFilteredSelected"
+                data-testid="admin-users-select-all"
+                @update:model-value="
+                  (v: boolean | 'indeterminate') => toggleAllFiltered(v === true)
+                "
+              />
+            </TableHead>
             <TableHead>{{ t("app.username") }}</TableHead>
             <TableHead>{{ t("app.adminUserRole") }}</TableHead>
             <TableHead>{{ t("app.adminUserStatus") }}</TableHead>
@@ -343,7 +553,27 @@ async function removeManagedHost() {
             :key="user.id"
             :data-testid="`admin-user-row-${user.username}`"
           >
-            <TableCell class="font-medium">{{ user.username }}</TableCell>
+            <TableCell v-if="props.extended">
+              <Checkbox
+                :model-value="isSelected(user.id)"
+                :data-testid="`admin-user-select-${user.username}`"
+                @update:model-value="
+                  (v: boolean | 'indeterminate') => toggleSelected(user.id, v === true)
+                "
+              />
+            </TableCell>
+            <TableCell class="font-medium">
+              <button
+                v-if="props.extended"
+                type="button"
+                class="underline-offset-4 hover:underline"
+                :data-testid="`admin-user-link-${user.username}`"
+                @click="emit('openUser', user.id)"
+              >
+                {{ user.username }}
+              </button>
+              <template v-else>{{ user.username }}</template>
+            </TableCell>
             <TableCell>
               <Badge :variant="user.role === 'admin' ? 'default' : 'secondary'">
                 {{ roleLabel(user.role) }}
@@ -843,6 +1073,39 @@ async function removeManagedHost() {
             @click.capture="removeContainer"
           >
             {{ t("app.removeContainer") }}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <AlertDialog v-model:open="bulkDeleteOpen">
+      <AlertDialogContent data-testid="admin-bulk-delete-dialog">
+        <AlertDialogHeader>
+          <AlertDialogTitle>{{ t("app.adminBulkDeleteTitle") }}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {{
+              t("app.adminBulkDeleteDescription", {
+                count: bulkTargets.length,
+                skipped: bulkSkipped,
+              })
+            }}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <label class="flex items-center justify-between gap-3 text-sm">
+          <span>{{ t("app.keepDataVolume") }}</span>
+          <Switch v-model="bulkKeepVolume" data-testid="admin-bulk-keep-volume" />
+        </label>
+        <AlertDialogFooter>
+          <AlertDialogCancel :disabled="bulkBusy">
+            {{ t("app.cancelFileDelete") }}
+          </AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            :disabled="bulkBusy || bulkTargets.length === 0"
+            data-testid="admin-bulk-delete-confirm"
+            @click.capture="bulkDelete"
+          >
+            {{ t("app.adminBulkDelete") }}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
