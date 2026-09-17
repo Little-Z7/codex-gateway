@@ -3,6 +3,10 @@ import { z } from "zod";
 import { authenticatedFetch, openApp } from "./helpers/app";
 
 const SHARED_AUTH_PRESENT = process.env.E2E_SHARED_AUTH_PRESENT === "1";
+const PROVIDER_ENABLED =
+  process.env.E2E_MODEL_PROVIDER_API_KEY !== undefined &&
+  process.env.E2E_MODEL_PROVIDER_API_KEY !== "";
+const MODEL_READY = SHARED_AUTH_PRESENT || PROVIDER_ENABLED;
 
 async function apiStatus(
   page: Page,
@@ -130,8 +134,51 @@ test("provisioned members only see and reach their own workspace", async ({ page
   expect(seedRead.status).toBe(200);
   expect(seedRead.body).toBe(marker);
 
-  // Home volumes are isolated: A writes a marker into its own config.toml (the only
-  // guaranteed-writable file), B's identical path must not contain it.
+  if (SHARED_AUTH_PRESENT) {
+    // Both containers share the same Codex login through the auth.json symlink.
+    const aAuth = await apiStatus(a.page, {
+      url: `/api/remote/files?hostId=${aHostId}&path=/home/dev/.codex/auth.json`,
+    });
+    const bAuth = await apiStatus(b.page, {
+      url: `/api/remote/files?hostId=${b.hosts[0]!.id}&path=/home/dev/.codex/auth.json`,
+    });
+    expect(aAuth.status).toBe(200);
+    expect(aAuth.body).toBe(bAuth.body);
+  }
+
+  if (MODEL_READY) {
+    // A creating a thread on its own container must not surface in B's list.
+    const aProjects = await authenticatedFetch(a.page, { url: "/api/projects" }, (value) =>
+      z.array(z.object({ id: z.number() }).loose()).parse(value),
+    );
+    await a.page.getByTestId(`project-button-${aProjects[0]!.id}`).click({ button: "right" });
+    await a.page.getByRole("menuitem", { name: /新建/ }).click();
+    await a.page.waitForFunction(
+      () => new URLSearchParams(window.location.search).get("threadId") !== null,
+      undefined,
+      { timeout: 30_000 },
+    );
+    const bThreads = await authenticatedFetch(
+      b.page,
+      { url: `/api/threads?hostId=${b.hosts[0]!.id}&limit=50` },
+      (value) =>
+        z
+          .object({ data: z.array(z.unknown()) })
+          .loose()
+          .parse(value),
+    );
+    expect(bThreads.data).toHaveLength(0);
+  } else {
+    test.info().annotations.push({
+      type: "skipped",
+      description:
+        "No Codex credentials (neither shared login nor E2E_MODEL_PROVIDER_API_KEY): thread creation check skipped",
+    });
+  }
+
+  // Home volumes are isolated: A overwrites its own config.toml (a guaranteed-writable
+  // file) with a marker; B's identical path must not contain it. Done last — the write
+  // intentionally clobbers A's config.
   const homeMarker = `home-marker-${suffix}`;
   const configPath = "/home/dev/.codex/config.toml";
   const configWrite = await apiStatus(a.page, {
@@ -146,41 +193,6 @@ test("provisioned members only see and reach their own workspace", async ({ page
   expect(bConfig.status).toBe(200);
   expect(bConfig.body).not.toContain(homeMarker);
   expect(bConfig.body).toContain('cli_auth_credentials_store = "file"');
-
-  if (SHARED_AUTH_PRESENT) {
-    // Both containers share the same Codex login; A creating a thread must not surface in B.
-    const aAuth = await apiStatus(a.page, {
-      url: `/api/remote/files?hostId=${aHostId}&path=/home/dev/.codex/auth.json`,
-    });
-    const bAuth = await apiStatus(b.page, {
-      url: `/api/remote/files?hostId=${b.hosts[0]!.id}&path=/home/dev/.codex/auth.json`,
-    });
-    expect(aAuth.status).toBe(200);
-    expect(aAuth.body).toBe(bAuth.body);
-
-    const aProjects = await authenticatedFetch(a.page, { url: "/api/projects" }, (value) =>
-      z.array(z.object({ id: z.number() }).loose()).parse(value),
-    );
-    await a.page.getByTestId(`project-button-${aProjects[0]!.id}`).click({ button: "right" });
-    await a.page.getByRole("menuitem", { name: /新建/ }).click();
-    await a.page.waitForFunction(
-      () => new URLSearchParams(window.location.search).get("threadId") !== null,
-      undefined,
-      { timeout: 30_000 },
-    );
-    const bThreads = await authenticatedFetch(
-      b.page,
-      { url: `/api/threads?hostId=${b.hosts[0]!.id}&limit=50` },
-      (value) => z.array(z.unknown()).parse(value),
-    );
-    expect(bThreads).toHaveLength(0);
-  } else {
-    test.info().annotations.push({
-      type: "skipped",
-      description:
-        "No E2E Codex login (E2E_SHARED_AUTH_PRESENT=0): shared auth.json and per-user thread creation checks skipped",
-    });
-  }
 
   // Cleanup: delete both members (dropping their containers and volumes).
   for (const id of [idA, idB]) {

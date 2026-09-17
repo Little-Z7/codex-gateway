@@ -48,6 +48,17 @@ if [ -f "$E2E_CODEX_HOME/auth.json" ]; then
   fi
 fi
 
+# Optional custom model provider: set E2E_MODEL_PROVIDER_API_KEY to run turn-dependent specs
+# against an API-key provider instead of a shared ChatGPT login. Never echoed or committed.
+if [ -n "${E2E_MODEL_PROVIDER_API_KEY:-}" ]; then
+  export E2E_MODEL_PROVIDER=custom
+  export E2E_MODEL_PROVIDER_ID="${E2E_MODEL_PROVIDER_ID:-ollama-cloud}"
+  export E2E_MODEL_PROVIDER_BASE_URL="${E2E_MODEL_PROVIDER_BASE_URL:-https://ollama.com/v1}"
+  export E2E_MODEL_PROVIDER_MODEL="${E2E_CODEX_MODEL:-gpt-oss:120b}"
+  export E2E_MODEL_PROVIDER_WEB_SEARCH=disabled
+  export E2E_CODEX_MODEL="$E2E_MODEL_PROVIDER_MODEL"
+fi
+
 cleanup() {
   status=$?
   if [ "$status" -ne 0 ]; then

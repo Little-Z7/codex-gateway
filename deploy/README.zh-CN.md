@@ -40,6 +40,28 @@ docker compose run --rm codex-gateway node scripts/create-user.mjs --admin admin
 docker compose up -d codex-gateway
 ```
 
+## 模型接入：共享登录 或 共享 API-key provider
+
+两条路径二选一，由 `.env` 的 `CODEX_GATEWAY_MODEL_PROVIDER` 决定：
+
+- **`openai`（默认）**：所有容器共享 `codex-login.sh` 写入的 ChatGPT 登录态（`auth.json` 软链）。
+- **`custom`**：所有容器共用一个 API-key 模型 provider，不需要共享登录。配置示例：
+
+  ```dotenv
+  CODEX_GATEWAY_MODEL_PROVIDER=custom
+  CODEX_GATEWAY_MODEL_PROVIDER_ID=ollama-cloud        # [a-z0-9_-]+
+  CODEX_GATEWAY_MODEL_PROVIDER_NAME=Ollama Cloud
+  CODEX_GATEWAY_MODEL_PROVIDER_BASE_URL=https://ollama.com/v1
+  CODEX_GATEWAY_MODEL_PROVIDER_API_KEY=<key>
+  CODEX_GATEWAY_MODEL_PROVIDER_WIRE_API=responses     # Codex 0.154 起必须 responses
+  CODEX_GATEWAY_MODEL=gpt-oss:120b
+  CODEX_GATEWAY_WEB_SEARCH=disabled                   # custom 默认 disabled
+  ```
+
+  容器 `config.toml` 顶/底的 `codex-gateway managed` 块每次启动都会重写（用户在块外的自定义保留）；API key 由 entrypoint 落到 `/etc/profile.d/` 供 SSH 会话读取，不写进 config.toml。注意：key 同时存在于容器 Env，`docker inspect` 可见——仅限内部可信环境。
+
+切换方式：改 `.env` → `docker compose up -d` 重启 Gateway → 对已有容器执行 `docker restart <容器>`（或管理面板的"停止/启动"）让 entrypoint 重写受管块；新建容器自动生效。
+
 ## 一次性共享登录
 
 所有用户容器共享同一份 Codex 账号凭证：

@@ -13,6 +13,14 @@ export interface ProvisioningDiagnostics {
   networkPresent: boolean;
   authFilePresent: boolean;
   dockerReachable: boolean;
+  modelProvider: {
+    mode: "openai" | "custom";
+    id: string;
+    model: string | null;
+    baseUrl: string | null;
+    valid: boolean;
+    error: string | null;
+  };
   error: string | null;
 }
 
@@ -28,6 +36,14 @@ export async function provisioningDiagnostics(): Promise<ProvisioningDiagnostics
     networkPresent: false,
     authFilePresent: false,
     dockerReachable: false,
+    modelProvider: {
+      mode: config.modelProvider.mode,
+      id: config.modelProvider.id,
+      model: config.modelProvider.model,
+      baseUrl: config.modelProvider.baseUrl,
+      valid: config.modelProvider.error === null,
+      error: config.modelProvider.error,
+    },
     error: null,
   };
   if (!config.enabled) return diagnostics;

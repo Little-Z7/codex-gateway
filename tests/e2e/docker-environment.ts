@@ -268,6 +268,34 @@ async function prepareCodexHome(sourceCodexHome: string, codexHome: string) {
     copyOptional(join(sourceCodexHome, "config.toml"), join(codexHome, "config.toml")),
     copyOptional(join(sourceCodexHome, "version.json"), join(codexHome, "version.json")),
   ]);
+
+  // When the run enables the custom model provider, the ssh-target fixtures need a config.toml
+  // that points Codex at it. The API key itself reaches app-server through the container's
+  // /etc/profile.d drop-in, never through this file.
+  if (firstNonEmptyString([process.env.E2E_MODEL_PROVIDER_API_KEY]) !== undefined) {
+    const providerId = firstNonEmptyString([process.env.E2E_MODEL_PROVIDER_ID]) ?? "ollama-cloud";
+    const baseUrl =
+      firstNonEmptyString([process.env.E2E_MODEL_PROVIDER_BASE_URL]) ?? "https://ollama.com/v1";
+    const model = firstNonEmptyString([process.env.E2E_CODEX_MODEL]) ?? "gpt-oss:120b";
+    await writeFile(
+      join(codexHome, "config.toml"),
+      [
+        `model = "${model}"`,
+        `model_provider = "${providerId}"`,
+        `model_reasoning_effort = "medium"`,
+        `web_search = "disabled"`,
+        `cli_auth_credentials_store = "file"`,
+        `sandbox_mode = "danger-full-access"`,
+        ``,
+        `[model_providers.${providerId}]`,
+        `name = "${providerId}"`,
+        `base_url = "${baseUrl}"`,
+        `env_key = "CODEX_GATEWAY_MODEL_PROVIDER_API_KEY"`,
+        `wire_api = "responses"`,
+        ``,
+      ].join("\n"),
+    );
+  }
 }
 
 async function copyOptional(source: string, target: string) {

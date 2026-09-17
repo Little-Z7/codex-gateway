@@ -111,6 +111,9 @@ async function provisionContainer(userId: number) {
       "Provisioning requires CODEX_GATEWAY_DOCKER_NETWORK and CODEX_GATEWAY_SHARED_AUTH_DIR",
     );
   }
+  if (config.modelProvider.error !== null) {
+    throw new Error(config.modelProvider.error);
+  }
   const docker = new DockerEngineClient();
   const containerName = userContainerProvisioner.containerNameFor(user.username);
   const volumeName = userContainerProvisioner.volumeNameFor(user.username);
@@ -130,10 +133,24 @@ async function provisionContainer(userId: number) {
     const keyPair = utils.generateKeyPairSync("ed25519");
     await docker.createVolume({ Name: volumeName, Labels: labels }).catch(ignoreIfExists);
 
+    const provider = config.modelProvider;
     const env = [
       `CODEX_GATEWAY_SSH_AUTHORIZED_KEY=${keyPair.public}`,
       `CODEX_GATEWAY_SANDBOX_MODE=${config.sandboxMode}`,
+      `CODEX_GATEWAY_MODEL_PROVIDER=${provider.mode}`,
+      `CODEX_GATEWAY_MODEL_PROVIDER_ID=${provider.id}`,
+      `CODEX_GATEWAY_MODEL_PROVIDER_NAME=${provider.displayName}`,
+      `CODEX_GATEWAY_MODEL_PROVIDER_WIRE_API=${provider.wireApi}`,
     ];
+    if (provider.baseUrl !== null)
+      env.push(`CODEX_GATEWAY_MODEL_PROVIDER_BASE_URL=${provider.baseUrl}`);
+    // The API key travels in container Env so the entrypoint can move it into
+    // /etc/profile.d (sshd does not propagate container Env to SSH sessions). Internal
+    // trusted topology accepts `docker inspect` visibility.
+    if (provider.apiKey !== null)
+      env.push(`CODEX_GATEWAY_MODEL_PROVIDER_API_KEY=${provider.apiKey}`);
+    if (provider.model !== null) env.push(`CODEX_GATEWAY_MODEL=${provider.model}`);
+    if (provider.webSearch !== null) env.push(`CODEX_GATEWAY_WEB_SEARCH=${provider.webSearch}`);
     const binds = [`${volumeName}:/home/dev`, `${config.sharedAuthDir}:/srv/codex-auth:rw`];
     if (config.sharedDataDir !== null) binds.push(`${config.sharedDataDir}:/data/shared:rw`);
 

@@ -1,6 +1,8 @@
 x-ssh-target: &ssh-target
   environment:
     CODEX_HOME: /home/codex/.codex
+    # Only set when the caller enables the custom model provider; never committed.
+    CODEX_GATEWAY_MODEL_PROVIDER_API_KEY: ${E2E_MODEL_PROVIDER_API_KEY:-}
   volumes:
     - ../..:/workspace/codex-gateway
 
@@ -99,6 +101,13 @@ services:
       CODEX_GATEWAY_SHARED_DATA_DIR: ${E2E_SHARED_DATA_DIR:?E2E_SHARED_DATA_DIR is required}
       CODEX_GATEWAY_USER_CONTAINER_PREFIX: codex-e2e-user-
       CODEX_GATEWAY_SANDBOX_MODE: danger-full-access
+      # Custom model provider path (E2E_MODEL_PROVIDER_API_KEY set by run-in-containers.sh).
+      CODEX_GATEWAY_MODEL_PROVIDER: ${E2E_MODEL_PROVIDER:-openai}
+      CODEX_GATEWAY_MODEL_PROVIDER_ID: ${E2E_MODEL_PROVIDER_ID:-ollama-cloud}
+      CODEX_GATEWAY_MODEL_PROVIDER_BASE_URL: ${E2E_MODEL_PROVIDER_BASE_URL:-}
+      CODEX_GATEWAY_MODEL_PROVIDER_API_KEY: ${E2E_MODEL_PROVIDER_API_KEY:-}
+      CODEX_GATEWAY_MODEL: ${E2E_MODEL_PROVIDER_MODEL:-}
+      CODEX_GATEWAY_WEB_SEARCH: ${E2E_MODEL_PROVIDER_WEB_SEARCH:-}
     volumes:
       - build-output:/e2e-output:ro
       - e2e-data:/workspace/codex-gateway/.data-e2e
@@ -147,6 +156,9 @@ services:
       E2E_GATEWAY_MEMBER_USERNAME: ${E2E_GATEWAY_MEMBER_USERNAME:-e2e-member}
       E2E_GATEWAY_MEMBER_PASSWORD: ${E2E_GATEWAY_MEMBER_PASSWORD:-codex-gateway-e2e-member-password}
       E2E_SHARED_AUTH_PRESENT: ${E2E_SHARED_AUTH_PRESENT:-0}
+      E2E_MODEL_PROVIDER_API_KEY: ${E2E_MODEL_PROVIDER_API_KEY:-}
+      E2E_MODEL_PROVIDER_ID: ${E2E_MODEL_PROVIDER_ID:-}
+      E2E_MODEL_PROVIDER_BASE_URL: ${E2E_MODEL_PROVIDER_BASE_URL:-}
       PLAYWRIGHT_BASE_URL: http://127.0.0.1:3100
       HOME: /home/pwuser
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
