@@ -120,6 +120,12 @@ export async function listManagedContainers(): Promise<AdminContainerRow[]> {
       }
       const summary = containerStatsSummary(stats);
       const config = recordFromUnknown(inspect?.Config);
+      // With no cgroup limit, Docker reports the host's total RAM as the limit — show "unlimited"
+      // instead of a misleading cap.
+      const hostConfig = recordFromUnknown(inspect?.HostConfig);
+      const configuredMemory = typeof hostConfig?.Memory === "number" ? hostConfig.Memory : null;
+      const memoryLimitBytes =
+        configuredMemory !== null && configuredMemory > 0 ? configuredMemory : null;
       return {
         userId: managed.userId,
         username: usersById.get(managed.userId) ?? `#${managed.userId}`,
@@ -132,7 +138,7 @@ export async function listManagedContainers(): Promise<AdminContainerRow[]> {
         codexVersion,
         cpuPercent: summary.cpuPercent,
         memoryUsageBytes: summary.memoryUsageBytes,
-        memoryLimitBytes: summary.memoryLimitBytes,
+        memoryLimitBytes,
         volumeName: managed.volumeName,
         volumeSizeBytes: null,
       };

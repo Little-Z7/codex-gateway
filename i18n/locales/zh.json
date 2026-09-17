@@ -1008,7 +1008,13 @@
     "adminVolumeOver": "超过阈值",
     "adminVersionMismatch": "与 Gateway 支持版本不一致",
     "adminVersionMismatchShort": "版本不一致",
-    "adminVolumesOverThreshold": "超过磁盘阈值的工作区"
+    "adminVolumesOverThreshold": "超过磁盘阈值的工作区",
+    "adminMemoryUnlimited": "不限",
+    "adminSessionsOnlineTitle": "在线",
+    "adminNoOnlineSessions": "当前无在线会话",
+    "adminOtherSessionsToggle": "其他会话（{count}） {state}",
+    "adminRevokeOtherSessions": "撤销全部其他会话（{count}）",
+    "adminSessionsRevokedAll": "已撤销其他会话"
   },
   "errors": {
     "auth.invalidCredentials": "用户名或密码错误",

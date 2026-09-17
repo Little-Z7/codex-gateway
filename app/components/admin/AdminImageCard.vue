@@ -116,8 +116,11 @@ async function cancelRecreate() {
         <div class="mb-1 text-sm font-medium">{{ t("app.adminImageTitle") }}</div>
         <div class="flex flex-wrap items-center gap-2 text-xs text-ink-secondary">
           <span class="font-mono">{{ image?.image ?? "—" }}</span>
-          <Badge v-if="image?.present" variant="secondary">{{
-            image.digest?.slice(0, 24) ?? ""
+          <Badge v-if="image?.digest" variant="secondary" :title="image.digest">{{
+            image.digest.replace(/^sha256:/, "").slice(0, 12)
+          }}</Badge>
+          <Badge v-else-if="image && !image.present" variant="destructive">{{
+            t("app.adminImageMissing")
           }}</Badge>
           <Badge v-else variant="destructive">{{ t("app.adminImageMissing") }}</Badge>
           <span v-if="image?.codexVersion">

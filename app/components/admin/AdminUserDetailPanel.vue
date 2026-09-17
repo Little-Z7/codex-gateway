@@ -35,6 +35,17 @@ const user = computed<AdminUserSummary | null>(
 );
 
 const userSessions = ref<AdminSession[]>([]);
+const ONLINE_SESSION_MS = 5 * 60_000;
+const onlineSessions = computed(() =>
+  userSessions.value.filter(
+    (item) => Date.now() - Date.parse(item.lastSeenAt) <= ONLINE_SESSION_MS,
+  ),
+);
+const otherSessions = computed(() =>
+  userSessions.value.filter((item) => Date.now() - Date.parse(item.lastSeenAt) > ONLINE_SESSION_MS),
+);
+const showOtherSessions = ref(false);
+const revokingOthers = ref(false);
 const userAudit = ref<AdminAuditEntry[]>([]);
 const container = ref<AdminContainerRow | null>(null);
 const threadStats = ref<{ count: number; lastActiveAt: string | null } | null>(null);
@@ -80,6 +91,27 @@ async function refresh() {
   }
   if (threadsResponse.status === "fulfilled") {
     threadStats.value = threadsResponse.value.threads;
+  }
+}
+
+async function revokeOtherSessions() {
+  if (revokingOthers.value || otherSessions.value.length === 0) return;
+  revokingOthers.value = true;
+  try {
+    const targets = otherSessions.value.filter((item) => !item.current);
+    const results = await Promise.allSettled(targets.map((item) => admin.revokeSession(item.id)));
+    const revoked = new Set(
+      targets.filter((_, index) => results[index]?.status === "fulfilled").map((item) => item.id),
+    );
+    userSessions.value = userSessions.value.filter((item) => !revoked.has(item.id));
+    const failed = results.length - revoked.size;
+    if (failed > 0) {
+      toast.error(t("app.adminBulkResult", { ok: revoked.size, failed, skipped: 0 }));
+    } else {
+      toast.success(t("app.adminSessionsRevokedAll"));
+    }
+  } finally {
+    revokingOthers.value = false;
   }
 }
 
@@ -189,33 +221,90 @@ function fmtBytes(bytes: number | null) {
         class="rounded-lg border border-hairline bg-surface p-4"
         data-testid="admin-user-sessions"
       >
-        <div class="mb-3 text-sm font-medium">{{ t("app.adminUserSessionsTitle") }}</div>
+        <div class="mb-3 flex items-center justify-between gap-2">
+          <div class="text-sm font-medium">{{ t("app.adminUserSessionsTitle") }}</div>
+          <Button
+            v-if="otherSessions.length > 0"
+            variant="outline"
+            size="sm"
+            :disabled="revokingOthers"
+            data-testid="admin-session-revoke-others"
+            @click="revokeOtherSessions"
+          >
+            {{ t("app.adminRevokeOtherSessions", { count: otherSessions.length }) }}
+          </Button>
+        </div>
         <div v-if="userSessions.length === 0" class="text-sm text-ink-muted">
           {{ t("app.adminNoSessions") }}
         </div>
-        <div v-else class="space-y-2">
-          <div
-            v-for="session in userSessions"
-            :key="session.id"
-            class="flex items-center justify-between gap-2 text-sm"
-          >
-            <span class="text-ink-secondary">
-              #{{ session.id }} · {{ fmt(session.lastSeenAt) }}
-              <Badge v-if="session.current" variant="secondary">{{
-                t("app.adminCurrentSession")
-              }}</Badge>
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              :disabled="revoking === session.id || session.current"
-              :data-testid="`admin-session-revoke-${session.id}`"
-              @click="revoke(session.id)"
-            >
-              {{ t("app.adminRevoke") }}
-            </Button>
+        <template v-else>
+          <div class="mb-2 text-xs text-ink-muted">
+            {{ t("app.adminSessionsOnlineTitle") }}
           </div>
-        </div>
+          <div v-if="onlineSessions.length === 0" class="text-sm text-ink-muted">
+            {{ t("app.adminNoOnlineSessions") }}
+          </div>
+          <div v-else class="space-y-2">
+            <div
+              v-for="session in onlineSessions"
+              :key="session.id"
+              class="flex items-center justify-between gap-2 text-sm"
+            >
+              <span class="text-ink-secondary">
+                #{{ session.id }} · {{ fmt(session.lastSeenAt) }}
+                <Badge v-if="session.current" variant="secondary">{{
+                  t("app.adminCurrentSession")
+                }}</Badge>
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                :disabled="revoking === session.id || session.current"
+                :data-testid="`admin-session-revoke-${session.id}`"
+                @click="revoke(session.id)"
+              >
+                {{ t("app.adminRevoke") }}
+              </Button>
+            </div>
+          </div>
+          <button
+            v-if="otherSessions.length > 0"
+            type="button"
+            class="mt-3 text-xs text-ink-muted underline-offset-2 hover:underline"
+            data-testid="admin-session-others-toggle"
+            @click="showOtherSessions = !showOtherSessions"
+          >
+            {{
+              t("app.adminOtherSessionsToggle", {
+                count: otherSessions.length,
+                state: showOtherSessions ? "−" : "+",
+              })
+            }}
+          </button>
+          <div v-if="showOtherSessions" class="mt-2 space-y-2">
+            <div
+              v-for="session in otherSessions"
+              :key="session.id"
+              class="flex items-center justify-between gap-2 text-sm"
+            >
+              <span class="text-ink-secondary">
+                #{{ session.id }} · {{ fmt(session.lastSeenAt) }}
+                <Badge v-if="session.current" variant="secondary">{{
+                  t("app.adminCurrentSession")
+                }}</Badge>
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                :disabled="revoking === session.id || session.current"
+                :data-testid="`admin-session-revoke-${session.id}`"
+                @click="revoke(session.id)"
+              >
+                {{ t("app.adminRevoke") }}
+              </Button>
+            </div>
+          </div>
+        </template>
       </section>
 
       <!-- Managed host -->

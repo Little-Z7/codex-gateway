@@ -15,6 +15,28 @@ export type ContainerState = "running" | "exited" | "missing" | "unknown";
 
 const { Client, utils } = ssh2;
 
+// ssh2's generateKeyPairSync has been observed to emit a private key that its own parser rejects
+// ("Malformed OpenSSH private key"). Validate immediately and retry a few times so one bad
+// generation does not fail a provisioning run.
+function generateEd25519KeyPair() {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const keyPair = utils.generateKeyPairSync("ed25519");
+    const parsed = utils.parseKey(keyPair.private);
+    if (!(parsed instanceof Error)) {
+      if (attempt > 1) {
+        runtimeLog("ssh keypair regenerated after parse failure", { attempts: attempt });
+      }
+      return keyPair;
+    }
+    lastError = parsed;
+  }
+  runtimeLog("ssh keypair generation failed", {
+    error: lastError instanceof Error ? lastError.message : String(lastError),
+  });
+  throw lastError instanceof Error ? lastError : new Error("ssh keypair generation failed");
+}
+
 const MANAGED_LABEL = "codex-gateway.managed";
 const USER_LABEL = "codex-gateway.user";
 const READY_PROBE_TIMEOUT_MS = 90_000;
@@ -125,7 +147,7 @@ export const userContainerProvisioner = {
 
         const user = userStore.findById(row.userId);
         if (user === null) throw new Error("user removed");
-        const keyPair = utils.generateKeyPairSync("ed25519");
+        const keyPair = generateEd25519KeyPair();
         await docker.execInContainer(row.containerName, [
           "sh",
           "-c",
@@ -272,7 +294,7 @@ async function provisionContainer(userId: number) {
     lastError: null,
   });
   try {
-    const keyPair = utils.generateKeyPairSync("ed25519");
+    const keyPair = generateEd25519KeyPair();
     await docker.createVolume({ Name: volumeName, Labels: labels }).catch(ignoreIfExists);
 
     const provider = config.modelProvider;

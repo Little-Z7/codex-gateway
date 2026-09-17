@@ -1008,7 +1008,13 @@
     "adminVolumeOver": "over threshold",
     "adminVersionMismatch": "Does not match the version supported by the gateway",
     "adminVersionMismatchShort": "version mismatch",
-    "adminVolumesOverThreshold": "Workspaces over disk threshold"
+    "adminVolumesOverThreshold": "Workspaces over disk threshold",
+    "adminMemoryUnlimited": "unlimited",
+    "adminSessionsOnlineTitle": "Online",
+    "adminNoOnlineSessions": "No online sessions",
+    "adminOtherSessionsToggle": "Other sessions ({count}) {state}",
+    "adminRevokeOtherSessions": "Revoke all other sessions ({count})",
+    "adminSessionsRevokedAll": "Other sessions revoked"
   },
   "errors": {
     "auth.invalidCredentials": "Invalid username or password",

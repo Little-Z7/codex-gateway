@@ -333,7 +333,12 @@ onUnmounted(() => {
               {{ row.cpuPercent == null ? "—" : `${row.cpuPercent}%` }}
             </TableCell>
             <TableCell class="text-ink-secondary">
-              {{ formatBytes(row.memoryUsageBytes) }} / {{ formatBytes(row.memoryLimitBytes) }}
+              {{ formatBytes(row.memoryUsageBytes) }} /
+              {{
+                row.memoryLimitBytes === null
+                  ? t("app.adminMemoryUnlimited")
+                  : formatBytes(row.memoryLimitBytes)
+              }}
             </TableCell>
             <TableCell class="text-ink-secondary">
               {{ row.startedAt ? row.startedAt.slice(0, 16).replace("T", " ") : "—" }}
