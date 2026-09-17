@@ -13,11 +13,14 @@ import {
 } from "@codex-gateway/ui/table";
 import { toast } from "@codex-gateway/ui/sonner";
 import { useGatewayAdminStore } from "@/stores/gateway-admin";
+import { useAuthStore } from "@/stores/auth";
+import { gatewayPath } from "@/utils/gateway-url";
 import { messageFromError, errorMessageLabels } from "@/stores/gateway/thread-utils/identity";
 
 const { t, te } = useI18n();
 const admin = useGatewayAdminStore();
-const { sessions, audit } = storeToRefs(admin);
+const auth = useAuthStore();
+const { sessions, audit, settings } = storeToRefs(admin);
 const errorLabels = computed(() => errorMessageLabels(t, te));
 
 const busy = ref<number | null>(null);
@@ -25,9 +28,29 @@ const auditUserFilter = ref("");
 const auditActionFilter = ref("");
 const auditLoading = ref(false);
 
+async function exportAuditCsv() {
+  try {
+    const params = new URLSearchParams();
+    if (auditUserFilter.value !== "") params.set("userId", auditUserFilter.value);
+    if (auditActionFilter.value !== "") params.set("action", auditActionFilter.value);
+    const blob = await $fetch<Blob>(`/api/admin/audit/export.csv?${params}`, {
+      responseType: "blob",
+      headers: { authorization: `Bearer ${auth.token}` },
+    });
+    const href = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = href;
+    a.download = "audit.csv";
+    a.click();
+    URL.revokeObjectURL(href);
+  } catch (error) {
+    toast.error(messageFromError(error, t("app.adminExportFailed"), errorLabels.value));
+  }
+}
+
 async function refresh() {
   try {
-    await Promise.all([admin.loadSessions(), loadAuditFresh()]);
+    await Promise.all([admin.loadSessions(), loadAuditFresh(), admin.loadSettings()]);
   } catch (error) {
     toast.error(messageFromError(error, t("app.adminSessionsLoadFailed"), errorLabels.value));
   }
@@ -153,7 +176,23 @@ onMounted(() => void refresh());
           <Button variant="outline" size="sm" :disabled="auditLoading" @click="loadAuditFresh">
             {{ t("app.adminApplyFilter") }}
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="admin-audit-export"
+            @click="exportAuditCsv"
+          >
+            {{ t("app.adminExportCsv") }}
+          </Button>
         </div>
+      </div>
+      <div class="flex items-center gap-2 text-xs text-ink-muted">
+        {{ t("app.adminAuditRetention", { days: settings?.audit.retentionDays ?? 180 }) }}
+        <a
+          :href="`${gatewayPath('/admin')}?tab=system`"
+          class="underline underline-offset-2 hover:text-ink"
+          >{{ t("app.adminAuditRetentionEdit") }}</a
+        >
       </div>
       <div class="rounded-lg border border-hairline bg-surface">
         <Table>

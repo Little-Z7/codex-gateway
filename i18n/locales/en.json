@@ -1060,7 +1060,9 @@
     "adminRuntimeRpc": "RPC sessions",
     "adminRuntimeEvents": "Event cache",
     "adminRuntimeMemory": "Memory (heap/rss)",
-    "passwordChangeDisabled": "Self-service password change is disabled by the administrator"
+    "passwordChangeDisabled": "Self-service password change is disabled by the administrator",
+    "adminAuditRetention": "Audit log retained for {days} days",
+    "adminAuditRetentionEdit": "Change on system page"
   },
   "errors": {
     "auth.invalidCredentials": "Invalid username or password",

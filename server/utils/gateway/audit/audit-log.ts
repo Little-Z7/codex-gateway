@@ -113,4 +113,43 @@ export const auditLog = {
     const nextCursor = rows.length > limit ? Number(rows[limit - 1]?.id ?? rows[limit]?.id) : null;
     return { entries, nextCursor };
   },
+
+  /** Unpaginated export for CSV; capped so a huge log cannot exhaust memory in one request. */
+  exportRows(options: { userId?: number; action?: string } = {}, cap = 10_000) {
+    const where: string[] = [];
+    const params: (string | number)[] = [];
+    if (options.userId !== undefined) {
+      where.push("(actor_user_id = ? OR (target_type = 'user' AND target_id = ?))");
+      params.push(options.userId, String(options.userId));
+    }
+    if (options.action !== undefined && options.action !== "") {
+      where.push("action = ?");
+      params.push(options.action);
+    }
+    const rows = gatewayDatabase()
+      .prepare(
+        `SELECT * FROM audit_log ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+         ORDER BY id DESC LIMIT ?`,
+      )
+      .all(...params, cap);
+    return rows.map((row) => ({
+      id: Number(row.id),
+      actorUserId: row.actor_user_id == null ? null : Number(row.actor_user_id),
+      actorUsername: String(row.actor_username),
+      action: String(row.action),
+      targetType: String(row.target_type),
+      targetId: row.target_id == null ? null : String(row.target_id),
+      targetLabel: row.target_label == null ? null : String(row.target_label),
+      detail: String(row.detail_json ?? ""),
+      createdAt: String(row.created_at),
+    }));
+  },
+
+  /** Deletes rows older than the cutoff; returns the number removed. */
+  pruneBefore(cutoffIso: string) {
+    const result = gatewayDatabase()
+      .prepare("DELETE FROM audit_log WHERE created_at < ?")
+      .run(cutoffIso);
+    return Number(result.changes);
+  },
 };

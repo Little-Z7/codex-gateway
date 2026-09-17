@@ -1060,7 +1060,9 @@
     "adminRuntimeRpc": "RPC 会话",
     "adminRuntimeEvents": "事件缓存",
     "adminRuntimeMemory": "内存（heap/rss）",
-    "passwordChangeDisabled": "管理员已关闭自助修改密码"
+    "passwordChangeDisabled": "管理员已关闭自助修改密码",
+    "adminAuditRetention": "审计日志保留 {days} 天",
+    "adminAuditRetentionEdit": "在系统页修改"
   },
   "errors": {
     "auth.invalidCredentials": "用户名或密码错误",
