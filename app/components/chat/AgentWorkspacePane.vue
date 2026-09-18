@@ -46,6 +46,14 @@ const showThreadLoading = computed(
     openingThread.value ||
     (Boolean(selectedThreadId.value) && !selectedThreadViewReady.value && !visibleError.value),
 );
+const heroComposerVisible = computed(
+  () =>
+    (navigation.newThreadDraft ||
+      (Boolean(selectedThreadId.value) &&
+        historyTurns.value.length === 0 &&
+        !visibleError.value)) &&
+    selectedProjectId.value !== null,
+);
 </script>
 
 <template>
@@ -72,14 +80,7 @@ const showThreadLoading = computed(
         </div>
       </ChatPanelScrollArea>
 
-      <ChatPanelScrollArea
-        v-else-if="
-          (navigation.newThreadDraft ||
-            (selectedThreadId && historyTurns.length === 0 && !visibleError)) &&
-          selectedProjectId
-        "
-        class="flex items-center justify-center"
-      >
+      <ChatPanelScrollArea v-else-if="heroComposerVisible" class="flex items-center justify-center">
         <NewThreadHero class="py-8">
           <ChatComposer />
         </NewThreadHero>
@@ -136,12 +137,7 @@ const showThreadLoading = computed(
       </ChatPanelScrollArea>
 
       <MisalignmentRecoveryCard v-if="selectedThreadId" />
-      <ChatComposer
-        v-if="
-          selectedThreadId &&
-          (historyTurns.length > 0 || (!navigation.newThreadDraft && Boolean(visibleError)))
-        "
-      />
+      <ChatComposer v-if="selectedThreadId && !heroComposerVisible" />
     </div>
   </div>
 </template>

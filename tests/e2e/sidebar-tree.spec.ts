@@ -192,17 +192,18 @@ test("sorts pinned threads for display without rewriting persisted pin order", a
     { hostId: 301, projectId: 401, threadId: "a-alpha-b", title: "Alpha Thread" },
     { hostId: 301, projectId: 401, threadId: "a-alpha-a", title: "Alpha Thread" },
   ];
+  const projects = [defaultGatewayProject(301, 401)];
   await page.evaluate(
-    ({ hosts, pinnedThreads }) => {
+    ({ hosts, projects, pinnedThreads }) => {
       const driver = window.__codexGatewayE2e;
       if (!driver) throw new Error("Gateway E2E driver is unavailable");
       driver.catalog.hosts = hosts;
-      driver.catalog.projects = [defaultGatewayProject(301, 401)];
+      driver.catalog.projects = projects;
       driver.config.gatewayConfig.pinnedThreads = pinnedThreads;
       driver.navigation.selectedHostId = 301;
       driver.navigation.selectedProjectId = 401;
     },
-    { hosts, pinnedThreads },
+    { hosts, projects, pinnedThreads },
   );
 
   const renderedThreadIds = await page
@@ -256,17 +257,18 @@ test("long expanded tree labels truncate without displacing trailing statuses", 
       },
     },
   });
+  const extraHost = defaultGatewayHost(900);
   await page.evaluate(
-    ({ hostId, threadId }) => {
+    ({ hostId, threadId, extraHost }) => {
       const driver = window.__codexGatewayE2e;
       if (!driver) throw new Error("Gateway E2E driver is unavailable");
       const { catalog, runtime } = driver;
       // Host sub-headers (and their status dot) render only when more than one host exists.
-      catalog.hosts = [...catalog.hosts, defaultGatewayHost(900)];
+      catalog.hosts = [...catalog.hosts, extraHost];
       catalog.hostConnectionStatuses = { [hostId]: { status: "connected" } };
       runtime.setThreadStatus(hostId, threadId, "running");
     },
-    { hostId, threadId },
+    { hostId, threadId, extraHost },
   );
 
   await expect(page.getByTestId(`thread-button-${threadId}`)).toBeVisible();

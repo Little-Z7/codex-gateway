@@ -153,10 +153,15 @@ test("provisioned members only see and reach their own workspace", async ({ page
     );
     await a.page.getByTestId(`project-button-${aProjects[0]!.id}`).click({ button: "right" });
     await a.page.getByRole("menuitem", { name: /新建|新对话|New/ }).click();
+    // 新对话 opens a front-end draft; the app-server thread only exists after the first send.
+    await a.page
+      .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
+      .fill("用一句话回复：ok");
+    await a.page.getByTestId("send-turn-button").click();
     await a.page.waitForFunction(
       () => new URLSearchParams(window.location.search).get("threadId") !== null,
       undefined,
-      { timeout: 30_000 },
+      { timeout: 120_000 },
     );
     const bThreads = await authenticatedFetch(
       b.page,

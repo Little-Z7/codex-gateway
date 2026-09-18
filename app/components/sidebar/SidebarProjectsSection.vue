@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   ChartNoAxesCombinedIcon,
+  ChevronRightIcon,
   FolderIcon,
   FolderOpenIcon,
   FolderPlusIcon,
@@ -49,6 +50,14 @@ const { t } = useI18n();
 const { openMfaDialog } = useHostMfaDialog();
 const multipleHosts = computed(() => props.hosts.length > 1);
 const pressHandlers = computed(() => props.longPressHandlers ?? {});
+const expandedMissingHosts = ref(new Set<number>());
+
+function toggleMissingProjects(hostId: number) {
+  const next = new Set(expandedMissingHosts.value);
+  if (next.has(hostId)) next.delete(hostId);
+  else next.add(hostId);
+  expandedMissingHosts.value = next;
+}
 
 function hostOnline(hostId: number) {
   return props.hostConnectionStatuses[hostId]?.status === "connected";
@@ -167,36 +176,54 @@ function hostStatusLabel(hostId: number) {
         </ContextMenuContent>
       </ContextMenu>
 
-      <ContextMenu
-        v-for="project in missingProjectsByHost.get(host.id) ?? []"
-        :key="`missing-${project.id}`"
-      >
-        <ContextMenuTrigger as-child>
-          <Button
-            :data-testid="`project-button-${project.id}`"
-            variant="ghost"
-            class="h-9 w-full min-w-0 justify-start gap-2 overflow-hidden rounded-lg px-3 text-sm font-normal text-ink-faint hover:bg-canvas-soft"
-            data-project-missing="true"
+      <template v-if="(missingProjectsByHost.get(host.id) ?? []).length > 0">
+        <Button
+          :data-testid="`missing-projects-toggle-${host.id}`"
+          variant="ghost"
+          class="h-9 w-full justify-start gap-2 rounded-lg px-3 text-sm font-normal text-ink-faint hover:bg-canvas-soft"
+          :aria-expanded="expandedMissingHosts.has(host.id)"
+          @click="toggleMissingProjects(host.id)"
+        >
+          <ChevronRightIcon
+            class="size-3.5 shrink-0 transition-transform"
+            :class="expandedMissingHosts.has(host.id) ? 'rotate-90' : ''"
+          />
+          {{ t("app.missingProjects") }} ·
+          {{ (missingProjectsByHost.get(host.id) ?? []).length }}
+        </Button>
+        <template v-if="expandedMissingHosts.has(host.id)">
+          <ContextMenu
+            v-for="project in missingProjectsByHost.get(host.id) ?? []"
+            :key="`missing-${project.id}`"
           >
-            <FolderXIcon class="size-4 shrink-0 text-destructive/70" />
-            <span class="min-w-0 flex-1 truncate text-left">{{ project.name }}</span>
-            <span class="text-[0.6875rem]">{{ t("app.projectDirectoryMissing") }}</span>
-          </Button>
-        </ContextMenuTrigger>
-        <ContextMenuContent :collision-padding="12" prioritize-position class="w-44">
-          <ContextMenuItem @select="emit('editProject', project)">
-            <FolderOpenIcon class="mr-2 size-4" />
-            {{ t("app.editProject") }}
-          </ContextMenuItem>
-          <ContextMenuItem
-            class="text-destructive focus:text-destructive"
-            @select="emit('deleteProject', project)"
-          >
-            <Trash2Icon class="mr-2 size-4" />
-            {{ t("app.deleteProject") }}
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
+            <ContextMenuTrigger as-child>
+              <Button
+                :data-testid="`project-button-${project.id}`"
+                variant="ghost"
+                class="h-9 w-full min-w-0 justify-start gap-2 overflow-hidden rounded-lg px-3 text-sm font-normal text-ink-faint hover:bg-canvas-soft"
+                data-project-missing="true"
+              >
+                <FolderXIcon class="size-4 shrink-0 text-destructive/70" />
+                <span class="min-w-0 flex-1 truncate text-left">{{ project.name }}</span>
+                <span class="text-[0.6875rem]">{{ t("app.projectDirectoryMissing") }}</span>
+              </Button>
+            </ContextMenuTrigger>
+            <ContextMenuContent :collision-padding="12" prioritize-position class="w-44">
+              <ContextMenuItem @select="emit('editProject', project)">
+                <FolderOpenIcon class="mr-2 size-4" />
+                {{ t("app.editProject") }}
+              </ContextMenuItem>
+              <ContextMenuItem
+                class="text-destructive focus:text-destructive"
+                @select="emit('deleteProject', project)"
+              >
+                <Trash2Icon class="mr-2 size-4" />
+                {{ t("app.deleteProject") }}
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
+        </template>
+      </template>
 
       <Button
         :data-testid="`sidebar-new-project-${host.id}`"

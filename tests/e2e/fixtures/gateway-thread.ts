@@ -24,7 +24,7 @@ export function gatewayThreadFixture(
     reasoningEffort: "medium",
     createdAt: now,
     updatedAt: now,
-    recencyAt: now,
+    recencyAt: fixture.updatedAt ?? now,
     status: { type: "idle" },
     path: null,
     cwd: "/tmp/e2e",

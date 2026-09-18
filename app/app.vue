@@ -27,9 +27,14 @@ const { initialized, isAuthenticated, isAdmin, token } = storeToRefs(auth);
 const mounted = ref(false);
 let activeSessionToken = "";
 const layoutName = computed(() => (device.isMobileOrTablet ? "mobile" : "default"));
-const requestPath = useRequestURL().pathname;
 const appBase = useRuntimeConfig().app.baseURL;
-const isAdminRoute = requestPath.replace(new RegExp(`^${appBase}`), "").startsWith("admin");
+const route = useRoute();
+const isAdminRoute = computed(() =>
+  route.path
+    .replace(new RegExp(`^${appBase}`), "")
+    .replace(/^\/+/, "")
+    .startsWith("admin"),
+);
 const pageTitle = computed(() => {
   if (!selectedThreadId.value || !currentThread.value) {
     return "Codex Gateway";

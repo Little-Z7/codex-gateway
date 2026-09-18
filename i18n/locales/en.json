@@ -498,6 +498,7 @@
     "runningCommand": "Running command",
     "commandOutput": "Command output",
     "waitingCommandOutput": "Waiting for command output...",
+    "intermediateRunningItem": "Running {label}",
     "intermediateSteps": "Intermediate steps",
     "copyAgentOutput": "Copy output",
     "agentOutputCopied": "Output copied",

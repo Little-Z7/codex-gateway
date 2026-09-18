@@ -842,7 +842,7 @@ test("streaming output does not force scroll when the user is reading earlier co
   await scrollChatViewportToBottom(page);
   // Process artifacts (command runs, diffs) collapse into the steps group while the turn runs;
   // expand it to reach the command card.
-  const stepsToggle = page.getByRole("button", { name: /中间过程/ }).first();
+  const stepsToggle = page.getByTestId("intermediate-steps").first();
   if (await stepsToggle.isVisible()) {
     if ((await stepsToggle.getAttribute("data-state")) !== "open") await stepsToggle.click();
     await expect(stepsToggle).toHaveAttribute("data-state", "open");
@@ -934,7 +934,9 @@ test("completed turns do not collapse intermediate steps while the user is detac
     .toBeLessThanOrEqual(visibleAnchor.top + 2);
 
   await scrollChatViewportToBottom(page);
-  await expect(page.getByTestId("intermediate-steps")).toBeHidden();
+  // Completed turns keep a single summary line instead of disappearing.
+  await expect(page.getByTestId("intermediate-steps")).toBeVisible();
+  await expect(page.getByTestId("intermediate-steps")).toContainText(/已完成|Done/);
 });
 
 test("automatic intermediate collapse stays pinned without a transient jump", async ({ page }) => {
@@ -984,7 +986,8 @@ test("automatic intermediate collapse stays pinned without a transient jump", as
     finalText: "final answer after pinned collapse",
   });
 
-  await expect(page.getByTestId("intermediate-steps")).toBeHidden();
+  // Completed turns keep a single summary line instead of disappearing.
+  await expect(page.getByTestId("intermediate-steps")).toBeVisible();
   await waitForAnimationFrames(page, 4);
   expect(Math.max(...(await stopFrameTracking(page)))).toBeLessThanOrEqual(2);
 });
@@ -1036,7 +1039,7 @@ test("manually expanded completed intermediate steps stay open after returning t
     },
   });
 
-  const toggle = page.getByRole("button", { name: /中间过程/ }).first();
+  const toggle = page.getByTestId("intermediate-steps").first();
   await expect(toggle).toHaveAttribute("data-state", "closed");
   await toggle.click();
   await expect(toggle).toHaveAttribute("data-state", "open");

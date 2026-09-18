@@ -326,7 +326,7 @@ function isTokenlessRealtimeUrl(rawUrl: string) {
 }
 
 function firstIntermediateStepsToggle(page: Page) {
-  return page.getByRole("button", { name: /中间过程/ }).first();
+  return page.getByTestId("intermediate-steps").first();
 }
 
 async function openThreadFromProjectOrRestoredState(

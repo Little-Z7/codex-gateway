@@ -181,7 +181,9 @@ set -eu
 socket="\${CODEX_HOME:-$HOME/.codex}/app-server-control/app-server-control.sock"
 daemon_dir="\${CODEX_HOME:-$HOME/.codex}/app-server-daemon"
 rm -f "$daemon_dir"/app-server.pid "$daemon_dir"/app-server.pid.lock "$daemon_dir"/app-server.stderr.log
-nohup ${codexBin} app-server --listen unix:// >/tmp/codex-gateway-unmanaged-app-server.log 2>&1 </dev/null &
+# Spawn through a login shell so the unmanaged app-server inherits the same
+# /etc/profile.d provider environment a real user-launched app-server would get.
+nohup bash -lc "exec ${codexBin} app-server --listen unix://" >/tmp/codex-gateway-unmanaged-app-server.log 2>&1 </dev/null &
 for i in $(seq 1 100); do
   if [ -S "$socket" ]; then
     break

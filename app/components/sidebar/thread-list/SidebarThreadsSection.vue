@@ -73,6 +73,9 @@ const pressHandlers = computed(() => props.longPressHandlers ?? {});
             <Button
               :data-testid="`pinned-thread-button-${thread.threadId}`"
               v-bind="pressHandlers"
+              :data-selected="
+                String(thread.threadId) === String(selectedThreadId) ? 'true' : 'false'
+              "
               variant="ghost"
               class="h-9 w-full min-w-0 justify-start overflow-hidden rounded-lg px-3 text-sm font-normal hover:bg-canvas-soft"
               :class="selectedRowClass(String(thread.threadId) === String(selectedThreadId))"
@@ -110,6 +113,7 @@ const pressHandlers = computed(() => props.longPressHandlers ?? {});
             <Button
               :data-testid="`thread-button-${thread.id}`"
               v-bind="pressHandlers"
+              :data-selected="String(thread.id) === String(selectedThreadId) ? 'true' : 'false'"
               variant="ghost"
               class="h-9 w-full min-w-0 justify-start overflow-hidden rounded-lg px-3 text-sm font-normal hover:bg-canvas-soft"
               :class="selectedRowClass(String(thread.id) === String(selectedThreadId))"

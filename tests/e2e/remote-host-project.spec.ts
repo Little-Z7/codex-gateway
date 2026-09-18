@@ -66,6 +66,11 @@ test("new threads display and inherit the remote Codex defaults", async ({
     .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
     .fill("/");
   await page.getByTestId("slash-command-new").click();
+  // The /new command only opens a front-end draft — thread.start rides on the first turn.
+  await page
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
+    .fill("用一句话回复：ok");
+  await page.getByTestId("send-turn-button").click();
   const threadStart = z
     .object({
       hostId: z.number(),
@@ -291,9 +296,7 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
   const project = await remoteWorkspace.addProject(host.id);
 
   await expect(page.getByTestId("project-thread-list")).toBeVisible();
-  await expect(
-    page.getByTestId("project-thread-list").getByRole("heading", { name: project.name }),
-  ).toBeVisible();
+  await expect(page.getByTestId("project-thread-list")).toContainText(project.name);
   await page.getByTestId("open-terminal-button").click();
   await expect(page.getByTestId("terminal-panel")).toBeVisible({ timeout: 30_000 });
   await runTerminalCommand(page, "pwd");

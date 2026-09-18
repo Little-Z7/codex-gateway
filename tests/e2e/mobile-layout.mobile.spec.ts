@@ -269,6 +269,12 @@ test("virtualizes a large running turn in one agent timeline", async ({ page }, 
   await expect(page.getByTestId("virtual-intermediate-items")).toHaveCount(0);
   await expect.poll(() => mountedRows.count()).toBeLessThan(30);
 
+  // Intermediate work renders inside a collapsed group; expand it so the command and
+  // file-change rows mount.
+  const intermediateToggle = page.getByTestId("intermediate-steps").first();
+  await expect(intermediateToggle).toHaveAttribute("data-state", "closed");
+  await intermediateToggle.click();
+
   // Use the final row as a stable lifecycle probe. Deep estimated rows can move while WebKit
   // replaces preceding estimates, which is expected virtualizer behavior rather than a leak.
   const commandTitle = page.getByText("large command lifecycle probe", { exact: true });
@@ -277,13 +283,6 @@ test("virtualizes a large running turn in one agent timeline", async ({ page }, 
   const commandRow = commandTitle.locator("xpath=ancestor::*[@data-index][1]");
   const commandRowHandle = await commandRow.elementHandle();
   if (commandRowHandle === null) throw new Error("Expected mounted command row");
-
-  // Intermediate work renders inside a collapsed group; expand it so the file-change rows mount.
-  // Once open, the header can leave the virtual window as the group grows, so assert on the
-  // mounted file rows instead of the toggle testid.
-  const intermediateToggle = page.getByRole("button", { name: /中间过程/ }).first();
-  await expect(intermediateToggle).toHaveAttribute("data-state", "closed");
-  await intermediateToggle.click();
 
   const fileChange = page.getByRole("button", { name: /src\/large_file_/ }).first();
   await expect(fileChange).toBeVisible();
@@ -602,6 +601,11 @@ test("opens sidebar context actions with long press on mobile", async ({
   await expect(page.getByTestId(`project-button-${project.id}`)).toBeVisible();
   await longPress(page, page.getByTestId(`project-button-${project.id}`));
   await page.getByRole("menuitem", { name: /新建|新对话|New/ }).click();
+  // 新对话 opens a front-end draft; the app-server thread only exists after the first send.
+  await page
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
+    .fill("用一句话回复：ok");
+  await page.getByTestId("send-turn-button").click();
   const threadId = await waitForSelectedThreadId(page);
 
   await page.getByTestId("mobile-sidebar-toggle").click();

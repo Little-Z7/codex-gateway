@@ -335,7 +335,7 @@ async function diffEndsBeforeText(page: import("@playwright/test").Page, text: s
 }
 
 async function openIntermediateSteps(page: import("@playwright/test").Page) {
-  const toggle = page.getByRole("button", { name: /中间过程/ }).first();
+  const toggle = page.getByTestId("intermediate-steps").first();
   await expect(toggle).toBeVisible();
   if ((await toggle.getAttribute("data-state")) !== "open") {
     await toggle.click();

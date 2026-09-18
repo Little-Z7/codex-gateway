@@ -498,6 +498,7 @@
     "runningCommand": "正在运行命令",
     "commandOutput": "命令输出",
     "waitingCommandOutput": "等待命令输出...",
+    "intermediateRunningItem": "正在运行 {label}",
     "intermediateSteps": "中间过程",
     "copyAgentOutput": "复制输出",
     "agentOutputCopied": "输出已复制",
