@@ -325,10 +325,21 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
   await expect(page.getByTestId("slash-command-new")).toBeVisible();
   await expect(page.getByTestId("slash-command-plan")).toBeHidden();
   await page.getByTestId("slash-command-new").click();
+  // /new opens a front-end draft; the app-server thread only exists after the first send.
+  await page
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
+    .fill("用一句话回复：ok");
+  await page.getByTestId("send-turn-button").click();
   const slashNewThreadId = await waitForSelectedThreadId(page);
   await expect(page.getByTestId(`thread-button-${slashNewThreadId}`)).toBeVisible({
     timeout: 30_000,
   });
+  // Wait for the first turn to finish so the plan-mode send is a fresh turn.start.
+  await expect(page.getByTestId("send-turn-button")).toHaveAttribute(
+    "aria-label",
+    /已完成|Done|失败|Failed|已中断|Interrupted/,
+    { timeout: 180_000 },
+  );
   await page
     .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
     .fill("/");

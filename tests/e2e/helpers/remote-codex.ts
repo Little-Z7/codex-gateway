@@ -254,6 +254,13 @@ export async function startRemoteThreadFromProjectMenu(
   await page.getByTestId("send-turn-button").click();
   const threadId = await waitForSelectedThreadId(page);
   await expect(page.getByTestId(`thread-button-${threadId}`)).toBeVisible({ timeout: 60_000 });
+  // Wait for the initial turn to finish so callers' next send is a fresh turn.start rather
+  // than a turn.steer into the still-running turn.
+  await expect(page.getByTestId("send-turn-button")).toHaveAttribute(
+    "aria-label",
+    /已完成|Done|失败|Failed|已中断|Interrupted/,
+    { timeout: 180_000 },
+  );
   return threadId;
 }
 

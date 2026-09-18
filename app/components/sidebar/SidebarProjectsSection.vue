@@ -148,6 +148,7 @@ function hostStatusLabel(hostId: number) {
           <Button
             :data-testid="`project-button-${project.id}`"
             v-bind="pressHandlers"
+            data-project-missing="false"
             variant="ghost"
             class="h-9 w-full min-w-0 justify-start gap-2 overflow-hidden rounded-lg px-3 text-sm font-normal hover:bg-canvas-soft"
             :class="selectedRowClass(project.id === selectedProjectId)"
