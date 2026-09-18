@@ -65,7 +65,7 @@ onMounted(() => {
 });
 
 watch([initialized, isAdmin], ([ready, admin]) => {
-  if (isAdminRoute && ready && !admin) {
+  if (isAdminRoute.value && ready && !admin) {
     window.location.replace(gatewayPath(""));
   }
 });
