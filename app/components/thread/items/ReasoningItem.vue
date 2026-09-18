@@ -55,15 +55,15 @@ watch(inProgress, (active) => (active ? resume() : pause()), { immediate: true }
         <ChevronRightIcon v-else class="size-4 shrink-0 text-ink-faint" />
       </span>
     </CollapsibleTrigger>
-    <!-- Keep long reasoning out of the DOM while collapsed, just like command output. The bounded
-         scrollport prevents a verbose model trace from expanding the outer virtual row without
-         changing the stored history or the user's ability to inspect it. -->
+    <!-- Keep long reasoning out of the DOM while collapsed, just like command output. Reasoning is
+         prose, however, so it uses the page background and normal Markdown wrapping rather than
+         the horizontally scrollable terminal treatment. Only its vertical growth is bounded. -->
     <DeferredCollapsibleContent :open="open">
       <ChatStickToBottomScrollArea
         v-if="text"
-        class="mt-1 max-h-56 rounded-lg border border-hairline bg-canvas-soft"
+        class="mt-1 max-h-56"
         viewport-class="max-h-56"
-        allow-horizontal-overflow
+        content-class="min-w-0 [overflow-wrap:anywhere]"
         :threshold="48"
         :follow-key="text.length"
       >
