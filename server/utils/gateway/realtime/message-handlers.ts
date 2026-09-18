@@ -2,6 +2,7 @@ import { authenticatePeer } from "./handlers/auth";
 import { subscribeHostLifecycle, unsubscribeHostLifecycle } from "./handlers/host-lifecycle";
 import {
   activateThread,
+  readThreadSettings,
   startThread,
   subscribeThread,
   unsubscribeThread,
@@ -60,6 +61,7 @@ export const realtimeMessageDispatcher = new RealtimeMessageDispatcher({
   "tmux.sessions.refresh": refreshTmuxSessions,
   "tmux.sessions.unsubscribe": unsubscribeTmuxSessions,
   "thread.activate": activateThread,
+  "thread.settings.read": readThreadSettings,
   "thread.start": startThread,
   "thread.subscribe": subscribeThread,
   "thread.unsubscribe": unsubscribeThread,

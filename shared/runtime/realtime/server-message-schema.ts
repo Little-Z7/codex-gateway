@@ -593,6 +593,14 @@ export const realtimeServerMessageSchema: z.ZodType<RealtimeServerMessage> = z.d
       .strict(),
     z
       .object({
+        type: z.literal("thread.settings.snapshot"),
+        ...requestIdField,
+        ...threadScopeFields,
+        threadSettings: threadSettingsSchema,
+      })
+      .strict(),
+    z
+      .object({
         type: z.literal("turn.start.accepted"),
         ...requestIdField,
         ...threadScopeFields,

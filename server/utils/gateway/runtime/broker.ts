@@ -97,6 +97,10 @@ class ThreadBroker {
     return this.settings.resolveThreadSettings(host, threadId);
   }
 
+  async readThreadSettings(host: HostRecord, threadId: string) {
+    return this.settings.readThreadSettings(host, threadId);
+  }
+
   async setThreadGoal(
     host: HostRecord,
     threadId: string,

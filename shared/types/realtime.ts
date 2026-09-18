@@ -90,6 +90,12 @@ export type RealtimeClientMessage =
       threadId: string;
     }
   | {
+      type: "thread.settings.read";
+      requestId: string;
+      hostId: number;
+      threadId: string;
+    }
+  | {
       type: "thread.turns.load";
       requestId: string;
       hostId: number;
@@ -415,6 +421,13 @@ export type RealtimeServerMessage =
       hostId: number;
       threadId: string;
     } & ThreadItemsPageResult)
+  | {
+      type: "thread.settings.snapshot";
+      requestId: string;
+      hostId: number;
+      threadId: string;
+      threadSettings: ThreadSettingsState;
+    }
   | {
       type: "turn.start.accepted";
       requestId: string;

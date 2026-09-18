@@ -1,4 +1,4 @@
-import type { HostRecord, RpcEnvelope } from "~~/shared/types";
+import type { HostRecord, RpcEnvelope, ThreadSettingsState } from "~~/shared/types";
 import {
   isAppServerSubAgentThread,
   parseThreadReadResult,
@@ -15,6 +15,7 @@ import { threadRuntimeEvents } from "./thread-runtime-events";
 import type { ThreadOpenSnapshot } from "./types";
 import { createThreadNotificationResolvers } from "./notification-rpc-resolvers";
 import type { AgentRpcClient, ProviderAdapter } from "../agent/provider-adapter";
+import { extractThreadSettings } from "../protocol/thread-payload";
 
 export class ThreadController {
   readonly client: AgentRpcClient;
@@ -24,6 +25,7 @@ export class ThreadController {
   private closed = false;
   private activeMainThread = false;
   private subAgentThread = false;
+  private resumeSettings: ThreadSettingsState | null = null;
 
   constructor(
     readonly host: HostRecord,
@@ -40,7 +42,10 @@ export class ThreadController {
     this.connected = connected;
     this.subscribed = subscribed;
     const cachedSnapshot = threadSnapshotStore.get(host.id, threadId);
-    if (cachedSnapshot !== null) this.updateMonitoringStateFromSnapshot(cachedSnapshot);
+    if (cachedSnapshot !== null) {
+      this.updateMonitoringStateFromSnapshot(cachedSnapshot);
+      this.resumeSettings = cachedSnapshot.threadSettings;
+    }
     if (this.ownsClient) {
       this.client.on(
         "notification",
@@ -112,7 +117,7 @@ export class ThreadController {
     this.subscribed = false;
   }
 
-  async ensureSubscribed() {
+  async ensureSubscribed(force = false) {
     await this.ensureConnected();
     await this.enqueue(async () => {
       // Check and mutation must share the serialized critical section. Two browser peers can
@@ -122,7 +127,7 @@ export class ThreadController {
       // attached; it has no ThreadResumeResponse. Existing threads must still resume once when
       // their materialized snapshot does not yet contain model/effort. This is the app-server's
       // authoritative settings read, not a presentation fallback.
-      if (this.subscribed && this.getOpenSnapshot()?.threadSettings != null) return;
+      if (!force && this.subscribed && this.getOpenSnapshot()?.threadSettings != null) return;
       // Fresh threads never enter this branch: ControllerRegistry keeps thread/start's implicit
       // subscription under a bootstrap owner until turn/started. Calling thread/resume before that
       // point is invalid because app-server has not materialized a rollout yet.
@@ -179,6 +184,10 @@ export class ThreadController {
 
   getOpenSnapshot() {
     return threadSnapshotStore.get(this.host.id, this.threadId);
+  }
+
+  getResumeSettings() {
+    return this.resumeSettings;
   }
 
   enqueue<T>(operation: () => Promise<T>) {
@@ -255,6 +264,17 @@ export class ThreadController {
       parseThreadResumeResult,
     );
     this.subscribed = true;
+    this.resumeSettings = extractThreadSettings(resumed);
+    const snapshot = this.getOpenSnapshot();
+    if (snapshot !== null) {
+      this.resumeSettings = {
+        ...this.resumeSettings,
+        ...(snapshot.threadSettings?.collaborationMode !== undefined
+          ? { collaborationMode: snapshot.threadSettings.collaborationMode }
+          : {}),
+      };
+      this.setOpenSnapshot({ ...snapshot, threadSettings: this.resumeSettings });
+    }
     // Do not synthesize thread/settings/updated from thread/resume. The resume DTO only contains
     // model/effort, while the official settings notification also contains collaborationMode. A
     // partial event under the official method name can therefore overwrite an already observed

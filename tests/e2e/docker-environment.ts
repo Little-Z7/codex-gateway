@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -267,6 +267,12 @@ async function prepareCodexHome(sourceCodexHome: string, codexHome: string) {
     copyOptional(join(sourceCodexHome, "auth.json"), join(codexHome, "auth.json")),
     copyOptional(join(sourceCodexHome, "config.toml"), join(codexHome, "config.toml")),
     copyOptional(join(sourceCodexHome, "version.json"), join(codexHome, "version.json")),
+    // config.toml may reference CODEX_HOME-relative catalogs. Copy them with the config so the
+    // real app-server does not fall back to invalid defaults inside the isolated SSH fixtures.
+    copyOptionalDirectory(
+      join(sourceCodexHome, "model-catalogs"),
+      join(codexHome, "model-catalogs"),
+    ),
   ]);
 }
 
@@ -274,6 +280,16 @@ async function copyOptional(source: string, target: string) {
   try {
     await mkdir(dirname(target), { recursive: true });
     await copyFile(source, target);
+  } catch (error: unknown) {
+    if (nodeErrorCode(error) !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+async function copyOptionalDirectory(source: string, target: string) {
+  try {
+    await cp(source, target, { recursive: true });
   } catch (error: unknown) {
     if (nodeErrorCode(error) !== "ENOENT") {
       throw error;

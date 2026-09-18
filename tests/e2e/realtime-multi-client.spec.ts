@@ -15,6 +15,48 @@ import { AGENT_OUTPUT_TIMEOUT_MS } from "./helpers/timeouts";
 
 test.describe.configure({ mode: "serial" });
 
+test("refreshes thread settings after a disconnected browser reconnects", async ({
+  browser,
+  page,
+  remoteWorkspace,
+}) => {
+  test.setTimeout(4 * 60_000);
+  await installRealtimeSocketProbe(page);
+  await openApp(page);
+  await expect.poll(() => activeRealtimeSocketCount(page), { timeout: 10_000 }).toBe(1);
+  const { project } = await remoteWorkspace.provision({
+    hostName: `settings-reconnect-${Date.now()}`,
+  });
+  const threadId = await remoteWorkspace.startThread(project.id);
+  await expect(page.getByTestId("model-select")).toContainText("gpt-5.6-luna");
+
+  const secondContext = await browser.newContext({
+    storageState: await page.context().storageState(),
+  });
+  const secondPage = await secondContext.newPage();
+  await installRealtimeSocketProbe(secondPage);
+  await openApp(secondPage, { resetConfig: false });
+  try {
+    await expect
+      .poll(async () => currentSelectedThreadId(secondPage), { timeout: 30_000 })
+      .toBe(threadId);
+    await expect(secondPage.getByTestId("model-select")).toContainText("gpt-5.6-luna");
+
+    await page.getByTestId("model-select").click();
+    await page.getByTestId("model-option-gpt-5.6-sol").click();
+    await page.getByTestId("model-selector-close").click();
+    await expect(page.getByTestId("model-select")).toContainText(/gpt-5\.6-sol/i);
+
+    const reconnectMessageOffset = await realtimeClientMessageCount(secondPage);
+    await closeRealtimeSockets(secondPage);
+    await expect.poll(() => activeRealtimeSocketCount(secondPage), { timeout: 30_000 }).toBe(1);
+    await waitForRealtimeClientMessage(secondPage, "thread.subscribe", reconnectMessageOffset);
+    await expect(secondPage.getByTestId("model-select")).toContainText(/gpt-5\.6-sol/i);
+  } finally {
+    await secondContext.close();
+  }
+});
+
 test("fans out a real remote app-server thread to multiple browser clients across turns", async ({
   browser,
   page,

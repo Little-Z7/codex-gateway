@@ -6,6 +6,23 @@ import { parseTurnSettingsUpdateResponse } from "~~/shared/runtime/app-server";
 export class ThreadSettingsService {
   constructor(private readonly registry: ControllerRegistry) {}
 
+  async readThreadSettings(host: HostRecord, threadId: string) {
+    // Settings can change in another Codex client while this browser is hidden. thread/read
+    // intentionally omits model/effort, so force one metadata-only resume only on the explicit
+    // recovery path; ordinary thread activation still uses the warm snapshot cache.
+    const lease = this.registry.retainSubscription(host, threadId, "scoped", {
+      forceUpstreamSubscription: true,
+    });
+    try {
+      const controller = await lease.ready;
+      const settings: ThreadSettingsState | null = controller.getResumeSettings();
+      if (settings === null) throw new Error("thread/resume omitted settings");
+      return settings;
+    } finally {
+      lease.release();
+    }
+  }
+
   async resolveThreadSettings(host: HostRecord, threadId: string) {
     // Acquiring a scoped lease invokes the controller's unified subscription/settings hydration.
     // The controller may skip thread/resume only when both the upstream subscription and the

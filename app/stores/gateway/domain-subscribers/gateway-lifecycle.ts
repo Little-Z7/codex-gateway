@@ -9,11 +9,23 @@ import { setRealtimeRequestContextResolver } from "@/stores/gateway-realtime/req
 import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
 import { useGatewayHostMetricsDataStore } from "@/stores/gateway-host-metrics/data";
 import { useGatewayProjectDefaultsStore } from "@/stores/gateway-project-defaults";
+import { recoverSelectedThreadSettings } from "@/stores/gateway-composer/thread-settings-recovery";
+import { useEventListener } from "@vueuse/core";
 import { gatewayDomainEvents } from "../domain-events";
 
 const lifecycleNotificationKeys = new Set<string>();
 
 export function registerGatewayLifecycleSubscribers() {
+  // A tab can be suspended without losing its WebSocket. Visibility recovery therefore belongs to
+  // this one-time client lifecycle, not to either layout: switching device layouts would otherwise
+  // register duplicate listeners. A reconnect still follows the explicit realtime-reconnected path.
+  useEventListener(
+    () => (import.meta.client ? document : null),
+    "visibilitychange",
+    () => {
+      if (document.visibilityState === "visible") void recoverSelectedThreadSettings();
+    },
+  );
   setRealtimeRequestContextResolver((request) => {
     if (!("hostId" in request)) return {};
     const hostName = useGatewayCatalogStore().hosts.find(
@@ -52,10 +64,11 @@ export function registerGatewayLifecycleSubscribers() {
   });
   gatewayDomainEvents.on("realtime-reconnected", () => {
     useGatewayBrowserStore().resetRuntime();
-    // A normal reconnect resumes every thread from its explicit event epoch and cursor. Do not
-    // also activate a full snapshot here: that races replay and discards accepted client-only
-    // items such as steer messages. The server emits thread.events.gap when replay is impossible;
-    // that single path below owns authoritative snapshot recovery.
+    // Settings can change in another Codex client without a subscribed notification. Refresh only
+    // that metadata here; activating a full snapshot would race replay and discard accepted
+    // client-only items such as steer messages. A thread.events.gap remains the sole owner of
+    // authoritative timeline recovery when replay is impossible.
+    void recoverSelectedThreadSettings();
   });
   gatewayDomainEvents.on("realtime-thread-events-gap", ({ hostId, threadId }) => {
     void useGatewayThreadViewStore().recoverThreadEventGap(hostId, threadId);
