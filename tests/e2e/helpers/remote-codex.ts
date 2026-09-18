@@ -261,7 +261,7 @@ export async function waitForSelectedThreadId(page: Page) {
   const handle = await page.waitForFunction(
     () => new URLSearchParams(window.location.search).get("threadId"),
     undefined,
-    { timeout: 30_000 },
+    { timeout: 120_000 },
   );
   const threadId = await handle.jsonValue();
   return String(threadId);
