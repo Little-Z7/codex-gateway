@@ -120,24 +120,37 @@ function budgetExceeded(userId: number) {
   );
 }
 
-function budgetCellLabel(userId: number) {
+function budgetPrimaryDimension(userId: number) {
   const row = budgetByUser.value.get(userId);
-  if (
-    row === undefined ||
-    row.effective.source === "unlimited" ||
-    row.effective.dailyTokens === null
-  ) {
-    return t("app.budgetUnlimited");
+  if (row === undefined) return null;
+  const dims = [
+    [row.usage.dailyTokens, row.effective.dailyTokens],
+    [row.usage.dailyTurns, row.effective.dailyTurns],
+    [row.usage.monthlyTokens, row.effective.monthlyTokens],
+    [row.usage.monthlyTurns, row.effective.monthlyTurns],
+  ] as const;
+  const exceeded = dims.find(([used, limit]) => limit !== null && used >= limit);
+  if (exceeded?.[1] !== null && exceeded !== undefined) {
+    return { used: exceeded[0], limit: exceeded[1] };
   }
-  return `${formatBudgetNumber(row.usage.dailyTokens)} / ${formatBudgetNumber(row.effective.dailyTokens)}`;
+  const limited = dims.find(([, limit]) => limit !== null);
+  if (limited?.[1] !== null && limited !== undefined) {
+    return { used: limited[0], limit: limited[1] };
+  }
+  return null;
+}
+
+function budgetCellLabel(userId: number) {
+  const primary = budgetPrimaryDimension(userId);
+  if (primary === null) return t("app.budgetUnlimited");
+  return `${formatBudgetNumber(primary.used)} / ${formatBudgetNumber(primary.limit)}`;
 }
 
 function budgetBarPercent(userId: number) {
-  const row = budgetByUser.value.get(userId);
-  const limit = row?.effective.dailyTokens ?? row?.effective.dailyTurns ?? null;
-  if (row === undefined || limit === null || limit <= 0) return 0;
-  const used = row.effective.dailyTokens !== null ? row.usage.dailyTokens : row.usage.dailyTurns;
-  return Math.min(100, Math.round((used / limit) * 100));
+  const primary = budgetPrimaryDimension(userId);
+  if (primary === null) return 0;
+  if (primary.limit <= 0) return 100;
+  return Math.min(100, Math.round((primary.used / primary.limit) * 100));
 }
 
 function budgetNear(userId: number) {
