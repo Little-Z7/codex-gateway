@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { EllipsisIcon, PencilIcon, PinIcon, PinOffIcon } from "@lucide/vue";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { Button } from "@codex-gateway/ui/button";
 import {
   ContextMenu,
@@ -51,8 +51,18 @@ const bucketLabelKeys: Record<string, string> = {
   earlier: "app.threadGroupEarlier",
 };
 
+const THREAD_PAGE_SIZE = 25;
+const visibleLimit = ref(THREAD_PAGE_SIZE);
 const unpinnedThreads = computed(() => props.threads.filter((thread) => thread.pinned !== true));
-const timeGroups = computed(() => groupThreadsByTime(unpinnedThreads.value));
+const visibleUnpinned = computed(() => unpinnedThreads.value.slice(0, visibleLimit.value));
+const timeGroups = computed(() => groupThreadsByTime(visibleUnpinned.value));
+const hiddenThreadCount = computed(() =>
+  Math.max(0, unpinnedThreads.value.length - visibleLimit.value),
+);
+
+function showMoreThreads() {
+  visibleLimit.value += THREAD_PAGE_SIZE;
+}
 
 const pressHandlers = computed(() => props.longPressHandlers ?? {});
 </script>
@@ -77,11 +87,11 @@ const pressHandlers = computed(() => props.longPressHandlers ?? {});
                 String(thread.threadId) === String(selectedThreadId) ? 'true' : 'false'
               "
               variant="ghost"
-              class="h-9 w-full min-w-0 justify-start overflow-hidden rounded-lg px-3 text-sm font-normal hover:bg-canvas-soft"
+              class="h-9 w-full min-w-0 justify-start overflow-hidden rounded-lg px-3 text-[0.875rem] font-normal hover:bg-canvas-soft"
               :class="selectedRowClass(String(thread.threadId) === String(selectedThreadId))"
               @click="emit('openPinnedThread', thread)"
             >
-              <PinIcon class="size-3.5 shrink-0 text-accent-orange" />
+              <PinIcon class="size-[1.125rem] shrink-0 text-accent-orange" />
               <span class="min-w-0 flex-1 truncate text-left" :title="thread.title">{{
                 thread.title
               }}</span>
@@ -117,7 +127,7 @@ const pressHandlers = computed(() => props.longPressHandlers ?? {});
               v-bind="pressHandlers"
               :data-selected="String(thread.id) === String(selectedThreadId) ? 'true' : 'false'"
               variant="ghost"
-              class="h-9 w-full min-w-0 justify-start overflow-hidden rounded-lg px-3 text-sm font-normal hover:bg-canvas-soft"
+              class="h-9 w-full min-w-0 justify-start overflow-hidden rounded-lg px-3 text-[0.875rem] font-normal hover:bg-canvas-soft"
               :class="selectedRowClass(String(thread.id) === String(selectedThreadId))"
               @click="emit('openThread', thread)"
             >
@@ -174,5 +184,15 @@ const pressHandlers = computed(() => props.longPressHandlers ?? {});
     >
       {{ t("app.noThreads") }}
     </div>
+
+    <button
+      v-if="hiddenThreadCount > 0"
+      type="button"
+      data-testid="sidebar-show-more-threads"
+      class="h-9 w-full rounded-lg px-3 text-left text-[0.875rem] text-ink-muted hover:bg-canvas-soft hover:text-ink"
+      @click="showMoreThreads"
+    >
+      {{ t("app.showMoreThreads") }}
+    </button>
   </div>
 </template>

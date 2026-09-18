@@ -14,6 +14,7 @@ import { projectContextUsage } from "./context-usage-display";
 
 const props = defineProps<{
   tokenUsage: ThreadTokenUsageState | null;
+  compact?: boolean;
 }>();
 
 const { locale, t } = useI18n();
@@ -48,12 +49,16 @@ function formatTokens(value: number) {
         type="button"
         variant="ghost"
         size="sm"
-        class="shrink-0 gap-2 px-1.5 text-base font-normal text-ink-muted hover:bg-canvas-soft"
+        :class="
+          compact
+            ? 'size-8 shrink-0 p-0 text-ink-muted hover:bg-canvas-soft'
+            : 'shrink-0 gap-2 px-1.5 text-base font-normal text-ink-muted hover:bg-canvas-soft'
+        "
         :title="accessibleLabel"
         :aria-label="accessibleLabel"
       >
-        <ContextIcon class="size-6" />
-        <span class="hidden sm:inline">{{ usage.percent }}%</span>
+        <ContextIcon :class="compact ? 'size-5' : 'size-6'" />
+        <span v-if="!compact" class="hidden sm:inline">{{ usage.percent }}%</span>
       </Button>
     </ContextTrigger>
     <ContextContent align="end" class="w-72 border-hairline">

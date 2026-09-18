@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { SearchIcon, SquarePenIcon } from "@lucide/vue";
+import { SearchIcon, ShieldIcon, SquarePenIcon } from "@lucide/vue";
 import { computed, nextTick, onScopeDispose, ref } from "vue";
 import { useEventListener } from "@vueuse/core";
 import {
@@ -11,6 +11,8 @@ import {
 } from "@codex-gateway/ui/dialog";
 import { SidebarFooter, SidebarTrigger } from "@codex-gateway/ui/sidebar";
 import SettingsPanel from "@/components/settings/SettingsPanel.vue";
+import { useAuthStore } from "@/stores/auth";
+import { gatewayPath } from "@/utils/gateway-url";
 import { useLongPressContextMenu } from "@/composables/interactions/useLongPressContextMenu";
 import { useWorkspaceLaunchActions } from "@/composables/workspace/useWorkspaceLaunchActions";
 import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
@@ -32,6 +34,7 @@ import type { HostRecord, ProjectRecord } from "./sidebar-types";
 
 const catalog = useGatewayCatalogStore();
 const navigation = useGatewayNavigationStore();
+const auth = useAuthStore();
 const { t } = useI18n();
 const showSettings = ref(false);
 const showSearch = ref(false);
@@ -154,20 +157,20 @@ function selectProject(project: ProjectRecord, event: MouseEvent) {
       <button
         type="button"
         data-testid="sidebar-new-thread"
-        class="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink hover:bg-surface"
+        class="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-[0.875rem] text-ink hover:bg-surface"
         @click="startNewThread"
       >
-        <SquarePenIcon class="size-4 shrink-0 text-ink-muted" />
+        <SquarePenIcon class="size-[1.125rem] shrink-0 text-ink-muted" />
         <span class="min-w-0 flex-1 truncate text-left">{{ t("app.newThread") }}</span>
         <kbd class="text-[0.6875rem] text-ink-faint">⌘N</kbd>
       </button>
       <button
         type="button"
         data-testid="sidebar-search-threads"
-        class="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink hover:bg-surface"
+        class="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-[0.875rem] text-ink hover:bg-surface"
         @click="showSearch = true"
       >
-        <SearchIcon class="size-4 shrink-0 text-ink-muted" />
+        <SearchIcon class="size-[1.125rem] shrink-0 text-ink-muted" />
         <span class="min-w-0 flex-1 truncate text-left">{{ t("app.searchThreads") }}</span>
         <kbd class="text-[0.6875rem] text-ink-faint">⌘K</kbd>
       </button>
@@ -214,6 +217,16 @@ function selectProject(project: ProjectRecord, event: MouseEvent) {
     </div>
 
     <SidebarFooter class="shrink-0 border-t border-hairline p-2">
+      <button
+        v-if="auth.isAdmin"
+        type="button"
+        data-testid="sidebar-admin-entry"
+        class="mb-1 flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-[0.875rem] text-ink hover:bg-surface"
+        @click="navigateTo(gatewayPath('admin'))"
+      >
+        <ShieldIcon class="size-[1.125rem] shrink-0 text-ink-muted" />
+        <span class="min-w-0 flex-1 truncate text-left">{{ t("app.adminConsole") }}</span>
+      </button>
       <SidebarUserMenu @settings="showSettings = true" />
     </SidebarFooter>
 

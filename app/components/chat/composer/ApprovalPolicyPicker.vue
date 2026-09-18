@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@codex-gateway/ui/popov
 
 const props = defineProps<{
   modelValue: ApprovalPolicy | "custom";
+  compact?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -69,14 +70,19 @@ const activeApprovalOption = computed(
       <Button
         type="button"
         variant="ghost"
-        size="lg"
-        class="h-10 shrink-0 gap-1.5 px-1.5 text-sm font-normal text-ink-muted hover:bg-canvas-soft hover:text-ink-secondary sm:gap-2 sm:px-2 md:text-base"
+        :size="compact ? 'sm' : 'lg'"
+        :class="
+          compact
+            ? 'h-8 shrink-0 gap-1 px-1.5 text-[0.8125rem] font-normal text-ink-muted hover:bg-canvas-soft hover:text-ink-secondary'
+            : 'h-10 shrink-0 gap-1.5 px-1.5 text-sm font-normal text-ink-muted hover:bg-canvas-soft hover:text-ink-secondary sm:gap-2 sm:px-2 md:text-base'
+        "
       >
-        <SettingsIcon class="size-5" />
-        <span class="max-w-[4.5rem] truncate sm:max-w-none">{{
-          t(`app.${activeApprovalOption.shortLabelKey}`)
-        }}</span>
-        <ChevronDownIcon class="size-4" />
+        <component :is="activeApprovalOption.icon" :class="compact ? 'size-3.5' : 'size-5'" />
+        <span
+          :class="compact ? 'max-w-[6.5rem] truncate' : 'max-w-[4.5rem] truncate sm:max-w-none'"
+          >{{ t(`app.${activeApprovalOption.shortLabelKey}`) }}</span
+        >
+        <ChevronDownIcon :class="compact ? 'size-3' : 'size-4'" />
       </Button>
     </PopoverTrigger>
     <PopoverContent

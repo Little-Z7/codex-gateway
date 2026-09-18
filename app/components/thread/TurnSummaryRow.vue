@@ -21,7 +21,7 @@ const durationLabel = computed(() =>
 </script>
 
 <template>
-  <div class="max-w-4xl text-sm" data-testid="turn-summary">
+  <div class="max-w-3xl text-[0.8125rem]" data-testid="turn-summary">
     <button
       type="button"
       class="flex items-center gap-1.5 rounded-md px-1 py-0.5 text-ink-muted hover:text-ink-secondary"

@@ -398,6 +398,7 @@ const agentProjectDefaultsSchema = z
     provider: z.literal("codex"),
     model: z.string().nullable(),
     effort: z.string().nullable(),
+    approvalPolicy: z.enum(["untrusted", "on-request", "never"]).nullable(),
   })
   .strict();
 

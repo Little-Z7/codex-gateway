@@ -80,8 +80,8 @@ const heroComposerVisible = computed(
         </div>
       </ChatPanelScrollArea>
 
-      <ChatPanelScrollArea v-else-if="heroComposerVisible" class="flex items-center justify-center">
-        <NewThreadHero class="py-8">
+      <ChatPanelScrollArea v-else-if="heroComposerVisible" class="flex flex-col">
+        <NewThreadHero class="pt-[clamp(3.5rem,14vh,7rem)] pb-10">
           <ChatComposer />
         </NewThreadHero>
       </ChatPanelScrollArea>
@@ -102,7 +102,9 @@ const heroComposerVisible = computed(
       />
 
       <ChatPanelScrollArea v-else-if="selectedProjectId" class="flex flex-col">
-        <ProjectThreadList />
+        <div class="pt-[clamp(3.5rem,14vh,7rem)] pb-10">
+          <ProjectThreadList />
+        </div>
       </ChatPanelScrollArea>
 
       <ChatPanelScrollArea v-else class="flex items-center justify-center">

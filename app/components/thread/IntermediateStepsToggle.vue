@@ -46,7 +46,7 @@ const label = computed(() => {
 <template>
   <button
     type="button"
-    class="flex w-full max-w-4xl items-center gap-1.5 rounded-md px-1 py-1 text-left text-[0.875rem] text-ink-muted transition-colors hover:text-ink-secondary"
+    class="flex w-full max-w-3xl items-center gap-1.5 rounded-md px-1 py-0.5 text-left text-[0.8125rem] text-ink-muted transition-colors hover:text-ink-secondary"
     :aria-expanded="open"
     :disabled="loading"
     :data-state="open ? 'open' : 'closed'"

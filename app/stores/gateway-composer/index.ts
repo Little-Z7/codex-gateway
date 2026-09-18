@@ -26,7 +26,7 @@ export const useGatewayComposerStore = defineStore("gateway-composer", () => {
   // one instance, hence store state rather than a composable-local ref.
   const draftModel = ref("");
   const draftEffort = ref<ReasoningEffort>("default");
-  const draftApprovalMode = ref<ApprovalPolicy | "custom">("custom");
+  const draftApprovalMode = ref<ApprovalPolicy | "custom" | null>(null);
   const draftProvider = ref<AgentProviderId>("codex");
   const actions = {
     ...createComposerActions(),

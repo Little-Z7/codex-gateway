@@ -53,6 +53,7 @@ const emptyThread = computed(() => threadView.timelineTurns.length === 0);
 <template>
   <ComposerShell
     :empty-thread="emptyThread"
+    :embedded="emptyThread"
     v-model="turnText"
     v-model:file-references="fileReferences"
     :attached-files="attachedFiles"

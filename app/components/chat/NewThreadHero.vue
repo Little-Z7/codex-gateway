@@ -38,9 +38,9 @@ function pickExample(text: string) {
 <template>
   <div
     data-testid="new-thread-hero"
-    class="mx-auto flex w-full max-w-3xl flex-col items-center justify-center gap-3 px-4 text-center"
+    class="mx-auto flex w-full max-w-3xl flex-col items-center gap-3 px-4 text-center"
   >
-    <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-semibold text-ink">
+    <h2 class="text-[clamp(1.5rem,2.6vw,1.875rem)] font-semibold text-ink">
       {{ t("app.newChatGreeting") }}
     </h2>
     <p v-if="subtitle" class="max-w-full truncate text-xs text-ink-faint">{{ subtitle }}</p>
@@ -52,7 +52,7 @@ function pickExample(text: string) {
         v-for="example in examples"
         :key="example"
         type="button"
-        class="rounded-full border border-hairline px-4 py-2 text-sm text-ink-secondary hover:bg-canvas-soft"
+        class="rounded-full border border-hairline bg-transparent px-4 py-2 text-[0.875rem] text-ink-secondary hover:bg-canvas-soft"
         @click="pickExample(example)"
       >
         {{ example }}

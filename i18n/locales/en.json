@@ -1089,7 +1089,10 @@
     "startThreadFailed": "Failed to start the thread",
     "openFilesPanel": "Open files",
     "thought": "Thought",
-    "selectProjectForModels": "Select a project to enable"
+    "selectProjectForModels": "Select a project to enable",
+    "showMoreThreads": "Show more",
+    "copyCode": "Copy",
+    "codeCopied": "Copied"
   },
   "errors": {
     "auth.invalidCredentials": "Invalid username or password",

@@ -339,23 +339,15 @@ async function openThreadFromProjectOrRestoredState(
   }
 
   await expect(page.getByTestId(`project-button-${projectId}`)).toBeVisible();
-  const row = page.getByTestId(`project-thread-row-${threadId}`);
-  if (!(await row.isVisible().catch(() => false))) {
+  const threadButton = page.getByTestId(`thread-button-${threadId}`);
+  if (!(await threadButton.isVisible().catch(() => false))) {
     await page.getByTestId(`project-button-${projectId}`).click();
   }
   if ((await currentSelectedThreadId(page)) === threadId) {
     return;
   }
-  const threadButton = page.getByTestId(`thread-button-${threadId}`);
-  if (await threadButton.isVisible().catch(() => false)) {
-    await threadButton.click();
-    await expect
-      .poll(async () => currentSelectedThreadId(page), { timeout: 10_000 })
-      .toBe(threadId);
-    return;
-  }
-  await expect(row).toBeVisible({ timeout: 30_000 });
-  await row.click();
+  await expect(threadButton).toBeVisible({ timeout: 30_000 });
+  await threadButton.click();
   await expect.poll(async () => currentSelectedThreadId(page), { timeout: 10_000 }).toBe(threadId);
 }
 

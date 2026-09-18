@@ -248,7 +248,7 @@
 
 @layer components {
   .markdown-content {
-    @apply min-w-0 max-w-full text-[0.9375rem] leading-8 text-inherit;
+    @apply min-w-0 max-w-full text-base leading-[1.75] text-inherit;
   }
 
   .markdown-content > :first-child {
@@ -314,6 +314,26 @@
 
   .markdown-content pre.shiki-block {
     @apply border border-hairline bg-canvas-soft;
+  }
+
+  .markdown-content .code-block {
+    @apply my-4 overflow-hidden rounded-lg border border-hairline;
+  }
+
+  .markdown-content .code-block-header {
+    @apply flex items-center justify-between gap-3 bg-canvas px-3 py-1.5 text-xs text-ink-muted;
+  }
+
+  .markdown-content .code-block-lang {
+    @apply truncate font-mono lowercase;
+  }
+
+  .markdown-content .code-block-copy {
+    @apply shrink-0 rounded-md px-1.5 py-0.5 text-ink-muted hover:bg-canvas-soft hover:text-ink;
+  }
+
+  .markdown-content .code-block pre {
+    @apply my-0 rounded-none border-0;
   }
 
   /* Shiki's dual-theme output sets these variables on each token. Keep selection in CSS so theme

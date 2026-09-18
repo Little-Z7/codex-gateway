@@ -87,10 +87,13 @@ export function useThreadSettingsControls() {
     },
   });
   const selectedApprovalMode = computed<ApprovalPolicy | "custom">({
-    get: () =>
-      selectedThreadId.value === null
-        ? newThreadApprovalMode.value
-        : (selectedThreadSettings.value.approvalPolicy ?? "custom"),
+    get: () => {
+      if (selectedThreadId.value !== null) {
+        return selectedThreadSettings.value.approvalPolicy ?? "custom";
+      }
+      if (newThreadApprovalMode.value !== null) return newThreadApprovalMode.value;
+      return newThreadProjectDefaults.value?.approvalPolicy ?? "custom";
+    },
     set: (approvalPolicy) => {
       if (selectedThreadId.value === null) {
         newThreadApprovalMode.value = approvalPolicy;
