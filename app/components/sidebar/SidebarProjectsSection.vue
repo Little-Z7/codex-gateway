@@ -54,6 +54,16 @@ function hostOnline(hostId: number) {
   return props.hostConnectionStatuses[hostId]?.status === "connected";
 }
 
+// The host header is hidden for the common single-connected-host case, but must stay
+// reachable whenever the host itself needs an action (MFA, reconnect, failure) or has
+// no projects to show yet.
+function showHostHeader(host: HostRecord) {
+  if (multipleHosts.value) return true;
+  const status = props.hostConnectionStatuses[host.id]?.status ?? "idle";
+  if (status !== "connected") return true;
+  return (props.projectsByHost.get(host.id) ?? []).length === 0;
+}
+
 function hostNeedsMfa(hostId: number) {
   return ["mfaRequired", "mfaConnecting"].includes(
     props.hostConnectionStatuses[hostId]?.status ?? "",
@@ -77,9 +87,9 @@ function hostStatusLabel(hostId: number) {
     </div>
 
     <div v-for="host in hosts" :key="host.id" class="min-w-0 space-y-0.5">
-      <!-- Host sub-section header: only rendered when the user has more than one host, so a
+      <!-- Host sub-section header: hidden for the common single connected host so a
            single-workspace member sees a flat project list like ChatGPT's. -->
-      <ContextMenu v-if="multipleHosts">
+      <ContextMenu v-if="showHostHeader(host)">
         <ContextMenuTrigger as-child>
           <div
             :data-testid="`host-button-${host.id}`"

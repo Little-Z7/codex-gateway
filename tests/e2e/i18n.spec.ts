@@ -23,8 +23,8 @@ test("requires bearer auth for protected HTTP APIs", async ({ page }) => {
 
 test("defaults to Chinese and can switch to English", async ({ page }) => {
   await openApp(page);
-  await expect(page.getByText("设置")).toBeVisible();
   await page.getByTestId("sidebar-user-menu").click();
+  await expect(page.getByText("设置")).toBeVisible();
   await page.getByTestId("settings-toggle").click();
   await page.getByRole("tab", { name: "外观" }).click();
   await page.getByRole("combobox").first().click();

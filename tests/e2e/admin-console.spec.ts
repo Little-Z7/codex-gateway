@@ -14,6 +14,7 @@ async function api<T>(page: Page, url: string, parse: (value: unknown) => T): Pr
 }
 
 async function openConsole(page: Page) {
+  await page.getByTestId("sidebar-user-menu").click();
   await page.getByTestId("admin-console-entry").click();
   await expect(page).toHaveURL(/\/gw\/admin/, { timeout: 15_000 });
   await expect(page.getByTestId("admin-console")).toBeVisible({ timeout: 30_000 });

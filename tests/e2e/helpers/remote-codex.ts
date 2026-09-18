@@ -177,7 +177,7 @@ export async function addRemoteHost(
   const host = uiHostSchema.parse(await (await hostResponsePromise).json());
   await closeSettings(page);
   if (options.waitForConnection !== false) {
-    await expect(hostConnectedIndicator(page, host.id)).toBeVisible({ timeout: 120_000 });
+    await waitForHostConnected(page, host.id);
   }
   if (
     options.waitForConnection !== false &&
@@ -192,8 +192,17 @@ export async function addRemoteHost(
   return host;
 }
 
-function hostConnectedIndicator(page: Page, hostId: number) {
-  return page.getByTestId(`host-button-${hostId}`).getByLabel(/已连接|Connected/);
+// The sidebar only renders host rows for multi-host layouts or hosts needing attention,
+// so connection readiness is observed through the E2E driver's catalog store instead.
+async function waitForHostConnected(page: Page, hostId: number) {
+  await page.waitForFunction(
+    (id) => {
+      const driver = window.__codexGatewayE2e;
+      return driver?.catalog.hostConnectionStatuses?.[id]?.status === "connected";
+    },
+    hostId,
+    { timeout: 120_000 },
+  );
 }
 
 export async function addRemoteProject(
@@ -203,8 +212,7 @@ export async function addRemoteProject(
   name = `remote-project-${Date.now()}`,
   remotePath = remote.projectPath,
 ) {
-  await page.getByTestId(`host-button-${hostId}`).click({ button: "right" });
-  await page.getByRole("menuitem", { name: /添加项目|Add project/ }).click();
+  await page.getByTestId(`sidebar-new-project-${hostId}`).click();
   await page.getByTestId("project-name-input").fill(name);
   await page.getByTestId("project-path-input").fill(remotePath);
 
@@ -214,7 +222,6 @@ export async function addRemoteProject(
   );
   await page.getByTestId("add-project-button").click();
   const project = uiProjectSchema.parse(await (await projectResponsePromise).json());
-  await expect(page.getByTestId(`host-button-${hostId}`)).toBeVisible();
   await expect(page.getByTestId(`project-button-${project.id}`)).toBeVisible();
   return project;
 }

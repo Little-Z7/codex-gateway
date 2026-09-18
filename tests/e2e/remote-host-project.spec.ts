@@ -492,7 +492,6 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
     )
     .toBe(true);
 
-  await page.getByTestId(`host-button-${host.id}`).click();
   await expect(page.getByTestId(`project-button-${project.id}`)).toBeVisible();
   const updatedProjectPath = `/home/${remote.username}/nested-workdir-${Date.now()}`;
   await execRemoteSsh(remote, `mkdir -p '${updatedProjectPath}'`);
@@ -597,8 +596,7 @@ async function verifyRemoteDirectoryBrowser(
   const directoryName = `gateway-directory-${Date.now()}`;
   await execRemoteSsh(remote, `mkdir -p "$HOME/media/${directoryName}"`);
 
-  await page.getByTestId(`host-button-${hostId}`).click({ button: "right" });
-  await page.getByRole("menuitem", { name: /添加项目|Add project/ }).click();
+  await page.getByTestId(`sidebar-new-project-${hostId}`).click();
   await page.getByTestId("project-browse-path-input").fill("media/");
   await page.getByRole("button", { name: /浏览|Browse/ }).click();
   await expect(page.getByTestId("project-browse-path-input")).toHaveValue(
