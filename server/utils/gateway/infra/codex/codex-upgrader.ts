@@ -14,6 +14,7 @@ import { CodexUpgradeResources } from "./codex-upgrade-resources";
 
 const UPGRADE_IDLE_TIMEOUT_MS = 90_000;
 const UPGRADE_TOTAL_TIMEOUT_MS = 10 * 60_000;
+const UPGRADE_OUTPUT_TAIL_BYTES = 256 * 1024;
 const artifactProvider = new CodexArtifactProvider();
 
 interface UpgradeCommandResult extends CommandResult {
@@ -239,11 +240,13 @@ export class CodexUpgrader {
       }, UPGRADE_TOTAL_TIMEOUT_MS);
 
       channel.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString("utf8");
+        // A stalled install (e.g. registry unreachable) can stream megabytes of retries.
+        // Keep a bounded tail so the gateway process cannot be OOM-killed by remote output.
+        stdout = tail(`${stdout}${chunk.toString("utf8")}`, UPGRADE_OUTPUT_TAIL_BYTES);
         resetIdleTimer();
       });
       channel.stderr.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString("utf8");
+        stderr = tail(`${stderr}${chunk.toString("utf8")}`, UPGRADE_OUTPUT_TAIL_BYTES);
         resetIdleTimer();
       });
       channel.on("error", (error: Error) => settle(() => reject(error)));
