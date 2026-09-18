@@ -58,6 +58,13 @@ export type AgentEvent =
   // ── Goals ───────────────────────────────────────────────────────
   | { type: "thread.goal.updated"; goal: unknown }
   | { type: "thread.goal.cleared" }
+  | {
+      type: "thread.attachment.updated";
+      attachmentId: string;
+      attachmentType: string;
+      identityKey: string;
+      operation: "created" | "deleted";
+    }
 
   // ── Server requests ─────────────────────────────────────────────
   | {
@@ -183,6 +190,14 @@ const threadGoalClearedSchema = z.object({
   type: z.literal("thread.goal.cleared"),
 });
 
+const threadAttachmentUpdatedSchema = z.object({
+  type: z.literal("thread.attachment.updated"),
+  attachmentId: z.string(),
+  attachmentType: z.string(),
+  identityKey: z.string(),
+  operation: z.enum(["created", "deleted"]),
+});
+
 const serverRequestRequestedSchema = z.object({
   type: z.literal("serverRequest.requested"),
   requestId: z.union([z.string(), z.number()]),
@@ -263,6 +278,7 @@ export const agentEventSchema = z.discriminatedUnion("type", [
   threadStartedSchema,
   threadGoalUpdatedSchema,
   threadGoalClearedSchema,
+  threadAttachmentUpdatedSchema,
   serverRequestRequestedSchema,
   serverRequestResolvedSchema,
   turnUsageUpsertSchema,

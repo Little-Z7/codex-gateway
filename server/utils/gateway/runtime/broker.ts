@@ -4,6 +4,12 @@ import type {
   ThreadGoalStatus,
   ThreadSettingsState,
 } from "~~/shared/types";
+import {
+  parseEmptyAppServerResponse,
+  parseThreadAttachmentAddResponse,
+  parseThreadAttachmentsPage,
+  parseThreadAttachmentRemoveResponse,
+} from "~~/shared/runtime/app-server";
 import { INITIAL_TURN_PAGE_LIMIT } from "~~/shared/config";
 import type { ServerRequestResponseInput, TurnStartInput, TurnSteerInput } from "./types";
 import { ControllerRegistry, type ThreadSubscriptionLease } from "./controller-registry";
@@ -161,6 +167,49 @@ class ThreadBroker {
     },
   ) {
     return this.historyReader.listThreadItems(host, threadId, params);
+  }
+
+  async addThreadAttachment(
+    host: HostRecord,
+    input: {
+      threadId: string;
+      attachmentType: string;
+      identityKey: string;
+      payload: unknown;
+    },
+  ) {
+    const client = await this.registry.getHostClient(host);
+    return parseThreadAttachmentAddResponse(
+      await client.request("thread/attachment/add", input, 120_000),
+    );
+  }
+
+  async listThreadAttachments(
+    host: HostRecord,
+    input: { threadId: string; cursor?: string | null; limit?: number },
+  ) {
+    const client = await this.registry.getHostClient(host);
+    return parseThreadAttachmentsPage(
+      await client.request(
+        "thread/attachment/list",
+        {
+          threadId: input.threadId,
+          cursor: input.cursor ?? null,
+          limit: input.limit ?? 100,
+        },
+        120_000,
+      ),
+    );
+  }
+
+  async removeThreadAttachment(
+    host: HostRecord,
+    input: { threadId: string; attachmentType: string; identityKey: string },
+  ) {
+    const client = await this.registry.getHostClient(host);
+    return parseThreadAttachmentRemoveResponse(
+      await client.request("thread/attachment/remove", input, 120_000, parseEmptyAppServerResponse),
+    );
   }
 
   async getHostClient(host: HostRecord) {

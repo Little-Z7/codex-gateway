@@ -131,6 +131,27 @@ export function expectThreadItemsPage(message: RealtimeResponseMessage) {
   return message;
 }
 
+export function expectThreadAttachmentsPage(message: RealtimeResponseMessage) {
+  if (message.type !== "thread.attachments.page") {
+    unexpectedResponse("thread.attachments.page", message.type);
+  }
+  return message;
+}
+
+export function expectThreadAttachmentAdded(message: RealtimeResponseMessage) {
+  if (message.type !== "thread.attachment.added") {
+    unexpectedResponse("thread.attachment.added", message.type);
+  }
+  return message;
+}
+
+export function expectThreadAttachmentRemoved(message: RealtimeResponseMessage) {
+  if (message.type !== "thread.attachment.removed") {
+    unexpectedResponse("thread.attachment.removed", message.type);
+  }
+  return message;
+}
+
 export function expectThreadSettingsSnapshot(message: RealtimeResponseMessage) {
   if (message.type !== "thread.settings.snapshot") {
     unexpectedResponse("thread.settings.snapshot", message.type);

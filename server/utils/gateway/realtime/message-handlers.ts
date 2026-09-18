@@ -49,6 +49,11 @@ import {
   handleHostMfaConnect,
   handleHostMfaSubmit,
 } from "./handlers/host-mfa";
+import {
+  addThreadAttachment,
+  listThreadAttachments,
+  removeThreadAttachment,
+} from "./handlers/thread-attachments";
 
 export const realtimeMessageDispatcher = new RealtimeMessageDispatcher({
   "auth.authenticate": { auth: "public", handler: authenticatePeer },
@@ -67,6 +72,9 @@ export const realtimeMessageDispatcher = new RealtimeMessageDispatcher({
   "thread.unsubscribe": unsubscribeThread,
   "thread.turns.load": loadThreadTurns,
   "thread.items.load": loadThreadItems,
+  "thread.attachments.list": listThreadAttachments,
+  "thread.attachment.add": addThreadAttachment,
+  "thread.attachment.remove": removeThreadAttachment,
   "thread.goal.set": setThreadGoal,
   "thread.goal.get": getThreadGoal,
   "thread.goal.clear": clearThreadGoal,

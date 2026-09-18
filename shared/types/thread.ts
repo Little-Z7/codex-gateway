@@ -76,6 +76,20 @@ export interface ThreadItemsPageResult {
   backwardsCursor: string | null;
 }
 
+/** Persisted by the official app-server thread attachment store. */
+export interface ThreadAttachment {
+  id: string;
+  attachmentType: string;
+  identityKey: string;
+  payload: unknown;
+  createdAt: number;
+}
+
+export interface ThreadAttachmentsPage {
+  data: ThreadAttachment[];
+  nextCursor: string | null;
+}
+
 export type ApprovalPolicy = "untrusted" | "on-request" | "never";
 export type ReasoningEffort = string;
 
@@ -185,9 +199,17 @@ export interface AppServerThreadSection {
   } | null;
 }
 
-/** Exact Codex 0.153 Thread DTO for the experimental API negotiated by Gateway. */
+/** Exact Codex 0.155 Thread DTO for the experimental API negotiated by Gateway. */
 export interface AppServerThread {
   id: string;
+  /** Environments selected by a loaded thread; null when the server cannot expose them. */
+  environments:
+    | {
+        environmentId: string;
+        cwd: string;
+        runtimeWorkspaceRoots: string[];
+      }[]
+    | null;
   extra: Record<never, never> | null;
   sessionId: string;
   forkedFromId: string | null;
@@ -208,11 +230,15 @@ export interface AppServerThread {
   path: string | null;
   cwd: string;
   cliVersion: string;
+  /** Client or executor that originally created the thread. */
+  originator: string | null;
   source: AppServerSessionSource;
   canAcceptDirectInput: boolean | null;
   threadSource: string | null;
   agentNickname: string | null;
   agentRole: string | null;
+  /** Persisted Daybreak preference for this thread. */
+  daybreakEnabled: boolean | null;
   gitInfo: {
     sha: string | null;
     branch: string | null;
