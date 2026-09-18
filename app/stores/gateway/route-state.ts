@@ -2,6 +2,8 @@ export interface GatewayRouteSelection {
   hostId: number | null;
   projectId: number | null;
   threadId: string | null;
+  /** `?new=1` marks the ChatGPT-style draft composer: no thread exists until the first send. */
+  draft: boolean;
 }
 
 function numberFromQuery(value: string | null) {
@@ -18,18 +20,24 @@ function stringFromQuery(value: string | null) {
 
 export function readGatewayRouteSelection(): GatewayRouteSelection {
   if (!import.meta.client) {
-    return { hostId: null, projectId: null, threadId: null };
+    return { hostId: null, projectId: null, threadId: null, draft: false };
   }
   const params = new URLSearchParams(window.location.search);
   return {
     hostId: numberFromQuery(params.get("hostId")),
     projectId: numberFromQuery(params.get("projectId")),
     threadId: stringFromQuery(params.get("threadId")),
+    draft: params.get("new") === "1",
   };
 }
 
 export function hasGatewayRouteSelection(selection = readGatewayRouteSelection()) {
-  return selection.hostId !== null || selection.projectId !== null || selection.threadId !== null;
+  return (
+    selection.hostId !== null ||
+    selection.projectId !== null ||
+    selection.threadId !== null ||
+    selection.draft
+  );
 }
 
 export function writeGatewayRouteSelection(
@@ -44,6 +52,7 @@ export function writeGatewayRouteSelection(
   setRouteParam(url, "hostId", selection.hostId);
   setRouteParam(url, "projectId", selection.projectId);
   setRouteParam(url, "threadId", selection.threadId);
+  setRouteParam(url, "new", selection.draft === true ? "1" : null);
 
   const nextUrl = `${url.pathname}${url.search}${url.hash}`;
   const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;

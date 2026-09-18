@@ -6,7 +6,7 @@ import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "@codex-gate
 
 <template>
   <main data-testid="desktop-layout" class="h-[100dvh] overflow-hidden bg-canvas-soft text-ink">
-    <SidebarProvider class="h-full min-h-0">
+    <SidebarProvider class="h-full min-h-0" style="--sidebar-width: 16.25rem">
       <Sidebar collapsible="offcanvas">
         <GatewaySidebar />
         <SidebarRail

@@ -2,10 +2,6 @@
 import { ref } from "vue";
 import type {
   ApprovalPolicy,
-  AgentProviderId,
-  AgentProviderOption,
-  ModelRecord,
-  ReasoningEffort,
   ThreadGoal,
   ThreadRuntimeStatus,
   ThreadTokenUsageState,
@@ -40,21 +36,7 @@ const props = defineProps<{
   selectedHostId: number | null;
   selectedProjectId: number | null;
   selectedApprovalMode: ApprovalPolicy | "custom";
-  selectedProvider: AgentProviderId;
-  providerOptions: readonly AgentProviderOption[];
-  canSelectProvider: boolean;
   selectedThreadTokenUsage: ThreadTokenUsageState | null;
-  models: ModelRecord[];
-  loadingModels: boolean;
-  activeModel: string;
-  activeModelLabel: string;
-  hostDefaultModelLabel: string;
-  hostDefaultEffortLabel: string;
-  activeEffortValue: string;
-  activeEffortCompactLabel: string;
-  effortOptions: Array<{ value: ReasoningEffort; label?: string }>;
-  labelEffortOption: (option: { value: ReasoningEffort; label?: string }) => string;
-  modelOptionValue: (modelOption: { model?: string; id: string }) => string;
   hasComposerInput: boolean;
   isThreadRunning: boolean;
   canInterruptTurn: boolean;
@@ -81,9 +63,6 @@ const emit = defineEmits<{
   fileReferenceLimit: [message: string];
   primaryAction: [];
   updateSelectedApprovalMode: [mode: ApprovalPolicy | "custom"];
-  selectModel: [model: string];
-  selectEffort: [effort: ReasoningEffort];
-  selectProvider: [provider: AgentProviderId];
 }>();
 
 const uploadInput = ref<HTMLInputElement | null>(null);
@@ -124,7 +103,8 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
         @clear-goal="emit('clearGoal')"
       />
       <div
-        class="relative rounded-[1.35rem] border border-hairline bg-surface p-2 shadow-lg shadow-ink/10 [container-type:inline-size] md:rounded-3xl md:p-[clamp(0.45rem,1vw,0.7rem)]"
+        data-testid="composer-box"
+        class="relative rounded-[1.25rem] border border-hairline bg-surface px-4 py-3 shadow-sm shadow-ink/5 [container-type:inline-size] md:rounded-[1.75rem]"
       >
         <SlashCommandMenu
           :open="slashMenuOpen"
@@ -161,21 +141,7 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
           :uploading-attachments="uploadingAttachments"
           :selected-thread-id="selectedThreadId"
           :selected-approval-mode="selectedApprovalMode"
-          :selected-provider="selectedProvider"
-          :provider-options="providerOptions"
-          :can-select-provider="canSelectProvider"
           :selected-thread-token-usage="selectedThreadTokenUsage"
-          :models="models"
-          :loading-models="loadingModels"
-          :active-model="activeModel"
-          :active-model-label="activeModelLabel"
-          :host-default-model-label="hostDefaultModelLabel"
-          :host-default-effort-label="hostDefaultEffortLabel"
-          :active-effort-value="activeEffortValue"
-          :active-effort-compact-label="activeEffortCompactLabel"
-          :effort-options="effortOptions"
-          :label-effort-option="labelEffortOption"
-          :model-option-value="modelOptionValue"
           :has-composer-input="hasComposerInput"
           :is-thread-running="isThreadRunning"
           :can-interrupt-turn="canInterruptTurn"
@@ -186,9 +152,6 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
           @attach="openAttachmentPicker"
           @primary-action="emit('primaryAction')"
           @update-selected-approval-mode="emit('updateSelectedApprovalMode', $event)"
-          @select-model="emit('selectModel', $event)"
-          @select-effort="emit('selectEffort', $event)"
-          @select-provider="emit('selectProvider', $event)"
         />
       </div>
     </div>

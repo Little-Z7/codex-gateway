@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { SettingsIcon, ShieldIcon, SquarePenIcon } from "@lucide/vue";
+import { SearchIcon, SquarePenIcon } from "@lucide/vue";
 import { computed, nextTick, onScopeDispose, ref } from "vue";
 import { useEventListener } from "@vueuse/core";
-import { Button } from "@codex-gateway/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -10,102 +9,65 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@codex-gateway/ui/dialog";
+import { SidebarFooter, SidebarTrigger } from "@codex-gateway/ui/sidebar";
 import SettingsPanel from "@/components/settings/SettingsPanel.vue";
-import BrowserOpenDialog from "@/components/browser/BrowserOpenDialog.vue";
 import { useLongPressContextMenu } from "@/composables/interactions/useLongPressContextMenu";
 import { useWorkspaceLaunchActions } from "@/composables/workspace/useWorkspaceLaunchActions";
-import { useAuthStore } from "@/stores/auth";
 import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
-import { gatewayPath } from "@/utils/gateway-url";
 import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
 import { gatewayDomainEvents } from "@/stores/gateway/domain-events";
+import { syncSelectedRoute } from "@/stores/gateway/thread-open/view-state";
 import AddProjectDialog from "./AddProjectDialog.vue";
-import HostTree from "./host-tree/HostTree.vue";
 import HostMfaDialog from "./host-tree/HostMfaDialog.vue";
-import PinnedThreadList from "./thread-list/PinnedThreadList.vue";
-import RecentThreadList from "./thread-list/RecentThreadList.vue";
 import ThreadRenameDialog from "./thread-list/ThreadRenameDialog.vue";
+import SidebarProjectsSection from "./SidebarProjectsSection.vue";
+import SidebarThreadsSection from "./thread-list/SidebarThreadsSection.vue";
+import SidebarUserMenu from "./SidebarUserMenu.vue";
+import ThreadSearchDialog from "./ThreadSearchDialog.vue";
 import SidebarScrollArea from "./SidebarScrollArea.vue";
-import { SidebarFooter } from "@codex-gateway/ui/sidebar";
 import { useSidebarTree } from "./host-tree/useSidebarTree";
 import { useThreadRename } from "./thread-list/useThreadRename";
-import { useRecentThreadActivity } from "./thread-list/useRecentThreadActivity";
-import SidebarWorkspaceToolbar from "./SidebarWorkspaceToolbar.vue";
-import { useTmuxMonitorLauncher } from "@/composables/workspace/useTmuxMonitorLauncher";
 import { provideHostMfaDialog } from "@/composables/host-mfa/useHostMfaDialog";
-import type { HostTreeController } from "./host-tree/controller";
 import type { HostRecord, ProjectRecord } from "./sidebar-types";
 
-const auth = useAuthStore();
 const catalog = useGatewayCatalogStore();
 const navigation = useGatewayNavigationStore();
-withDefaults(defineProps<{ workspaceToolbar?: boolean }>(), { workspaceToolbar: true });
 const { t } = useI18n();
 const showSettings = ref(false);
-const showBrowserDialog = ref(false);
+const showSearch = ref(false);
 const projectEditor = ref<{ host: HostRecord; project: ProjectRecord | null } | null>(null);
 const { longPressTriggered, longPressContextMenuHandlers } = useLongPressContextMenu();
 const sidebarTree = useSidebarTree(longPressTriggered);
 const threadRename = useThreadRename();
-const recentActivity = useRecentThreadActivity();
 const workspaceActions = useWorkspaceLaunchActions();
-const tmuxLauncher = useTmuxMonitorLauncher();
-const { mfaDialogHostId, openMfaDialog, closeMfaDialog } = provideHostMfaDialog();
+const { mfaDialogHostId, closeMfaDialog } = provideHostMfaDialog();
+// Inside a mobile Sheet there is no SidebarProvider, so the collapse trigger is desktop-only.
+withDefaults(defineProps<{ collapsible?: boolean }>(), { collapsible: true });
 const {
   hosts,
   pinnedThreads,
+  threads,
   selectedHostId,
+  selectedProjectId,
   selectedThreadId,
-  openPinnedThread,
-  pinnedRuntimeStatus,
-  pinnedCompletionAttention,
+  availableProjectsByHost,
+  missingProjectsByHost,
+  hostConnectionStatuses,
 } = sidebarTree;
-const { recentThreads } = recentActivity;
-const { selectedHostTitle, canLaunch } = workspaceActions;
-const { activeCount: tmuxActiveCount } = tmuxLauncher;
-const hostTreeController = computed<HostTreeController>(() => ({
-  hosts: sidebarTree.hosts.value,
-  availableProjectsByHost: sidebarTree.availableProjectsByHost.value,
-  missingProjectsByHost: sidebarTree.missingProjectsByHost.value,
-  projectThreads: sidebarTree.projectThreads.value,
-  expandedHostIds: sidebarTree.expandedHostIds.value,
-  expandedProjectIds: sidebarTree.expandedProjectIds.value,
-  expandedMissingProjectHostIds: sidebarTree.expandedMissingProjectHostIds.value,
-  selectedHostId: sidebarTree.selectedHostId.value,
-  selectedProjectId: sidebarTree.selectedProjectId.value,
-  selectedThreadId: sidebarTree.selectedThreadId.value,
-  hostConnectionStatuses: sidebarTree.hostConnectionStatuses.value,
-  longPressHandlers: longPressContextMenuHandlers,
-  selectHost: sidebarTree.selectHost,
-  addProject: openAddProject,
-  deleteHost: catalog.deleteHost,
-  monitorHost: openHostMonitor,
-  selectProject: sidebarTree.selectProject,
-  toggleMissingProjects: sidebarTree.toggleMissingProjects,
-  editProject: openEditProject,
-  deleteProject: catalog.deleteProject,
-  startThreadInProject: sidebarTree.startThreadInProject,
-  openThread: sidebarTree.openThread,
-  toggleThreadPin: navigation.setThreadPinned,
-  rename: threadRename.startRename,
-  threadRuntimeStatus: sidebarTree.threadRuntimeStatus,
-  threadCompletionAttention: sidebarTree.threadCompletionAttention,
-}));
-
-defineOptions({
-  inheritAttrs: false,
-});
-
-function openAddProject(host: HostRecord) {
-  projectEditor.value = { host, project: null };
-}
 
 const singleManagedHost = computed(() => {
   const list = hosts.value;
   return list.length === 1 && list[0]?.managed === true ? list[0] : null;
 });
 const selectedProject = computed(
-  () => catalog.projects.find((project) => project.id === navigation.selectedProjectId) ?? null,
+  () => catalog.projects.find((project) => project.id === selectedProjectId.value) ?? null,
+);
+const projectPinnedThreads = computed(() =>
+  pinnedThreads.value.filter(
+    (thread) =>
+      thread.hostId === selectedHostId.value &&
+      (thread.projectId === null || thread.projectId === selectedProjectId.value),
+  ),
 );
 
 function startNewThread() {
@@ -114,6 +76,11 @@ function startNewThread() {
     return;
   }
   const host = singleManagedHost.value ?? hosts.value[0] ?? null;
+  const fallbackProject = host ? (availableProjectsByHost.value.get(host.id) ?? [])[0] : undefined;
+  if (fallbackProject !== undefined) {
+    sidebarTree.startThreadInProject(fallbackProject);
+    return;
+  }
   if (host !== null) {
     // No project selected: guide the user into the project creation dialog instead of failing.
     openAddProject(host);
@@ -127,7 +94,15 @@ useEventListener(window, "keydown", (event) => {
     event.preventDefault();
     startNewThread();
   }
+  if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key === "k") {
+    event.preventDefault();
+    showSearch.value = true;
+  }
 });
+
+function openAddProject(host: HostRecord) {
+  projectEditor.value = { host, project: null };
+}
 
 function openEditProject(project: ProjectRecord) {
   const host = hosts.value.find((item) => item.id === project.hostId);
@@ -137,10 +112,25 @@ function openEditProject(project: ProjectRecord) {
   projectEditor.value = { host, project };
 }
 
-async function openHostMonitor(hostId: number) {
-  if (selectedHostId.value !== hostId) await catalog.selectHost(hostId);
+async function openHostMonitor(host: HostRecord) {
+  if (selectedHostId.value !== host.id) await catalog.selectHost(host.id);
   await nextTick();
   workspaceActions.openHostMonitor();
+}
+
+function selectProject(project: ProjectRecord, event: MouseEvent) {
+  if (longPressTriggered.value) return;
+  if (event.button !== 0) return;
+  if (project.hostId !== selectedHostId.value) {
+    void catalog.selectHost(project.hostId);
+  }
+  if (project.id !== selectedProjectId.value) {
+    void catalog.selectProject(project.id);
+  } else if (navigation.newThreadDraft) {
+    // Clicking the already-selected project leaves the draft and shows the project page.
+    navigation.newThreadDraft = false;
+    syncSelectedRoute();
+  }
 }
 </script>
 
@@ -149,81 +139,84 @@ async function openHostMonitor(hostId: number) {
     v-bind="$attrs"
     class="relative flex h-full min-h-0 flex-col border-r border-hairline bg-canvas-soft"
   >
-    <SidebarWorkspaceToolbar
-      v-if="workspaceToolbar"
-      :title="selectedHostTitle"
-      :can-launch="canLaunch"
-      :tmux-active-count="tmuxActiveCount"
-      @open-tmux="tmuxLauncher.open"
-      @open-terminal="workspaceActions.openTerminal"
-      @open-browser="showBrowserDialog = true"
-      @open-host-monitor="workspaceActions.openHostMonitor"
-    />
-    <div class="px-3 pb-1">
-      <Button data-testid="sidebar-new-thread" class="w-full gap-2" @click="startNewThread">
-        <SquarePenIcon class="size-4" />
-        {{ t("app.newThread") }}
-      </Button>
+    <div class="flex h-12 shrink-0 items-center justify-between px-3">
+      <span class="truncate text-sm font-semibold text-ink">Codex Gateway</span>
+      <SidebarTrigger
+        v-if="collapsible"
+        data-testid="sidebar-collapse"
+        :title="t('app.collapseSidebar')"
+        :aria-label="t('app.collapseSidebar')"
+      />
     </div>
-    <div class="flex min-h-0 flex-1 overflow-hidden px-3 py-3">
+
+    <div class="shrink-0 space-y-0.5 px-2 pb-2">
+      <button
+        type="button"
+        data-testid="sidebar-new-thread"
+        class="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink hover:bg-surface"
+        @click="startNewThread"
+      >
+        <SquarePenIcon class="size-4 shrink-0 text-ink-muted" />
+        <span class="min-w-0 flex-1 truncate text-left">{{ t("app.newThread") }}</span>
+        <kbd class="text-[0.6875rem] text-ink-faint">⌘N</kbd>
+      </button>
+      <button
+        type="button"
+        data-testid="sidebar-search-threads"
+        class="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink hover:bg-surface"
+        @click="showSearch = true"
+      >
+        <SearchIcon class="size-4 shrink-0 text-ink-muted" />
+        <span class="min-w-0 flex-1 truncate text-left">{{ t("app.searchThreads") }}</span>
+        <kbd class="text-[0.6875rem] text-ink-faint">⌘K</kbd>
+      </button>
+    </div>
+
+    <div class="flex min-h-0 flex-1 overflow-hidden px-2 pb-2">
       <SidebarScrollArea>
         <div class="min-w-0 max-w-full space-y-4 overflow-hidden pr-1">
-          <PinnedThreadList
-            :threads="pinnedThreads"
+          <SidebarProjectsSection
             :hosts="hosts"
-            :selected-host-id="selectedHostId"
-            :selected-thread-id="selectedThreadId"
+            :projects-by-host="availableProjectsByHost"
+            :missing-projects-by-host="missingProjectsByHost"
+            :host-connection-statuses="hostConnectionStatuses"
+            :selected-project-id="selectedProjectId"
             :long-press-handlers="longPressContextMenuHandlers"
-            :runtime-status="pinnedRuntimeStatus"
-            :completion-attention="pinnedCompletionAttention"
-            @open="openPinnedThread"
-            @unpin="navigation.setPinnedThread($event, false)"
-            @rename="threadRename.startRename"
+            @select-project="selectProject"
+            @start-thread="sidebarTree.startThreadInProject"
+            @edit-project="openEditProject"
+            @delete-project="(project) => catalog.deleteProject(project.id)"
+            @add-project="openAddProject"
+            @monitor-host="openHostMonitor"
+            @delete-host="(host) => catalog.deleteHost(host.id)"
           />
 
-          <RecentThreadList
-            :threads="recentThreads"
-            :selected-host-id="selectedHostId"
+          <SidebarThreadsSection
+            v-if="selectedProjectId !== null"
+            :threads="threads"
+            :pinned-threads="projectPinnedThreads"
+            :hosts="hosts"
             :selected-thread-id="selectedThreadId"
+            :runtime-status="sidebarTree.threadRuntimeStatus"
+            :completion-attention="sidebarTree.threadCompletionAttention"
+            :pinned-runtime-status="sidebarTree.pinnedRuntimeStatus"
+            :pinned-completion-attention="sidebarTree.pinnedCompletionAttention"
             :long-press-handlers="longPressContextMenuHandlers"
-            @open="recentActivity.openRecentThread"
-            @pin="recentActivity.pinRecentThread"
+            @open-thread="(thread) => sidebarTree.openThread(String(thread.id))"
+            @open-pinned-thread="sidebarTree.openPinnedThread"
+            @toggle-pin="(thread) => navigation.setThreadPinned(String(thread.id), !thread.pinned)"
+            @unpin="(thread) => navigation.setPinnedThread(thread, false)"
             @rename="threadRename.startRename"
           />
-
-          <HostTree :controller="hostTreeController" />
         </div>
       </SidebarScrollArea>
     </div>
 
-    <SidebarFooter class="shrink-0 border-t border-hairline p-3">
-      <Button
-        data-testid="settings-toggle"
-        variant="ghost"
-        class="h-10 w-full justify-start gap-3 rounded-lg px-3 text-[0.9375rem] font-normal hover:bg-surface"
-        @click="showSettings = !showSettings"
-      >
-        <SettingsIcon class="size-4" />
-        {{ t("app.settings") }}
-      </Button>
-      <Button
-        v-if="auth.isAdmin"
-        data-testid="admin-console-entry"
-        variant="ghost"
-        class="h-10 w-full justify-start gap-3 rounded-lg px-3 text-[0.9375rem] font-normal hover:bg-surface"
-        as="a"
-        :href="gatewayPath('admin')"
-      >
-        <ShieldIcon class="size-4" />
-        {{ t("app.adminConsole") }}
-      </Button>
+    <SidebarFooter class="shrink-0 border-t border-hairline p-2">
+      <SidebarUserMenu @settings="showSettings = true" />
     </SidebarFooter>
 
-    <BrowserOpenDialog
-      v-if="workspaceToolbar"
-      v-model:open="showBrowserDialog"
-      :open-target="workspaceActions.openBrowser"
-    />
+    <ThreadSearchDialog v-model:open="showSearch" />
 
     <Dialog v-model:open="showSettings">
       <DialogContent

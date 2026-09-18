@@ -6,17 +6,23 @@ import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
 import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
 import { gatewayDomainEvents } from "@/stores/gateway/domain-events";
 
+const props = defineProps<{
+  /** Project-page variant shows the project name instead of the raw path only. */
+  projectPage?: boolean;
+}>();
+
 const catalog = useGatewayCatalogStore();
 const navigation = useGatewayNavigationStore();
 const threadView = useGatewayThreadViewStore();
 const { t } = useI18n();
 
-const projectPath = computed(
-  () =>
-    projectById(catalog.projects, navigation.selectedProjectId)?.remotePath ??
-    threadView.currentThread?.cwd ??
-    null,
-);
+const project = computed(() => projectById(catalog.projects, navigation.selectedProjectId));
+const subtitle = computed(() => {
+  if (props.projectPage === true) {
+    return [project.value?.name, project.value?.remotePath].filter(Boolean).join(" · ");
+  }
+  return project.value?.remotePath ?? threadView.currentThread?.cwd ?? null;
+});
 
 const examples = computed(() => [
   t("app.newThreadExample1"),
@@ -32,18 +38,21 @@ function pickExample(text: string) {
 <template>
   <div
     data-testid="new-thread-hero"
-    class="mx-auto flex w-full max-w-4xl flex-1 flex-col items-center justify-center gap-4 px-4 text-center"
+    class="mx-auto flex w-full max-w-3xl flex-col items-center justify-center gap-3 px-4 text-center"
   >
-    <h2 class="text-[clamp(1.375rem,3vw,1.75rem)] font-semibold text-ink">
-      {{ t("app.newThreadHeroTitle") }}
+    <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-semibold text-ink">
+      {{ t("app.newChatGreeting") }}
     </h2>
-    <p v-if="projectPath" class="truncate font-mono text-xs text-ink-faint">{{ projectPath }}</p>
+    <p v-if="subtitle" class="max-w-full truncate text-xs text-ink-faint">{{ subtitle }}</p>
+    <div class="w-full">
+      <slot />
+    </div>
     <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-center">
       <button
         v-for="example in examples"
         :key="example"
         type="button"
-        class="rounded-full border border-hairline px-4 py-2 text-sm text-ink-secondary hover:bg-surface"
+        class="rounded-full border border-hairline px-4 py-2 text-sm text-ink-secondary hover:bg-canvas-soft"
         @click="pickExample(example)"
       >
         {{ example }}

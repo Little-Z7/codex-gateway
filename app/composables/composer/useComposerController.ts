@@ -94,7 +94,7 @@ export function useComposerController() {
   );
   const canSendTurn = computed(
     () =>
-      selectedThreadId.value !== null &&
+      (selectedThreadId.value !== null || navigation.newThreadDraft) &&
       submit.hasComposerInput.value &&
       !attachmentUpload.uploadingAttachments.value,
   );
@@ -150,7 +150,7 @@ export function useComposerController() {
       return;
     }
     event.preventDefault();
-    if (selectedThreadId.value === null) {
+    if (selectedThreadId.value === null && !navigation.newThreadDraft) {
       return;
     }
     void submitComposer();

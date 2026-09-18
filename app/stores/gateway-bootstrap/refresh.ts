@@ -47,6 +47,8 @@ export async function refreshGatewayClient() {
     }
     navigation.selectedProjectId = routeHostExists ? routeSelection.projectId : null;
     navigation.selectedThreadId = routeHostExists ? routeSelection.threadId : null;
+    navigation.newThreadDraft =
+      routeHostExists && routeSelection.threadId === null ? routeSelection.draft : false;
     views.resetCurrentView();
 
     const viewUnchanged = () => sessionIsCurrent() && views.viewEpoch === refreshViewEpoch;

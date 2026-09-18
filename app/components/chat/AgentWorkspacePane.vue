@@ -13,6 +13,7 @@ import McpRuntimeStatusBar from "@/components/thread/McpRuntimeStatusBar.vue";
 import { useGatewayThreadTurnsStore } from "@/stores/gateway-thread-turns";
 import { useAuthStore } from "@/stores/auth";
 import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
+import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
 import { gatewayPath } from "@/utils/gateway-url";
 import { useChatWorkspaceState } from "./chat-workspace-state";
 
@@ -35,6 +36,7 @@ const {
 const threadTurns = useGatewayThreadTurnsStore();
 const auth = useAuthStore();
 const catalog = useGatewayCatalogStore();
+const navigation = useGatewayNavigationStore();
 const hasNoHosts = computed(() => catalog.hosts.length === 0);
 
 const { t } = useI18n();
@@ -70,10 +72,18 @@ const showThreadLoading = computed(
         </div>
       </ChatPanelScrollArea>
 
-      <NewThreadHero
-        v-else-if="selectedThreadId && historyTurns.length === 0 && !visibleError"
-        class="overflow-y-auto"
-      />
+      <ChatPanelScrollArea
+        v-else-if="
+          (navigation.newThreadDraft ||
+            (selectedThreadId && historyTurns.length === 0 && !visibleError)) &&
+          selectedProjectId
+        "
+        class="flex items-center justify-center"
+      >
+        <NewThreadHero class="py-8">
+          <ChatComposer />
+        </NewThreadHero>
+      </ChatPanelScrollArea>
 
       <ThreadVirtualTimeline
         v-else-if="selectedThreadId"
@@ -90,7 +100,7 @@ const showThreadLoading = computed(
         @load-older="threadTurns.loadOlderTurns"
       />
 
-      <ChatPanelScrollArea v-else-if="selectedProjectId">
+      <ChatPanelScrollArea v-else-if="selectedProjectId" class="flex flex-col">
         <ProjectThreadList />
       </ChatPanelScrollArea>
 
@@ -126,7 +136,12 @@ const showThreadLoading = computed(
       </ChatPanelScrollArea>
 
       <MisalignmentRecoveryCard v-if="selectedThreadId" />
-      <ChatComposer v-if="selectedThreadId || selectedProjectId" />
+      <ChatComposer
+        v-if="
+          selectedThreadId &&
+          (historyTurns.length > 0 || (!navigation.newThreadDraft && Boolean(visibleError)))
+        "
+      />
     </div>
   </div>
 </template>

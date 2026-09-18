@@ -1,12 +1,15 @@
 import { computed, type Ref } from "vue";
+import { toast } from "@codex-gateway/ui/sonner";
 
 import type { ComposerTurnOptions } from "~~/shared/types";
 import type { ComposerFileReference } from "@/stores/gateway/types";
 import { useGatewayBootstrapStore } from "@/stores/gateway-bootstrap";
 import { useGatewayComposerStore } from "@/stores/gateway-composer";
+import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
 import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
 import { useGatewayThreadTurnsStore } from "@/stores/gateway-thread-turns";
 import { buildThreadCollaborationMode } from "@/utils/thread-collaboration-mode";
+import { messageFromError } from "@/stores/gateway/thread-utils/identity";
 
 type AttachedFile = {
   name: string;
@@ -46,13 +49,30 @@ export function useComposerTurnSubmit(input: {
   }
 
   async function startNewThread() {
-    input.clearDraft();
-    await threadView.startThread(input.selectedTurnOptions());
+    const navigation = useGatewayNavigationStore();
+    if (navigation.selectedProjectId === null) return;
+    threadView.startDraftThread({
+      hostId: navigation.selectedHostId ?? 0,
+      projectId: navigation.selectedProjectId,
+    });
   }
 
   async function submitTurn() {
     const text = input.turnText.value.trim();
     if (!text && !input.attachedFiles.value.length) return;
+    const navigation = useGatewayNavigationStore();
+    if (navigation.newThreadDraft && navigation.selectedThreadId === null) {
+      // A draft has no app-server thread yet; create it on first send so the conversation
+      // only materializes after the user actually submits a message.
+      try {
+        await threadView.startThread(input.selectedTurnOptions());
+      } catch (error: unknown) {
+        toast.error(
+          messageFromError(error, gateway.t("app.startThreadFailed"), gateway.errorLabels),
+        );
+        return;
+      }
+    }
     if (planModeActive.value) {
       composer.dismissLatestSelectedPlanPrompt();
     }
