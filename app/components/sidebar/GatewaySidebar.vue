@@ -126,9 +126,10 @@ function selectProject(project: ProjectRecord, event: MouseEvent) {
   }
   if (project.id !== selectedProjectId.value) {
     void catalog.selectProject(project.id);
-  } else if (navigation.newThreadDraft) {
-    // Clicking the already-selected project leaves the draft and shows the project page.
+  } else if (navigation.newThreadDraft || navigation.selectedThreadId !== null) {
+    // Clicking the already-selected project leaves the draft/thread and shows the project page.
     navigation.newThreadDraft = false;
+    navigation.selectedThreadId = null;
     syncSelectedRoute();
   }
 }
