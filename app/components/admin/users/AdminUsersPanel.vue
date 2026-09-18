@@ -654,7 +654,7 @@ async function removeManagedHost() {
       </Button>
     </div>
 
-    <div class="hidden md:block overflow-x-auto">
+    <div class="hidden max-w-full overflow-x-auto md:block">
       <Table>
         <TableHeader>
           <TableRow>
@@ -676,7 +676,7 @@ async function removeManagedHost() {
             <TableHead v-if="props.extended">{{ t("app.adminUserOnlineSessions") }}</TableHead>
             <TableHead>{{ t("app.adminBudgetColumn") }}</TableHead>
             <TableHead>{{ t("app.adminUserCreatedAt") }}</TableHead>
-            <TableHead class="sticky right-0 bg-surface text-right">{{
+            <TableHead class="sticky right-0 z-10 bg-surface text-right">{{
               t("app.adminUserActions")
             }}</TableHead>
           </TableRow>
@@ -783,7 +783,7 @@ async function removeManagedHost() {
               </div>
             </TableCell>
             <TableCell class="text-ink-secondary">{{ user.createdAt.slice(0, 10) }}</TableCell>
-            <TableCell class="sticky right-0 bg-surface text-right">
+            <TableCell class="sticky right-0 z-10 bg-surface text-right">
               <div class="flex flex-wrap justify-end gap-1">
                 <template v-if="provisioning?.enabled">
                   <Button
