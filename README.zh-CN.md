@@ -149,7 +149,7 @@ Browser
 本 fork 在上游基础上增加多用户与运维能力：
 
 - **多用户容器工作区**：管理员为成员一键 provision 独立 Docker 容器（独立 home 卷、SSH 接入、每用户内存/CPU 配额）；成员只能看到自己的托管工作区。
-- **管理员后台 `/gw/admin`**：用户/会话/容器管理与批量操作、用户详情页、镜像重建与滚动重建、用量统计（按天聚合 turn/token）、审计日志（筛选 + CSV 导出 + 保留天数）、系统设置与一键备份。
+- **管理员后台 `/gw/admin`**：用户/会话/容器管理与批量操作、用户详情页、镜像重建与滚动重建、用量统计（按天聚合 turn/token）、按用户的日/月 token 与 turn 额度（全局默认 + 覆盖 + 超额拦截）、审计日志（筛选 + CSV 导出 + 保留天数）、系统设置与一键备份。
 - **同源浏览器预览**：预览与 Gateway 同端口同域，由 HttpOnly cookie 路由，无需通配 DNS 或额外端口。
 - **共享模型 provider**：成员共享 ChatGPT 登录或共享 API-key provider；provider 在后台可编辑（DB 优先于 env）。
 - **首次运行引导**：空数据库首次打开页面即可创建首个管理员账号。
@@ -225,7 +225,7 @@ CODEX_GATEWAY_DB_PATH="./data/codex-gateway.db" \
 pnpm user:create -- --admin <username> <password>
 ```
 
-普通用户由管理员在"设置 → 用户管理"中创建，并可在那里分配托管 host。
+普通用户由管理员在后台「用户」页创建（可生成初始密码、要求首次登录改密），并可在那里分配托管 host 与用量额度。
 
 `CODEX_GATEWAY_CONFIG_SECRET` 用于加密保存连接配置。生产环境必须设置稳定且足够长的 secret；更换 secret 会导致已有加密配置无法解密。
 

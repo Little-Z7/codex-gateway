@@ -151,7 +151,7 @@ Core rules:
 This fork adds multi-user and operations capabilities on top:
 
 - **Per-user container workspaces**: admins provision an isolated Docker container per member (dedicated home volume, SSH access, per-user memory/CPU quotas); members only see their own managed workspace.
-- **Admin console `/gw/admin`**: user/session/container management with bulk actions, user detail pages, image rebuild and rolling recreate, usage statistics (daily turn/token aggregation), audit log (filters + CSV export + retention), system settings, and one-click backups.
+- **Admin console `/gw/admin`**: user/session/container management with bulk actions, user detail pages, image rebuild and rolling recreate, usage statistics (daily turn/token aggregation), per-user daily/monthly token and turn budgets (global defaults, overrides, and turn intercept), audit log (filters + CSV export + retention), system settings, and one-click backups.
 - **Same-origin browser previews**: previews share the Gateway port and origin, routed by an HttpOnly cookie — no wildcard DNS or extra ports.
 - **Shared model provider**: members share a ChatGPT login or a shared API-key provider; the provider is editable in the console (DB overrides env).
 - **First-run setup**: opening the app on an empty database offers admin creation directly.
@@ -228,7 +228,7 @@ CODEX_GATEWAY_DB_PATH="./data/codex-gateway.db" \
 pnpm user:create -- --admin <username> <password>
 ```
 
-Regular users are created by an administrator in Settings → User management, where they can also be assigned a managed host.
+Regular users are created by an administrator in the admin console Users tab (optional generated initial password and first-login password change), where they can also be assigned a managed host and a usage budget.
 
 `CODEX_GATEWAY_CONFIG_SECRET` encrypts stored connection config. Use a stable, sufficiently long secret in production. Changing it makes existing encrypted config unreadable.
 

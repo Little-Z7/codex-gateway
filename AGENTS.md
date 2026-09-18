@@ -6,14 +6,14 @@
 - `packages/gateway-ui/`、`packages/gateway-ai-elements/`：预编译的 shadcn-vue 和 AI Elements 组件；`packages/gateway-browser-runtime/`：重型浏览器依赖。业务组件优先复用这些包的公开导出。
 - `app/stores/`：按领域拆分的 Pinia store；状态和动作放在对应领域，跨领域事件沿用现有 `gateway/domain-events.ts` 等机制，不重新集中到单个 gateway store。
 - `server/api/`、`server/routes/`：Nuxt/Nitro HTTP、WebSocket 和代理入口，浏览器通过 Gateway 访问远端服务。
-- `server/utils/gateway/`：后端 gateway 核心，包括 SSH、Codex app-server RPC、thread broker、运行时索引。
+- `server/utils/gateway/`：后端 gateway 核心，包括 SSH、Codex app-server RPC、thread broker、运行时索引。用量额度拦截入口在 `server/utils/gateway/realtime/turn-start.ts` 的 `startTurnFromRealtime`（新 turn 发起前校验，不打断已在运行的 turn）。
 - `server/nitro/node-entry.mjs`：自定义 Nitro entry，`/gw/` 之外的请求与 WS upgrade 全部走按 cookie 路由的同源预览代理。
 - `server/utils/gateway/provisioning/`：直连 Docker Engine API 的用户容器 provisioning（不引入新依赖）。
 - `server/api/admin/`：admin 角色专用接口（用户管理、托管 host、容器生命周期、用量、设置、备份、审计导出）。
 - `server/api/setup/`：首次运行引导接口（`users` 表为空时允许创建首个 admin，之后一律 409）。
 - `server/utils/gateway/settings/`：DB 优先的持久化设置层（DB > env > 默认，带内存缓存）；`server/utils/gateway/audit/`：审计日志存储/查询/导出/清理。
 - `app/components/admin/`：后台管理台组件（`/gw/admin`，六个 tab：总览/用户/容器/用量/会话/系统）。
-- SQLite 主要表：`users`/`sessions` 账号与会话；`managed_hosts` 用户托管工作区（含配额覆盖）；`audit_log` 管理员写操作审计；`usage_daily` 按（用户×天×模型）聚合的 turn/token 用量；`gateway_settings` 持久化设置；`tmux_monitors` 监控绑定。
+- SQLite 主要表：`users`/`sessions` 账号与会话；`managed_hosts` 用户托管工作区（含配额覆盖）；`user_budgets` 按用户的日/月 token 与 turn 额度覆盖（NULL 表示该维度不限，无行则用全局默认）；`audit_log` 管理员写操作审计；`usage_daily` 按（用户×天×模型）聚合的 turn/token 用量；`gateway_settings` 持久化设置；`tmux_monitors` 监控绑定。
 - `deploy/`：用户工作区镜像（`deploy/user-container/`）与部署脚本/手册（`deploy/scripts/`、`deploy/README.zh-CN.md`）。
 - Gateway UI 与 API 位于 `app.baseURL=/gw/` 之下，前端拼 URL 统一用 `app/utils/gateway-url.ts` 的 `gatewayPath`。
 - `shared/types.ts`：前后端共享 DTO 和类型。

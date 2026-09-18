@@ -90,15 +90,31 @@ docker compose up -d codex-gateway
 管理员登录后打开 `http://<host>:3000/gw/admin`（或工作区侧栏入口）。后台分六个 tab：
 
 - **总览**：用户/在线会话/容器状态/用户卷容量，以及"今日 turn 数""今日 token"两张用量卡；磁盘超过阈值（`CODEX_GATEWAY_VOLUME_WARN_BYTES`，默认 20 GiB）的工作区在此汇总。
-- **用户**：列表支持角色/状态/容器筛选、多选批量启用/禁用/删除（可选保留数据卷）、导出 CSV。点用户名进入详情页：基本信息、在线会话（可逐个或批量撤销）、托管 host、容器资源、对话统计（来自运行时缓存，重启后为空）、该用户最近 50 条审计。
+- **用户**：列表支持角色/状态/容器筛选、按用户名/最后登录/额度用量排序、多选批量启用/禁用/删除（可选保留数据卷）、导出 CSV。创建用户时可生成并复制初始密码、填写显示名与备注，并可勾选「要求首次登录修改密码」。点用户名进入详情页：基本信息（可编辑显示名/备注）、在线会话（可逐个或批量撤销）、用量额度、托管 host、容器资源、对话统计（来自运行时缓存，重启后为空）、该用户最近 50 条审计。
 - **容器**：每行显示容器状态、镜像 digest（短 12 位）、容器内 Codex 版本（与 `SUPPORTED_CODEX_VERSION` 不一致时黄色徽标）、CPU/内存（无内存限制显示"不限"）；支持多选批量启动/停止/重建（保留卷）、日志弹窗（可开"跟随"每 2s 追加）。
-- **用量**：按用户/天/模型的 turn 与 token 聚合图表 + 明细表 + CSV 导出。
+- **用量**：按用户/天/模型的 turn 与 token 聚合图表 + 明细表 + CSV 导出；顶部显示本期超额用户数，表格标记是否超额。
 - **会话**：全部在线会话（可撤销）与审计日志（筛选 + CSV 导出，显示保留天数）。
-- **系统**：运行态指标（WS/SSH/RPC/事件缓存/内存）、模型 provider 编辑、共享登录、安全设置与锁定列表、通知默认值、备份、审计保留天数。
+- **系统**：运行态指标（WS/SSH/RPC/事件缓存/内存）、模型 provider 编辑、共享登录、额度默认值、安全设置与锁定列表、通知默认值、备份、审计保留天数。
+
+### 用户管理
+
+- **初始密码**：创建对话框可「生成密码」并「复制」，避免管理员手输后无法告知成员。
+- **强制改密**：勾选「要求首次登录修改密码」后，该用户登录会进入改密页（复用 `POST /api/auth/password`）。即使系统关闭了成员自助改密，此流程仍允许，改完即清除标记。
+- **显示名与备注**：`users.display_name` / `users.note` 可在列表搜索、详情编辑；侧栏用户行优先显示显示名。
 
 ### 用户配额
 
-`managed_hosts` 支持每用户 `memory_limit`/`cpu_limit` 覆盖（详情页「配额」卡），优先于全局 `CODEX_GATEWAY_USER_CONTAINER_MEMORY/CPUS`；保存后需「立即重建（保留数据卷）」生效。
+`managed_hosts` 支持每用户 `memory_limit`/`cpu_limit` 覆盖（详情页「配额」卡），优先于全局 `CODEX_GATEWAY_USER_CONTAINER_MEMORY/CPUS`；保存后需「立即重建（保留数据卷）」生效。这是容器 CPU/内存配额，不是 token 额度。
+
+### 用量额度
+
+额度按 Gateway 用户（`currentGatewayUserId()`）计算，管理员同样受约束，除非其额度设为不限。日/月口径与 `usage_daily.day` 一致（UTC 日期）。
+
+- **全局默认**：系统页「额度默认值」卡，写入 `gateway_settings` 的 `budget.defaults`（`dailyTokens` / `monthlyTokens` / `dailyTurns` / `monthlyTurns` + `warnPercent`，默认 80）。字段留空 = 该维度不限。
+- **按用户覆盖**：`user_budgets` 一行覆盖该用户四维度；「使用全局默认」删除该行。任一字段 NULL = 该维度不限。
+- **拦截**：在 `startTurnFromRealtime`（`turn.start`）校验。命中任一超额维度即拒绝，**不下发到 app-server**，返回 `budget.exceeded`（`dimension` / `used` / `limit` / `resetAt`）。已在运行的 turn 不打断，只拦新发起。前端 composer 显示阻断提示并禁用发送，Sonner 提示一次；达到 `warnPercent` 时仅低干扰提示。
+- **重置**：详情页「重置本期用量」把该用户当月（含今日）`usage_daily` 的 turns/token 清零，并写审计 `budget.reset`。UI 会显示最近重置时间。
+- **成员自查**：设置 → 账户 显示自己的额度进度条；`GET /api/usage/me` 返回用量与上限。
 
 ### 镜像与滚动重建
 
@@ -112,6 +128,7 @@ docker compose up -d codex-gateway
 - **安全**：登录失败上限、锁定时长、会话有效期、是否允许成员自助改密码。
 - **通知**：全局默认 Bark 服务器地址（用户未填时用它）。
 - **审计**：审计日志保留天数（默认 180），每天 03:00 自动清理并写 `audit.prune` 审计。
+- **额度默认值**：见上文「用量额度」。
 
 ### 用量统计口径
 
