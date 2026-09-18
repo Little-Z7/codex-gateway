@@ -1150,15 +1150,17 @@
     "auth.passwordChangeDisabled": "管理员已关闭自助修改密码",
     "admin.backupNotFound": "备份不存在",
     "setup.completed": "Gateway 已完成初始化",
-    "budget.exceeded": "用量额度已用尽（{used}/{limit}），将于 {resetAt} 重置，请联系管理员调整",
-    "budget.exceeded.dailyTokens": "今日 token 额度已用尽（{used}/{limit}），将于 {resetAt} 重置，请联系管理员调整",
-    "budget.exceeded.monthlyTokens": "本月 token 额度已用尽（{used}/{limit}），将于 {resetAt} 重置，请联系管理员调整",
-    "budget.exceeded.dailyTurns": "今日对话轮次额度已用尽（{used}/{limit}），将于 {resetAt} 重置，请联系管理员调整",
-    "budget.exceeded.monthlyTurns": "本月对话轮次额度已用尽（{used}/{limit}），将于 {resetAt} 重置，请联系管理员调整",
-    "budget.warning": "用量已达到预警（{used}/{limit}），将于 {resetAt} 重置",
-    "budget.warning.dailyTokens": "今日 token 即将用尽（{used}/{limit}），将于 {resetAt} 重置",
-    "budget.warning.monthlyTokens": "本月 token 即将用尽（{used}/{limit}），将于 {resetAt} 重置",
-    "budget.warning.dailyTurns": "今日对话轮次即将用尽（{used}/{limit}），将于 {resetAt} 重置",
-    "budget.warning.monthlyTurns": "本月对话轮次即将用尽（{used}/{limit}），将于 {resetAt} 重置"
+    "budget": {
+      "exceeded": "用量额度已用尽（{used}/{limit}），将于 {resetAt} 重置，请联系管理员调整",
+      "exceededDailyTokens": "今日 token 额度已用尽（{used}/{limit}），将于 {resetAt} 重置，请联系管理员调整",
+      "exceededMonthlyTokens": "本月 token 额度已用尽（{used}/{limit}），将于 {resetAt} 重置，请联系管理员调整",
+      "exceededDailyTurns": "今日对话轮次额度已用尽（{used}/{limit}），将于 {resetAt} 重置，请联系管理员调整",
+      "exceededMonthlyTurns": "本月对话轮次额度已用尽（{used}/{limit}），将于 {resetAt} 重置，请联系管理员调整",
+      "warning": "用量已达到预警（{used}/{limit}），将于 {resetAt} 重置",
+      "warningDailyTokens": "今日 token 即将用尽（{used}/{limit}），将于 {resetAt} 重置",
+      "warningMonthlyTokens": "本月 token 即将用尽（{used}/{limit}），将于 {resetAt} 重置",
+      "warningDailyTurns": "今日对话轮次即将用尽（{used}/{limit}），将于 {resetAt} 重置",
+      "warningMonthlyTurns": "本月对话轮次即将用尽（{used}/{limit}），将于 {resetAt} 重置"
+    }
   }
 }

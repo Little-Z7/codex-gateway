@@ -1150,15 +1150,17 @@
     "auth.passwordChangeDisabled": "Self-service password change is disabled",
     "admin.backupNotFound": "Backup not found",
     "setup.completed": "Gateway is already initialized",
-    "budget.exceeded": "Usage budget exhausted ({used}/{limit}). Resets at {resetAt}. Ask an admin to raise the limit.",
-    "budget.exceeded.dailyTokens": "Today's token budget is exhausted ({used}/{limit}). Resets at {resetAt}. Ask an admin to raise the limit.",
-    "budget.exceeded.monthlyTokens": "This month's token budget is exhausted ({used}/{limit}). Resets at {resetAt}. Ask an admin to raise the limit.",
-    "budget.exceeded.dailyTurns": "Today's turn budget is exhausted ({used}/{limit}). Resets at {resetAt}. Ask an admin to raise the limit.",
-    "budget.exceeded.monthlyTurns": "This month's turn budget is exhausted ({used}/{limit}). Resets at {resetAt}. Ask an admin to raise the limit.",
-    "budget.warning": "Usage is near the budget ({used}/{limit}). Resets at {resetAt}.",
-    "budget.warning.dailyTokens": "Today's token budget is nearly exhausted ({used}/{limit}). Resets at {resetAt}.",
-    "budget.warning.monthlyTokens": "This month's token budget is nearly exhausted ({used}/{limit}). Resets at {resetAt}.",
-    "budget.warning.dailyTurns": "Today's turn budget is nearly exhausted ({used}/{limit}). Resets at {resetAt}.",
-    "budget.warning.monthlyTurns": "This month's turn budget is nearly exhausted ({used}/{limit}). Resets at {resetAt}."
+    "budget": {
+      "exceeded": "Usage budget exhausted ({used}/{limit}). Resets at {resetAt}. Ask an admin to raise the limit.",
+      "exceededDailyTokens": "Today's token budget is exhausted ({used}/{limit}). Resets at {resetAt}. Ask an admin to raise the limit.",
+      "exceededMonthlyTokens": "This month's token budget is exhausted ({used}/{limit}). Resets at {resetAt}. Ask an admin to raise the limit.",
+      "exceededDailyTurns": "Today's turn budget is exhausted ({used}/{limit}). Resets at {resetAt}. Ask an admin to raise the limit.",
+      "exceededMonthlyTurns": "This month's turn budget is exhausted ({used}/{limit}). Resets at {resetAt}. Ask an admin to raise the limit.",
+      "warning": "Usage is near the budget ({used}/{limit}). Resets at {resetAt}.",
+      "warningDailyTokens": "Today's token budget is nearly exhausted ({used}/{limit}). Resets at {resetAt}.",
+      "warningMonthlyTokens": "This month's token budget is nearly exhausted ({used}/{limit}). Resets at {resetAt}.",
+      "warningDailyTurns": "Today's turn budget is nearly exhausted ({used}/{limit}). Resets at {resetAt}.",
+      "warningMonthlyTurns": "This month's turn budget is nearly exhausted ({used}/{limit}). Resets at {resetAt}."
+    }
   }
 }

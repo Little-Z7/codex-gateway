@@ -40,17 +40,10 @@ export const useGatewayBudgetStore = defineStore("gateway-budget", () => {
     resetAt: string,
     blocking: boolean,
   ) {
-    const code = blocking
-      ? `errors.budget.exceeded.${dimension}`
-      : `errors.budget.warning.${dimension}`;
-    if (i18n.te(code)) {
-      return i18n.t(code, {
-        used: formatBudgetNumber(used),
-        limit: formatBudgetNumber(limit),
-        resetAt: formatResetClock(resetAt),
-      });
-    }
-    return i18n.t(blocking ? "errors.budget.exceeded" : "errors.budget.warning", {
+    const kind = blocking ? "exceeded" : "warning";
+    const specific = `errors.budget.${kind}${dimension.charAt(0).toUpperCase()}${dimension.slice(1)}`;
+    const key = i18n.te(specific) ? specific : `errors.budget.${kind}`;
+    return i18n.t(key, {
       used: formatBudgetNumber(used),
       limit: formatBudgetNumber(limit),
       resetAt: formatResetClock(resetAt),
