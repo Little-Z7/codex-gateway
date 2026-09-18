@@ -1,4 +1,4 @@
-import type { HostRecord, RpcEnvelope } from "~~/shared/types";
+import type { HostRecord, RpcEnvelope, ThreadSettingsState } from "~~/shared/types";
 import {
   isAppServerSubAgentThread,
   parseThreadReadResult,
@@ -10,11 +10,13 @@ import {
 } from "~~/shared/thread-runtime-status";
 import { recordFromUnknown } from "~~/shared/utils/records";
 import { bindGatewayUser } from "../state/memory";
+import { gatewayEventStore } from "../state/gateway-events";
 import { threadSnapshotStore } from "../state/thread-snapshots";
 import { threadRuntimeEvents } from "./thread-runtime-events";
 import type { ThreadOpenSnapshot } from "./types";
 import { createThreadNotificationResolvers } from "./notification-rpc-resolvers";
 import type { AgentRpcClient, ProviderAdapter } from "../agent/provider-adapter";
+import { extractThreadSettings, latestThreadSettingsFromEvents } from "../protocol/thread-payload";
 
 export class ThreadController {
   readonly client: AgentRpcClient;
@@ -24,6 +26,7 @@ export class ThreadController {
   private closed = false;
   private activeMainThread = false;
   private subAgentThread = false;
+  private resumeSettings: ThreadSettingsState | null = null;
 
   constructor(
     readonly host: HostRecord,
@@ -40,7 +43,10 @@ export class ThreadController {
     this.connected = connected;
     this.subscribed = subscribed;
     const cachedSnapshot = threadSnapshotStore.get(host.id, threadId);
-    if (cachedSnapshot !== null) this.updateMonitoringStateFromSnapshot(cachedSnapshot);
+    if (cachedSnapshot !== null) {
+      this.updateMonitoringStateFromSnapshot(cachedSnapshot);
+      this.resumeSettings = cachedSnapshot.threadSettings;
+    }
     if (this.ownsClient) {
       this.client.on(
         "notification",
@@ -112,7 +118,7 @@ export class ThreadController {
     this.subscribed = false;
   }
 
-  async ensureSubscribed() {
+  async ensureSubscribed(force = false) {
     await this.ensureConnected();
     await this.enqueue(async () => {
       // Check and mutation must share the serialized critical section. Two browser peers can
@@ -122,7 +128,7 @@ export class ThreadController {
       // attached; it has no ThreadResumeResponse. Existing threads must still resume once when
       // their materialized snapshot does not yet contain model/effort. This is the app-server's
       // authoritative settings read, not a presentation fallback.
-      if (this.subscribed && this.getOpenSnapshot()?.threadSettings != null) return;
+      if (!force && this.subscribed && this.getOpenSnapshot()?.threadSettings != null) return;
       // Fresh threads never enter this branch: ControllerRegistry keeps thread/start's implicit
       // subscription under a bootstrap owner until turn/started. Calling thread/resume before that
       // point is invalid because app-server has not materialized a rollout yet.
@@ -179,6 +185,10 @@ export class ThreadController {
 
   getOpenSnapshot() {
     return threadSnapshotStore.get(this.host.id, this.threadId);
+  }
+
+  getResumeSettings() {
+    return this.resumeSettings;
   }
 
   enqueue<T>(operation: () => Promise<T>) {
@@ -255,11 +265,25 @@ export class ThreadController {
       parseThreadResumeResult,
     );
     this.subscribed = true;
-    // Do not synthesize thread/settings/updated from thread/resume. The resume DTO only contains
-    // model/effort, while the official settings notification also contains collaborationMode. A
-    // partial event under the official method name can therefore overwrite an already observed
-    // Plan mode. The open snapshot carries resume settings directly and real settings events remain
-    // the sole source for the complete app-server state.
+    this.resumeSettings = extractThreadSettings(resumed);
+    const latestSettings = latestThreadSettingsFromEvents(
+      gatewayEventStore.list(this.host.id, this.threadId, 0, 200),
+    );
+    if (latestSettings?.collaborationMode !== undefined) {
+      this.resumeSettings = {
+        ...this.resumeSettings,
+        collaborationMode: latestSettings.collaborationMode,
+      };
+    }
+    const snapshot = this.getOpenSnapshot();
+    if (snapshot !== null) {
+      this.setOpenSnapshot({ ...snapshot, threadSettings: this.resumeSettings });
+    }
+    // thread/resume is authoritative for model, effort, and approval policy, but it does not carry
+    // collaborationMode. Reuse the newest real settings notification already recorded for this
+    // thread instead of letting an older open snapshot overwrite a remote Plan/Default change.
+    // Do not synthesize a settings notification: the app-server event remains the single source of
+    // truth for fields absent from the resume response.
     return resumed;
   }
 }

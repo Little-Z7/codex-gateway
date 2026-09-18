@@ -88,6 +88,7 @@ export function createRealtimeServerMessageDispatcher(ctx: RealtimeServerMessage
             "thread.started",
             "thread.turns.page",
             "thread.items.page",
+            "thread.settings.snapshot",
             "turn.start.accepted",
             "turn.steer.accepted",
             "turn.interrupt.accepted",

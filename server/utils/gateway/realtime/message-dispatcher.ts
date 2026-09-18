@@ -146,6 +146,9 @@ export class RealtimeMessageDispatcher {
       .with({ type: "thread.subscribe" }, (value) =>
         this.dispatchEntry(peer, value, this.handlers[value.type]),
       )
+      .with({ type: "thread.settings.read" }, (value) =>
+        this.dispatchEntry(peer, value, this.handlers[value.type]),
+      )
       .with({ type: "thread.turns.load" }, (value) =>
         this.dispatchEntry(peer, value, this.handlers[value.type]),
       )

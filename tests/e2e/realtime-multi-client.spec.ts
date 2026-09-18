@@ -15,6 +15,53 @@ import { AGENT_OUTPUT_TIMEOUT_MS } from "./helpers/timeouts";
 
 test.describe.configure({ mode: "serial" });
 
+test("refreshes thread settings after a disconnected browser reconnects", async ({
+  browser,
+  page,
+  remoteWorkspace,
+}) => {
+  test.setTimeout(4 * 60_000);
+  await installRealtimeSocketProbe(page);
+  await openApp(page);
+  await expect.poll(() => activeRealtimeSocketCount(page), { timeout: 10_000 }).toBe(1);
+  const { project } = await remoteWorkspace.provision({
+    hostName: `settings-reconnect-${Date.now()}`,
+  });
+  const threadId = await remoteWorkspace.startThread(project.id);
+  await expect(page.getByTestId("model-select")).toContainText("gpt-5.6-luna");
+
+  const secondContext = await browser.newContext({
+    storageState: await page.context().storageState(),
+  });
+  const secondPage = await secondContext.newPage();
+  await installRealtimeSocketProbe(secondPage);
+  await openApp(secondPage, { resetConfig: false });
+  try {
+    await expect
+      .poll(async () => currentSelectedThreadId(secondPage), { timeout: 30_000 })
+      .toBe(threadId);
+    await expect(secondPage.getByTestId("model-select")).toContainText("gpt-5.6-luna");
+
+    await page.getByTestId("model-select").click();
+    await page.getByTestId("model-option-gpt-5.6-sol").click();
+    await page.getByTestId("model-selector-close").click();
+    await expect(page.getByTestId("model-select")).toContainText(/gpt-5\.6-sol/i);
+
+    // Model changes made in another client must be recovered when a user returns to a background
+    // tab, not only after its WebSocket reconnects.
+    await triggerRealtimeResume(secondPage);
+    await expect(secondPage.getByTestId("model-select")).toContainText(/gpt-5\.6-sol/i);
+
+    const reconnectMessageOffset = await realtimeClientMessageCount(secondPage);
+    await closeRealtimeSockets(secondPage);
+    await expect.poll(() => activeRealtimeSocketCount(secondPage), { timeout: 30_000 }).toBe(1);
+    await waitForRealtimeClientMessage(secondPage, "thread.subscribe", reconnectMessageOffset);
+    await expect(secondPage.getByTestId("model-select")).toContainText(/gpt-5\.6-sol/i);
+  } finally {
+    await secondContext.close();
+  }
+});
+
 test("fans out a real remote app-server thread to multiple browser clients across turns", async ({
   browser,
   page,
@@ -145,7 +192,7 @@ test("fans out a real remote app-server thread to multiple browser clients acros
   const secondContext = await browser.newContext({
     storageState: await page.context().storageState(),
   });
-  await openThreadFromProjectOrRestoredState(page, project.id, threadId);
+  await openThreadFromProjectOrRestoredState(page, host.id, project.id, threadId);
   const secondPage = await secondContext.newPage();
   let remoteImageRequestCount = 0;
   secondPage.on("request", (request) => {
@@ -160,7 +207,7 @@ test("fans out a real remote app-server thread to multiple browser clients acros
     // This scenario verifies cross-browser runtime fanout, not last-open restoration. Select the
     // background thread through the same project-tree action a user performs so the assertion does
     // not depend on which tab last wrote browser-local navigation while the new page was starting.
-    await openThreadFromProjectOrRestoredState(secondPage, project.id, backgroundThreadId);
+    await openThreadFromProjectOrRestoredState(secondPage, host.id, project.id, backgroundThreadId);
     await expect
       .poll(async () => currentSelectedThreadId(secondPage), { timeout: 30_000 })
       .toBe(backgroundThreadId);
@@ -191,7 +238,7 @@ test("fans out a real remote app-server thread to multiple browser clients acros
       .poll(() => threadRuntimeStatus(secondPage, host.id, threadId), { timeout: 30_000 })
       .toBe("completed");
 
-    await openThreadFromProjectOrRestoredState(secondPage, project.id, threadId);
+    await openThreadFromProjectOrRestoredState(secondPage, host.id, project.id, threadId);
     await expect(secondPage.getByPlaceholder("输入后续修改要求")).toBeEnabled();
     await expect
       .poll(async () => secondPage.getByTestId("chat-scroll-area").getByText(firstMarker).count(), {
@@ -266,8 +313,8 @@ test("fans out a real remote app-server thread to multiple browser clients acros
     await expect(imageAttachment.locator("img")).toHaveAttribute("src", /^blob:/);
     await expect.poll(() => remoteImageRequestCount).toBe(1);
 
-    await openThreadFromProjectOrRestoredState(secondPage, project.id, backgroundThreadId);
-    await openThreadFromProjectOrRestoredState(secondPage, project.id, threadId);
+    await openThreadFromProjectOrRestoredState(secondPage, host.id, project.id, backgroundThreadId);
+    await openThreadFromProjectOrRestoredState(secondPage, host.id, project.id, threadId);
     await revealVirtualizedChatLocator(secondPage, imageAttachment);
     await expect(imageAttachment.locator("img")).toHaveAttribute("src", /^blob:/);
     // Timeline virtualization intentionally destroys off-thread image DOM. The page-level Blob
@@ -329,6 +376,7 @@ function firstIntermediateStepsToggle(page: Page) {
 
 async function openThreadFromProjectOrRestoredState(
   page: Page,
+  hostId: number,
   projectId: number,
   threadId: string,
 ) {
@@ -336,10 +384,16 @@ async function openThreadFromProjectOrRestoredState(
     return;
   }
 
-  await expect(page.getByTestId(`project-button-${projectId}`)).toBeVisible();
+  const projectButton = page.getByTestId(`project-button-${projectId}`);
+  if (!(await projectButton.isVisible().catch(() => false))) {
+    // A newly opened browser restores its own sidebar expansion state. Follow the same interaction
+    // a user performs instead of assuming that another browser left this host expanded.
+    await page.getByTestId(`host-button-${hostId}`).click();
+  }
+  await expect(projectButton).toBeVisible();
   const row = page.getByTestId(`project-thread-row-${threadId}`);
   if (!(await row.isVisible().catch(() => false))) {
-    await page.getByTestId(`project-button-${projectId}`).click();
+    await projectButton.click();
   }
   if ((await currentSelectedThreadId(page)) === threadId) {
     return;
@@ -373,6 +427,15 @@ async function currentSelectedThreadId(page: Page) {
 
 async function triggerRealtimeResume(page: Page) {
   await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "hidden",
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
     window.dispatchEvent(new Event("focus"));
     document.dispatchEvent(new Event("visibilitychange"));
   });
