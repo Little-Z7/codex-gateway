@@ -22,6 +22,8 @@ import { runTurnRequestWithAutoRetry } from "./retry";
 import { requestTurnStart, requestTurnSteer } from "./transport";
 import type { Translate, TranslateExists, TurnRequestResult } from "./types";
 import { captureSessionEpoch } from "@/utils/session-epoch";
+import { useGatewayBudgetStore } from "@/stores/gateway-budget";
+import { RealtimeRequestError } from "@/stores/gateway-realtime/request-errors";
 
 export async function sendTurn(
   t: Translate,
@@ -115,6 +117,13 @@ export async function sendTurn(
   } catch (error: unknown) {
     if (!sessionIsCurrent()) return false;
     useGatewayThreadTurnsStore().clearRequest(hostId, threadId);
+    if (error instanceof RealtimeRequestError && error.code === "budget.exceeded") {
+      await useGatewayBudgetStore().refresh();
+      if (!shouldSteerActiveTurn) {
+        runtimeStore.setThreadStatus(hostId, threadId, "completed");
+      }
+      return false;
+    }
     gateway.setError(
       messageFromError(error, t("app.sendMessageFailed"), errorMessageLabels(t, te)),
       {

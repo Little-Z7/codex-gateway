@@ -12,6 +12,7 @@ import { useGatewayComposerStore } from "@/stores/gateway-composer";
 import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
 import { useGatewayThreadRuntimeStore } from "@/stores/gateway-thread-runtime";
 import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
+import { useGatewayBudgetStore } from "@/stores/gateway-budget";
 import { latestThreadPlanItem, planItemSummary } from "@/utils/thread-plan";
 import { isThreadGoalOngoing } from "@/utils/thread-goal-display";
 import { useComposerSlashMenu } from "./useComposerSlashMenu";
@@ -23,6 +24,7 @@ export function useComposerController() {
   const navigation = useGatewayNavigationStore();
   const runtime = useGatewayThreadRuntimeStore();
   const threadView = useGatewayThreadViewStore();
+  const budget = useGatewayBudgetStore();
   const { t } = useI18n();
   const { models, loadingModels } = storeToRefs(gateway);
   const { selectedHostId, selectedProjectId, selectedThreadId } = storeToRefs(navigation);
@@ -104,7 +106,9 @@ export function useComposerController() {
   );
   const canUsePrimaryAction = computed(() =>
     Boolean(
-      (canSendTurn.value || canInterruptTurn.value) && !attachmentUpload.uploadingAttachments.value,
+      (canSendTurn.value || canInterruptTurn.value) &&
+      !attachmentUpload.uploadingAttachments.value &&
+      (budget.exceeded === null || canInterruptTurn.value),
     ),
   );
   const sendButtonLabel = computed(() => {

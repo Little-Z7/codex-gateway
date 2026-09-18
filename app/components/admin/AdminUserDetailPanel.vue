@@ -21,6 +21,7 @@ import {
   type AdminUserSummary,
 } from "@/stores/gateway-admin";
 import { messageFromError, errorMessageLabels } from "@/stores/gateway/thread-utils/identity";
+import AdminUserBudgetCard from "./AdminUserBudgetCard.vue";
 
 const props = defineProps<{ userId: number }>();
 const emit = defineEmits<{ back: [] }>();
@@ -56,10 +57,15 @@ const quotaCpus = ref("");
 const quotaSaving = ref(false);
 const quotaInitialized = ref(false);
 const rebuilding = ref(false);
+const displayName = ref("");
+const note = ref("");
+const profileSaving = ref(false);
 
 watch(
   () => user.value?.id,
   () => {
+    displayName.value = user.value?.displayName ?? "";
+    note.value = user.value?.note ?? "";
     if (quotaInitialized.value) return;
     quotaMemory.value = user.value?.managedHost?.quota?.memory ?? "";
     quotaCpus.value = user.value?.managedHost?.quota?.cpus ?? "";
@@ -126,6 +132,22 @@ async function revoke(sessionId: number) {
     showError(error, t("app.adminSessionsRevokeFailed"));
   } finally {
     revoking.value = null;
+  }
+}
+
+async function saveProfile() {
+  if (profileSaving.value || user.value === null) return;
+  profileSaving.value = true;
+  try {
+    await admin.updateUser(props.userId, {
+      displayName: displayName.value,
+      note: note.value,
+    });
+    toast.success(t("app.adminSettingsSave"));
+  } catch (error) {
+    showError(error, t("app.adminUserUpdateFailed"));
+  } finally {
+    profileSaving.value = false;
   }
 }
 
@@ -197,6 +219,14 @@ function fmtBytes(bytes: number | null) {
         <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
           <dt class="text-ink-secondary">{{ t("app.username") }}</dt>
           <dd>{{ user?.username ?? "—" }}</dd>
+          <dt class="text-ink-secondary">{{ t("app.adminDisplayName") }}</dt>
+          <dd>
+            <Input v-model="displayName" data-testid="admin-user-detail-display-name" />
+          </dd>
+          <dt class="text-ink-secondary">{{ t("app.adminUserNote") }}</dt>
+          <dd>
+            <Input v-model="note" data-testid="admin-user-detail-note" />
+          </dd>
           <dt class="text-ink-secondary">{{ t("app.adminUserRole") }}</dt>
           <dd>
             <Badge :variant="user?.role === 'admin' ? 'default' : 'secondary'">
@@ -214,6 +244,15 @@ function fmtBytes(bytes: number | null) {
           <dt class="text-ink-secondary">{{ t("app.adminUserLastLogin") }}</dt>
           <dd>{{ fmt(user?.lastLoginAt ?? null) }}</dd>
         </dl>
+        <Button
+          class="mt-3"
+          size="sm"
+          :disabled="profileSaving"
+          data-testid="admin-user-profile-save"
+          @click="saveProfile"
+        >
+          {{ t("app.adminSettingsSave") }}
+        </Button>
       </section>
 
       <!-- Online sessions -->
@@ -354,6 +393,8 @@ function fmtBytes(bytes: number | null) {
         </dl>
         <div v-else class="text-sm text-ink-muted">—</div>
       </section>
+
+      <AdminUserBudgetCard :user-id="props.userId" />
 
       <!-- Quota -->
       <section

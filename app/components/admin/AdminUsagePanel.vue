@@ -19,7 +19,7 @@ import { messageFromError, errorMessageLabels } from "@/stores/gateway/thread-ut
 const { t, te } = useI18n();
 const admin = useGatewayAdminStore();
 const auth = useAuthStore();
-const { usageRows } = storeToRefs(admin);
+const { usageRows, budgets } = storeToRefs(admin);
 const errorLabels = computed(() => errorMessageLabels(t, te));
 
 // Theme-aware palette: --chart-1..5 are recomputed on light/dark switch by useCssVar.
@@ -74,6 +74,7 @@ async function refresh() {
       admin.loadUsage({ ...range, groupBy: "user" }),
       admin.loadUsage({ ...range, groupBy: "day" }),
       admin.loadUsage({ ...range, groupBy: "model" }),
+      admin.loadBudgets().catch(() => null),
     ]);
     byUser.value = u;
     byDay.value = d;
@@ -103,6 +104,34 @@ async function exportCsv() {
   } catch (error) {
     toast.error(messageFromError(error, t("app.adminExportFailed"), errorLabels.value));
   }
+}
+
+const exceededUserCount = computed(
+  () =>
+    budgets.value.filter((row) => {
+      const limits = row.effective;
+      return (
+        (limits.dailyTokens !== null && row.usage.dailyTokens >= limits.dailyTokens) ||
+        (limits.monthlyTokens !== null && row.usage.monthlyTokens >= limits.monthlyTokens) ||
+        (limits.dailyTurns !== null && row.usage.dailyTurns >= limits.dailyTurns) ||
+        (limits.monthlyTurns !== null && row.usage.monthlyTurns >= limits.monthlyTurns)
+      );
+    }).length,
+);
+
+function usageRowExceeded(row: AdminUsageRow) {
+  if (admin.usageRows.length === 0) return false;
+  const budget = budgets.value.find(
+    (item) => item.username === row.label || String(item.userId) === row.bucket,
+  );
+  if (budget === undefined) return false;
+  const limits = budget.effective;
+  return (
+    (limits.dailyTokens !== null && budget.usage.dailyTokens >= limits.dailyTokens) ||
+    (limits.monthlyTokens !== null && budget.usage.monthlyTokens >= limits.monthlyTokens) ||
+    (limits.dailyTurns !== null && budget.usage.dailyTurns >= limits.dailyTurns) ||
+    (limits.monthlyTurns !== null && budget.usage.monthlyTurns >= limits.monthlyTurns)
+  );
 }
 
 const hasData = computed(
@@ -228,6 +257,14 @@ const modelChart = computed(() => ({
     </div>
 
     <div
+      class="rounded-lg border border-hairline bg-surface p-4"
+      data-testid="admin-usage-over-budget"
+    >
+      <div class="text-xs text-ink-muted">{{ t("app.adminBudgetExceededUsers") }}</div>
+      <div class="text-2xl font-semibold">{{ exceededUserCount }}</div>
+    </div>
+
+    <div
       v-if="!hasData && !loading"
       class="rounded-lg border border-hairline bg-surface p-8 text-center text-sm text-ink-muted"
       data-testid="admin-usage-empty"
@@ -266,6 +303,7 @@ const modelChart = computed(() => ({
               <TableHead>{{ t("app.adminUsageTurns") }}</TableHead>
               <TableHead>{{ t("app.adminUsageInputTokens") }}</TableHead>
               <TableHead>{{ t("app.adminUsageOutputTokens") }}</TableHead>
+              <TableHead>{{ t("app.adminBudgetOver") }}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -275,6 +313,12 @@ const modelChart = computed(() => ({
               <TableCell>{{ row.turns }}</TableCell>
               <TableCell>{{ row.inputTokens }}</TableCell>
               <TableCell>{{ row.outputTokens }}</TableCell>
+              <TableCell>
+                <span v-if="usageRowExceeded(row)" class="text-destructive">{{
+                  t("app.adminBudgetOver")
+                }}</span>
+                <span v-else class="text-ink-muted">—</span>
+              </TableCell>
             </TableRow>
           </TableBody>
         </Table>

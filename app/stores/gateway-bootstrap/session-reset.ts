@@ -15,6 +15,7 @@ import { useGatewayMcpRuntimeStore } from "@/stores/gateway-mcp-runtime";
 import { useGatewayTurnRecoveryStore } from "@/stores/gateway-turn-recovery";
 import { useGatewayWorkspaceLayoutStore } from "@/stores/gateway-workspace-layout";
 import { useFileGitReviewPanelStore } from "@/stores/file-workspace/git/review-panel";
+import { useGatewayBudgetStore } from "@/stores/gateway-budget";
 import { useGatewayBootstrapStore } from ".";
 
 /**
@@ -36,6 +37,7 @@ export function resetGatewayClientSession() {
   useGatewayThreadRuntimeStore().resetState();
   useGatewayThreadActivityStore().resetState();
   useGatewayComposerStore().resetState();
+  useGatewayBudgetStore().reset();
   useGatewayTerminalStore().resetState();
   useGatewayBrowserStore().resetRuntime();
   useGatewayTmuxStore().resetState();

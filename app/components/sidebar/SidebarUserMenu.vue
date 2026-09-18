@@ -17,7 +17,8 @@ const emit = defineEmits<{
 
 const auth = useAuthStore();
 const { t } = useI18n();
-const initial = computed(() => (auth.username.trim().charAt(0) || "?").toUpperCase());
+const displayLabel = computed(() => auth.displayName.trim() || auth.username);
+const initial = computed(() => (displayLabel.value.trim().charAt(0) || "?").toUpperCase());
 const roleLabel = computed(() => (auth.isAdmin ? t("app.roleAdmin") : t("app.roleMember")));
 
 async function logout() {
@@ -39,7 +40,7 @@ async function logout() {
           {{ initial }}
         </span>
         <span class="min-w-0 flex-1">
-          <span class="block truncate text-sm font-medium text-ink">{{ auth.username }}</span>
+          <span class="block truncate text-sm font-medium text-ink">{{ displayLabel }}</span>
           <span class="block truncate text-xs text-ink-faint">{{ roleLabel }}</span>
         </span>
         <ChevronsUpDownIcon class="size-4 shrink-0 text-ink-faint" />

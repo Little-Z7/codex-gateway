@@ -18,6 +18,8 @@ export const useAuthStore = defineStore("auth", () => {
   const isAuthenticated = computed(() => token.value !== "");
   const isAdmin = computed(() => role.value === "admin");
   const selfPasswordChangeAllowed = ref(true);
+  const displayName = ref("");
+  const mustChangePassword = ref(false);
 
   watch([storedToken, storedUsername, storedRole], ([nextToken, nextUsername, nextRole]) => {
     if (!initialized.value) return;
@@ -48,13 +50,15 @@ export const useAuthStore = defineStore("auth", () => {
     if (token.value === "") return;
     try {
       const response = await $fetch<{
-        user: { role?: string };
+        user: { role?: string; displayName?: string | null; mustChangePassword?: boolean };
         features?: { selfPasswordChange?: boolean };
       }>("/api/auth/me", {
         headers: { authorization: `Bearer ${token.value}` },
       });
       role.value = normalizeRole(response.user.role);
       storedRole.value = role.value;
+      displayName.value = (response.user.displayName ?? "").trim();
+      mustChangePassword.value = response.user.mustChangePassword === true;
       selfPasswordChangeAllowed.value = response.features?.selfPasswordChange ?? true;
     } catch {}
   }
@@ -63,12 +67,21 @@ export const useAuthStore = defineStore("auth", () => {
     const session = await $fetch<{
       token: string;
       expiresAt: string;
-      user: { id: number; username: string; role?: GatewayUserRole };
+      user: {
+        id: number;
+        username: string;
+        role?: GatewayUserRole;
+        displayName?: string | null;
+        mustChangePassword?: boolean;
+      };
     }>("/api/auth/login", {
       method: "POST",
       body: input,
     });
     setSession(session.token, session.user.username, normalizeRole(session.user.role));
+    displayName.value = (session.user.displayName ?? "").trim();
+    mustChangePassword.value = session.user.mustChangePassword === true;
+    if (mustChangePassword.value) selfPasswordChangeAllowed.value = true;
     return session;
   }
 
@@ -109,6 +122,10 @@ export const useAuthStore = defineStore("auth", () => {
     token.value = nextToken;
     username.value = nextUsername;
     role.value = nextToken === "" ? "user" : nextRole;
+    if (nextToken === "") {
+      displayName.value = "";
+      mustChangePassword.value = false;
+    }
   }
 
   function isCurrentSession(epoch: number) {
@@ -118,6 +135,8 @@ export const useAuthStore = defineStore("auth", () => {
   return {
     token,
     username,
+    displayName,
+    mustChangePassword,
     role,
     isAdmin,
     selfPasswordChangeAllowed,

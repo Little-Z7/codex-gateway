@@ -14,7 +14,8 @@ const passwordSchema = z.object({
 
 export default defineEventHandler(async (event) => {
   const user = requireAuthenticatedUser(event);
-  if (!securitySettings().allowSelfPasswordChange) {
+  const mustChangePassword = userStore.mustChangePassword(user.id);
+  if (!securitySettings().allowSelfPasswordChange && !mustChangePassword) {
     throw gatewayApiError("auth.passwordChangeDisabled", 403, "Password change is disabled");
   }
   const input = await readValidatedBody(event, (body) => passwordSchema.parse(body));

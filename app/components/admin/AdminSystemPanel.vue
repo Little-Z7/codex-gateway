@@ -63,6 +63,16 @@ watch(
 const auditRetentionDays = ref(180);
 const auditRetentionInitialized = ref(false);
 
+const budgetForm = ref({
+  dailyTokens: "",
+  monthlyTokens: "",
+  dailyTurns: "",
+  monthlyTurns: "",
+  warnPercent: 80,
+});
+const budgetSaving = ref(false);
+const budgetInitialized = ref(false);
+
 watch(
   () => systemInfo.value,
   (info) => {
@@ -135,6 +145,32 @@ async function restartAll() {
   }
 }
 
+function parseBudgetLimit(value: string) {
+  const trimmed = value.trim();
+  if (trimmed === "") return null;
+  const numeric = Number(trimmed);
+  return Number.isInteger(numeric) && numeric >= 0 ? numeric : null;
+}
+
+async function saveBudgetDefaults() {
+  if (budgetSaving.value) return;
+  budgetSaving.value = true;
+  try {
+    await admin.saveBudgetDefaults({
+      dailyTokens: parseBudgetLimit(budgetForm.value.dailyTokens),
+      monthlyTokens: parseBudgetLimit(budgetForm.value.monthlyTokens),
+      dailyTurns: parseBudgetLimit(budgetForm.value.dailyTurns),
+      monthlyTurns: parseBudgetLimit(budgetForm.value.monthlyTurns),
+      warnPercent: budgetForm.value.warnPercent,
+    });
+    toast.success(t("app.adminSettingsSaved"));
+  } catch (error) {
+    toast.error(messageFromError(error, t("app.adminSettingsSaveFailed"), errorLabels.value));
+  } finally {
+    budgetSaving.value = false;
+  }
+}
+
 async function saveSecurity() {
   if (securitySaving.value) return;
   securitySaving.value = true;
@@ -177,7 +213,23 @@ async function saveNotifications() {
 
 async function refresh() {
   try {
-    await Promise.all([admin.loadSystem(), admin.loadSharedLogin(), admin.loadLockouts()]);
+    await Promise.all([
+      admin.loadSystem(),
+      admin.loadSharedLogin(),
+      admin.loadLockouts(),
+      admin.loadBudgets(),
+    ]);
+    if (!budgetInitialized.value && admin.budgetDefaults) {
+      const defaults = admin.budgetDefaults;
+      budgetForm.value = {
+        dailyTokens: defaults.dailyTokens === null ? "" : String(defaults.dailyTokens),
+        monthlyTokens: defaults.monthlyTokens === null ? "" : String(defaults.monthlyTokens),
+        dailyTurns: defaults.dailyTurns === null ? "" : String(defaults.dailyTurns),
+        monthlyTurns: defaults.monthlyTurns === null ? "" : String(defaults.monthlyTurns),
+        warnPercent: defaults.warnPercent,
+      };
+      budgetInitialized.value = true;
+    }
   } catch (error) {
     toast.error(messageFromError(error, t("app.adminSystemLoadFailed"), errorLabels.value));
   }
@@ -515,6 +567,57 @@ const runtimeRows = computed(() => {
           </Button>
         </div>
       </template>
+    </div>
+
+    <div
+      class="rounded-lg border border-hairline bg-surface p-4"
+      data-testid="admin-budget-defaults"
+    >
+      <div class="text-sm font-medium text-ink">{{ t("app.adminBudgetDefaults") }}</div>
+      <div class="mt-1 text-xs text-ink-muted">{{ t("app.adminBudgetDefaultsHint") }}</div>
+      <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <label class="space-y-1 text-xs text-ink-muted">
+          {{ t("app.budgetDimension.dailyTokens") }}
+          <Input v-model="budgetForm.dailyTokens" data-testid="admin-budget-default-daily-tokens" />
+        </label>
+        <label class="space-y-1 text-xs text-ink-muted">
+          {{ t("app.budgetDimension.monthlyTokens") }}
+          <Input
+            v-model="budgetForm.monthlyTokens"
+            data-testid="admin-budget-default-monthly-tokens"
+          />
+        </label>
+        <label class="space-y-1 text-xs text-ink-muted">
+          {{ t("app.budgetDimension.dailyTurns") }}
+          <Input v-model="budgetForm.dailyTurns" data-testid="admin-budget-default-daily-turns" />
+        </label>
+        <label class="space-y-1 text-xs text-ink-muted">
+          {{ t("app.budgetDimension.monthlyTurns") }}
+          <Input
+            v-model="budgetForm.monthlyTurns"
+            data-testid="admin-budget-default-monthly-turns"
+          />
+        </label>
+        <label class="space-y-1 text-xs text-ink-muted">
+          {{ t("app.adminBudgetWarnPercent") }}
+          <Input
+            v-model.number="budgetForm.warnPercent"
+            type="number"
+            min="1"
+            max="100"
+            data-testid="admin-budget-warn-percent"
+          />
+        </label>
+      </div>
+      <Button
+        class="mt-3"
+        size="sm"
+        :disabled="budgetSaving"
+        data-testid="admin-budget-defaults-save"
+        @click="saveBudgetDefaults"
+      >
+        {{ t("app.adminSettingsSave") }}
+      </Button>
     </div>
 
     <div class="rounded-lg border border-hairline bg-surface p-4" data-testid="admin-security-card">

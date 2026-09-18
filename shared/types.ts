@@ -39,6 +39,16 @@ export type { AgentProviderId, AgentProviderOption } from "./agent/providers";
 export { agentProviderIdSchema, agentProviderIds, agentProviderOptions } from "./agent/providers";
 export type { AgentProjectDefaults } from "./types/agent-defaults";
 export type {
+  AdminUserBudgetRow,
+  BudgetDefaults,
+  BudgetDimension,
+  BudgetExceeded,
+  BudgetLimits,
+  BudgetSnapshot,
+  BudgetSource,
+  BudgetUsage,
+} from "./types/budget";
+export type {
   GatewayMcpServerStatus,
   McpAuthStatus,
   McpServerConnectionStatus,

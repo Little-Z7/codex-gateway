@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import ComposerShell from "@/components/chat/composer/ComposerShell.vue";
-import { computed } from "vue";
+import { computed, onMounted, watch } from "vue";
 import { useInjectedComposerController } from "@/components/chat/composer/context";
+import { useGatewayBudgetStore } from "@/stores/gateway-budget";
 import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
 
 const {
@@ -47,7 +48,15 @@ const {
   handleFileReferenceLimit,
 } = useInjectedComposerController();
 const threadView = useGatewayThreadViewStore();
+const budget = useGatewayBudgetStore();
 const emptyThread = computed(() => threadView.timelineTurns.length === 0);
+
+onMounted(() => {
+  void budget.refresh();
+});
+watch(selectedThreadStatus, (status, previous) => {
+  if (previous === "running" && status !== "running") void budget.refresh();
+});
 </script>
 
 <template>

@@ -21,6 +21,9 @@ export function migrateGatewaySchema(db: DatabaseSync) {
       username TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
       is_active INTEGER NOT NULL DEFAULT 1,
+      display_name TEXT,
+      note TEXT,
+      must_change_password INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -126,6 +129,15 @@ export function migrateGatewaySchema(db: DatabaseSync) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS user_budgets (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      daily_tokens INTEGER,
+      monthly_tokens INTEGER,
+      daily_turns INTEGER,
+      monthly_turns INTEGER,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   const userColumns = db.prepare("PRAGMA table_info(users)").all();
@@ -172,5 +184,15 @@ export function migrateGatewaySchema(db: DatabaseSync) {
   }
   if (!managedColumns.some((column) => column.name === "cpu_limit")) {
     db.exec("ALTER TABLE managed_hosts ADD COLUMN cpu_limit TEXT");
+  }
+
+  if (!userColumns.some((column) => column.name === "must_change_password")) {
+    db.exec("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!userColumns.some((column) => column.name === "display_name")) {
+    db.exec("ALTER TABLE users ADD COLUMN display_name TEXT");
+  }
+  if (!userColumns.some((column) => column.name === "note")) {
+    db.exec("ALTER TABLE users ADD COLUMN note TEXT");
   }
 }

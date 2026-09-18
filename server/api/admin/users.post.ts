@@ -16,6 +16,9 @@ const createUserSchema = z
     password: z.string().min(8),
     role: z.enum(["admin", "user"]).default("user"),
     provision: z.boolean().optional(),
+    mustChangePassword: z.boolean().optional(),
+    displayName: z.string().max(64).nullable().optional(),
+    note: z.string().max(500).nullable().optional(),
   })
   .strict();
 
@@ -30,16 +33,32 @@ export default defineGatewayEventHandler(async (event) => {
       message: "Username already exists",
     });
   }
-  const user = userStore.createUser(input.username, input.password, input.role);
+  const user = userStore.createUser(input.username, input.password, input.role, {
+    mustChangePassword: input.mustChangePassword,
+    displayName: input.displayName,
+    note: input.note,
+  });
   auditLog.record(
     admin,
     "user.create",
     { type: "user", id: user!.id, label: input.username },
-    { role: input.role, provision: input.provision !== false },
+    {
+      role: input.role,
+      provision: input.provision !== false,
+      mustChangePassword: input.mustChangePassword === true,
+    },
   );
   // Provision the workspace container in the background; the users list surfaces the status.
   if (provisioningConfig().enabled && input.provision !== false) {
     void userContainerProvisioner.provision(user!.id).catch(() => {});
   }
-  return { user: { id: user!.id, username: user!.username, role: user!.role } };
+  return {
+    user: {
+      id: user!.id,
+      username: user!.username,
+      role: user!.role,
+      displayName: user!.displayName,
+      mustChangePassword: user!.mustChangePassword,
+    },
+  };
 });

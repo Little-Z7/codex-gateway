@@ -1,8 +1,16 @@
 import { gatewayDatabase } from "../storage/database";
 import { runtimeLog } from "../runtime/runtime-log";
 
-function todayUtc() {
+export function usageDayUtc() {
   return new Date().toISOString().slice(0, 10);
+}
+
+export function usageMonthPrefixUtc(day = usageDayUtc()) {
+  return day.slice(0, 7);
+}
+
+function todayUtc() {
+  return usageDayUtc();
 }
 
 function bump(
@@ -96,6 +104,66 @@ export const usageStore = {
       inputTokens: Number(Reflect.get(row, "inputTokens") ?? 0),
       outputTokens: Number(Reflect.get(row, "outputTokens") ?? 0),
     }));
+  },
+
+  usageForUser(userId: number) {
+    const day = todayUtc();
+    const monthPrefix = `${usageMonthPrefixUtc(day)}%`;
+    const row = gatewayDatabase()
+      .prepare(
+        `SELECT
+            COALESCE(SUM(CASE WHEN day = ? THEN turns ELSE 0 END), 0) AS dailyTurns,
+            COALESCE(SUM(CASE WHEN day = ? THEN input_tokens + output_tokens ELSE 0 END), 0) AS dailyTokens,
+            COALESCE(SUM(CASE WHEN day LIKE ? THEN turns ELSE 0 END), 0) AS monthlyTurns,
+            COALESCE(SUM(CASE WHEN day LIKE ? THEN input_tokens + output_tokens ELSE 0 END), 0) AS monthlyTokens
+           FROM usage_daily
+          WHERE user_id = ?`,
+      )
+      .get(day, day, monthPrefix, monthPrefix, userId);
+    return {
+      dailyTurns: Number(Reflect.get(row ?? {}, "dailyTurns") ?? 0),
+      dailyTokens: Number(Reflect.get(row ?? {}, "dailyTokens") ?? 0),
+      monthlyTurns: Number(Reflect.get(row ?? {}, "monthlyTurns") ?? 0),
+      monthlyTokens: Number(Reflect.get(row ?? {}, "monthlyTokens") ?? 0),
+    };
+  },
+
+  usageByUser() {
+    const day = todayUtc();
+    const monthPrefix = `${usageMonthPrefixUtc(day)}%`;
+    const rows = gatewayDatabase()
+      .prepare(
+        `SELECT user_id AS userId,
+                COALESCE(SUM(CASE WHEN day = ? THEN turns ELSE 0 END), 0) AS dailyTurns,
+                COALESCE(SUM(CASE WHEN day = ? THEN input_tokens + output_tokens ELSE 0 END), 0) AS dailyTokens,
+                COALESCE(SUM(CASE WHEN day LIKE ? THEN turns ELSE 0 END), 0) AS monthlyTurns,
+                COALESCE(SUM(CASE WHEN day LIKE ? THEN input_tokens + output_tokens ELSE 0 END), 0) AS monthlyTokens
+           FROM usage_daily
+          GROUP BY user_id`,
+      )
+      .all(day, day, monthPrefix, monthPrefix);
+    return rows.map((row) => ({
+      userId: Number(Reflect.get(row, "userId") ?? 0),
+      dailyTurns: Number(Reflect.get(row, "dailyTurns") ?? 0),
+      dailyTokens: Number(Reflect.get(row, "dailyTokens") ?? 0),
+      monthlyTurns: Number(Reflect.get(row, "monthlyTurns") ?? 0),
+      monthlyTokens: Number(Reflect.get(row, "monthlyTokens") ?? 0),
+    }));
+  },
+
+  resetCurrentPeriod(userId: number) {
+    const monthPrefix = `${usageMonthPrefixUtc()}%`;
+    gatewayDatabase()
+      .prepare(
+        `UPDATE usage_daily
+            SET threads = 0,
+                turns = 0,
+                input_tokens = 0,
+                output_tokens = 0,
+                updated_at = datetime('now')
+          WHERE user_id = ? AND day LIKE ?`,
+      )
+      .run(userId, monthPrefix);
   },
 
   todayTotals() {

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { storeToRefs } from "pinia";
 import { Toaster } from "@codex-gateway/ui/sonner";
+import ForcePasswordChangeScreen from "@/components/auth/ForcePasswordChangeScreen.vue";
 import LoginScreen from "@/components/auth/LoginScreen.vue";
 import { useAuthStore } from "@/stores/auth";
 import { gatewayPath } from "@/utils/gateway-url";
@@ -23,7 +24,7 @@ const device = useDevice();
 const { initializing } = storeToRefs(bootstrap);
 const { selectedThreadId } = storeToRefs(navigation);
 const { currentThread } = storeToRefs(threadView);
-const { initialized, isAuthenticated, isAdmin, token } = storeToRefs(auth);
+const { initialized, isAuthenticated, isAdmin, token, mustChangePassword } = storeToRefs(auth);
 const mounted = ref(false);
 let activeSessionToken = "";
 const layoutName = computed(() => (device.isMobileOrTablet ? "mobile" : "default"));
@@ -103,6 +104,7 @@ watch(
   >
   <Toaster rich-colors position="top-right" />
   <LoginScreen v-if="mounted && !isAuthenticated" />
+  <ForcePasswordChangeScreen v-else-if="mustChangePassword" />
   <AdminConsole v-else-if="isAdminRoute && isAdmin" />
   <NuxtLayout v-else :name="layoutName" />
 </template>

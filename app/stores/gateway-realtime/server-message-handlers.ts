@@ -20,7 +20,10 @@ export type {
   RealtimeServerMessageMap,
 } from "./handlers/types";
 
-const locallyRecoveredRequestErrorCodes = new Set([STALE_THREAD_CURSOR_ERROR_CODE]);
+const locallyRecoveredRequestErrorCodes = new Set([
+  STALE_THREAD_CURSOR_ERROR_CODE,
+  "budget.exceeded",
+]);
 
 export function createRealtimeServerMessageDispatcher(ctx: RealtimeServerMessageHandlerContext) {
   const thread = createThreadRealtimeHandlers(ctx);

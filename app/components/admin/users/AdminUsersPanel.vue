@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { KeyRoundIcon, Loader2Icon, PlusIcon, Trash2Icon } from "@lucide/vue";
+import { CopyIcon, KeyRoundIcon, Loader2Icon, PlusIcon, Trash2Icon } from "@lucide/vue";
 import { storeToRefs } from "pinia";
 import {
   AlertDialog,
@@ -46,6 +46,7 @@ import {
   hostConnectionFormFromRecord,
   hostConnectionPayload,
 } from "@/components/settings/host-connection/form";
+import { formatBudgetNumber } from "@/stores/gateway-budget";
 import { useGatewayAdminStore, type AdminUserSummary } from "@/stores/gateway-admin";
 import { useAuthStore } from "@/stores/auth";
 import { gatewayApi } from "@/utils/gateway-api";
@@ -58,11 +59,21 @@ const props = withDefaults(defineProps<{ extended?: boolean }>(), { extended: fa
 const emit = defineEmits<{ openUser: [userId: number] }>();
 const { t, te } = useI18n();
 const admin = useGatewayAdminStore();
-const { users, provisioning } = storeToRefs(admin);
+const { users, provisioning, budgets } = storeToRefs(admin);
 const errorLabels = computed(() => errorMessageLabels(t, te));
 
 const createOpen = ref(false);
-const createForm = ref({ username: "", password: "", role: "user", provision: true });
+const createForm = ref({
+  username: "",
+  password: "",
+  role: "user",
+  provision: true,
+  mustChangePassword: false,
+  displayName: "",
+  note: "",
+});
+const generatedPassword = ref("");
+const sortBy = ref<"username" | "lastLogin" | "budget">("username");
 const createSaving = ref(false);
 
 const passwordTarget = ref<AdminUserSummary | null>(null);
@@ -89,10 +100,57 @@ const search = ref("");
 const roleFilter = ref("all");
 const statusFilter = ref("all");
 const containerFilter = ref("all");
+const budgetByUser = computed(() => new Map(budgets.value.map((row) => [row.userId, row])));
+
+function budgetUsageScore(userId: number) {
+  const row = budgetByUser.value.get(userId);
+  if (row === undefined) return 0;
+  return row.usage.dailyTokens + row.usage.monthlyTokens + row.usage.dailyTurns * 1000;
+}
+
+function budgetExceeded(userId: number) {
+  const row = budgetByUser.value.get(userId);
+  if (row === undefined) return false;
+  const limits = row.effective;
+  return (
+    (limits.dailyTokens !== null && row.usage.dailyTokens >= limits.dailyTokens) ||
+    (limits.monthlyTokens !== null && row.usage.monthlyTokens >= limits.monthlyTokens) ||
+    (limits.dailyTurns !== null && row.usage.dailyTurns >= limits.dailyTurns) ||
+    (limits.monthlyTurns !== null && row.usage.monthlyTurns >= limits.monthlyTurns)
+  );
+}
+
+function budgetBarPercent(userId: number) {
+  const row = budgetByUser.value.get(userId);
+  const limit = row?.effective.dailyTokens ?? row?.effective.dailyTurns ?? null;
+  if (row === undefined || limit === null || limit <= 0) return 0;
+  const used = row.effective.dailyTokens !== null ? row.usage.dailyTokens : row.usage.dailyTurns;
+  return Math.min(100, Math.round((used / limit) * 100));
+}
+
+function budgetNear(userId: number) {
+  const row = budgetByUser.value.get(userId);
+  if (row === undefined || budgetExceeded(userId)) return false;
+  const warn = admin.budgetDefaults?.warnPercent ?? 80;
+  const check = (used: number, limit: number | null) =>
+    limit !== null && limit > 0 && (used / limit) * 100 >= warn;
+  return (
+    check(row.usage.dailyTokens, row.effective.dailyTokens) ||
+    check(row.usage.monthlyTokens, row.effective.monthlyTokens) ||
+    check(row.usage.dailyTurns, row.effective.dailyTurns) ||
+    check(row.usage.monthlyTurns, row.effective.monthlyTurns)
+  );
+}
+
 const filteredUsers = computed(() => {
   const term = search.value.trim().toLowerCase();
-  return users.value.filter((user) => {
-    if (term !== "" && !user.username.includes(term)) return false;
+  const list = users.value.filter((user) => {
+    if (term !== "") {
+      const haystack = [user.username, user.displayName ?? "", user.note ?? ""]
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(term)) return false;
+    }
     if (roleFilter.value !== "all" && user.role !== roleFilter.value) return false;
     if (statusFilter.value === "active" && !user.isActive) return false;
     if (statusFilter.value === "disabled" && user.isActive) return false;
@@ -107,6 +165,15 @@ const filteredUsers = computed(() => {
       return false;
     }
     return true;
+  });
+  return list.toSorted((left, right) => {
+    if (sortBy.value === "lastLogin") {
+      return (right.lastLoginAt ?? "").localeCompare(left.lastLoginAt ?? "");
+    }
+    if (sortBy.value === "budget") {
+      return budgetUsageScore(right.id) - budgetUsageScore(left.id);
+    }
+    return left.username.localeCompare(right.username);
   });
 });
 
@@ -250,6 +317,7 @@ watch(users, () => {
 onMounted(() => {
   void admin.listUsers().catch(showError);
   void admin.loadProvisioning().catch(() => {});
+  void admin.loadBudgets().catch(() => {});
 });
 
 onUnmounted(() => {
@@ -258,6 +326,22 @@ onUnmounted(() => {
 
 function showError(error: unknown, fallback = t("app.adminUsersLoadFailed")) {
   toast.error(messageFromError(error, fallback, errorLabels.value));
+}
+
+function generatePassword() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const bytes = new Uint8Array(14);
+  crypto.getRandomValues(bytes);
+  let value = "";
+  for (const byte of bytes) value += alphabet[byte % alphabet.length];
+  generatedPassword.value = `${value}Aa1`;
+  createForm.value.password = generatedPassword.value;
+}
+
+async function copyGeneratedPassword() {
+  if (createForm.value.password === "") return;
+  await navigator.clipboard.writeText(createForm.value.password);
+  toast.success(t("app.adminPasswordCopied"));
 }
 
 function roleLabel(role: string) {
@@ -293,12 +377,26 @@ async function createUser() {
   createSaving.value = true;
   try {
     await admin.createUser({
-      ...createForm.value,
+      username: createForm.value.username,
+      password: createForm.value.password,
+      role: createForm.value.role,
       provision: provisioning.value?.enabled === true && createForm.value.provision,
+      mustChangePassword: createForm.value.mustChangePassword,
+      displayName: createForm.value.displayName,
+      note: createForm.value.note,
     });
     toast.success(t("app.adminUserCreated"));
     createOpen.value = false;
-    createForm.value = { username: "", password: "", role: "user", provision: true };
+    generatedPassword.value = "";
+    createForm.value = {
+      username: "",
+      password: "",
+      role: "user",
+      provision: true,
+      mustChangePassword: false,
+      displayName: "",
+      note: "",
+    };
   } catch (error) {
     showError(error, t("app.adminUserCreateFailed"));
   } finally {
@@ -474,6 +572,14 @@ async function removeManagedHost() {
             <SelectItem value="none">{{ t("app.adminFilterNoContainer") }}</SelectItem>
           </SelectContent>
         </Select>
+        <Select v-model="sortBy" data-testid="admin-users-sort">
+          <SelectTrigger class="w-36"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="username">{{ t("app.adminSortUsername") }}</SelectItem>
+            <SelectItem value="lastLogin">{{ t("app.adminSortLastLogin") }}</SelectItem>
+            <SelectItem value="budget">{{ t("app.adminSortBudget") }}</SelectItem>
+          </SelectContent>
+        </Select>
         <Button variant="outline" size="sm" data-testid="admin-users-export-csv" @click="exportCsv">
           {{ t("app.adminExportCsv") }}
         </Button>
@@ -543,6 +649,7 @@ async function removeManagedHost() {
             <TableHead v-if="provisioning?.enabled">{{ t("app.container") }}</TableHead>
             <TableHead v-if="props.extended">{{ t("app.adminUserLastLogin") }}</TableHead>
             <TableHead v-if="props.extended">{{ t("app.adminUserOnlineSessions") }}</TableHead>
+            <TableHead>{{ t("app.adminBudgetColumn") }}</TableHead>
             <TableHead>{{ t("app.adminUserCreatedAt") }}</TableHead>
             <TableHead class="text-right">{{ t("app.adminUserActions") }}</TableHead>
           </TableRow>
@@ -570,9 +677,9 @@ async function removeManagedHost() {
                 :data-testid="`admin-user-link-${user.username}`"
                 @click="emit('openUser', user.id)"
               >
-                {{ user.username }}
+                {{ user.displayName || user.username }}
               </button>
-              <template v-else>{{ user.username }}</template>
+              <template v-else>{{ user.displayName || user.username }}</template>
             </TableCell>
             <TableCell>
               <Badge :variant="user.role === 'admin' ? 'default' : 'secondary'">
@@ -618,6 +725,48 @@ async function removeManagedHost() {
             </TableCell>
             <TableCell v-if="props.extended" class="text-ink-secondary">
               {{ user.onlineSessions }}
+            </TableCell>
+            <TableCell>
+              <div class="min-w-28 space-y-1" :data-testid="`admin-user-budget-${user.username}`">
+                <template v-if="budgetByUser.get(user.id)?.effective.source === 'unlimited'">
+                  <span class="text-xs text-ink-muted">{{ t("app.budgetUnlimited") }}</span>
+                </template>
+                <template v-else>
+                  <div class="flex items-center justify-between gap-2 text-xs">
+                    <span>{{ t("app.budgetDimension.dailyTokens") }}</span>
+                    <span
+                      :class="
+                        budgetExceeded(user.id)
+                          ? 'text-destructive'
+                          : budgetNear(user.id)
+                            ? 'text-accent-orange'
+                            : 'text-ink-secondary'
+                      "
+                    >
+                      {{
+                        budgetByUser.get(user.id)?.effective.dailyTokens === null
+                          ? t("app.budgetUnlimited")
+                          : `${formatBudgetNumber(budgetByUser.get(user.id)?.usage.dailyTokens ?? 0)} / ${formatBudgetNumber(budgetByUser.get(user.id)?.effective.dailyTokens ?? 0)}`
+                      }}
+                    </span>
+                  </div>
+                  <div class="h-1 overflow-hidden rounded-full bg-canvas-soft">
+                    <div
+                      class="h-full rounded-full"
+                      :class="
+                        budgetExceeded(user.id)
+                          ? 'bg-destructive'
+                          : budgetNear(user.id)
+                            ? 'bg-accent-orange'
+                            : 'bg-primary'
+                      "
+                      :style="{
+                        width: `${budgetBarPercent(user.id)}%`,
+                      }"
+                    />
+                  </div>
+                </template>
+              </div>
             </TableCell>
             <TableCell class="text-ink-secondary">{{ user.createdAt.slice(0, 10) }}</TableCell>
             <TableCell class="text-right">
@@ -903,12 +1052,50 @@ async function removeManagedHost() {
             autocomplete="off"
           />
           <Input
-            v-model="createForm.password"
-            data-testid="admin-user-password-input"
-            type="password"
-            :placeholder="t('app.password')"
-            autocomplete="new-password"
+            v-model="createForm.displayName"
+            data-testid="admin-user-display-name-input"
+            :placeholder="t('app.adminDisplayName')"
           />
+          <div class="flex gap-2">
+            <Input
+              v-model="createForm.password"
+              data-testid="admin-user-password-input"
+              :type="generatedPassword ? 'text' : 'password'"
+              :placeholder="t('app.password')"
+              autocomplete="new-password"
+              class="flex-1"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              data-testid="admin-user-generate-password"
+              @click="generatePassword"
+            >
+              {{ t("app.adminGeneratePassword") }}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              data-testid="admin-user-copy-password"
+              :disabled="createForm.password === ''"
+              @click="copyGeneratedPassword"
+            >
+              <CopyIcon class="size-4" />
+              {{ t("app.adminCopyPassword") }}
+            </Button>
+          </div>
+          <Input
+            v-model="createForm.note"
+            data-testid="admin-user-note-input"
+            :placeholder="t('app.adminUserNote')"
+          />
+          <label class="flex items-center justify-between gap-3 text-sm">
+            <span>{{ t("app.adminMustChangePassword") }}</span>
+            <Switch
+              v-model="createForm.mustChangePassword"
+              data-testid="admin-user-must-change-password"
+            />
+          </label>
           <Select v-model="createForm.role">
             <SelectTrigger class="w-full bg-surface" :aria-label="t('app.adminUserRole')">
               <SelectValue />

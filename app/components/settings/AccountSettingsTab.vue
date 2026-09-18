@@ -5,17 +5,41 @@ import { Button } from "@codex-gateway/ui/button";
 import { Input } from "@codex-gateway/ui/input";
 import { Label } from "@codex-gateway/ui/label";
 import { useAuthStore } from "@/stores/auth";
+import { formatBudgetNumber, useGatewayBudgetStore } from "@/stores/gateway-budget";
 import { gatewayApi } from "@/utils/gateway-api";
 import { gatewayErrorPayload, gatewayErrorMessage } from "@/utils/gateway-error";
 import { errorMessageLabels, messageFromError } from "@/stores/gateway/thread-utils/identity";
 
 const auth = useAuthStore();
+const budget = useGatewayBudgetStore();
 const { t, te } = useI18n();
 const errorLabels = computed(() => errorMessageLabels(t, te));
 const currentPassword = ref("");
 const newPassword = ref("");
 const confirmPassword = ref("");
 const submitting = ref(false);
+
+onMounted(() => {
+  void budget.refresh();
+});
+
+const usageRows = computed(() => {
+  const snap = budget.snapshot;
+  if (snap === null) return [];
+  return (
+    [
+      ["dailyTokens", snap.usage.dailyTokens, snap.limits.dailyTokens],
+      ["dailyTurns", snap.usage.dailyTurns, snap.limits.dailyTurns],
+      ["monthlyTokens", snap.usage.monthlyTokens, snap.limits.monthlyTokens],
+      ["monthlyTurns", snap.usage.monthlyTurns, snap.limits.monthlyTurns],
+    ] as const
+  ).map(([dimension, used, limit]) => ({
+    dimension,
+    used,
+    limit,
+    percent: limit === null || limit <= 0 ? null : Math.min(100, Math.round((used / limit) * 100)),
+  }));
+});
 
 async function submit() {
   if (newPassword.value !== confirmPassword.value) {
@@ -52,6 +76,31 @@ async function submit() {
       <div class="text-base font-medium text-ink">{{ auth.username }}</div>
       <div class="text-sm text-ink-muted">
         {{ auth.isAdmin ? t("app.roleAdmin") : t("app.roleUser") }}
+      </div>
+    </div>
+    <div class="space-y-3" data-testid="account-budget">
+      <div class="text-sm font-medium text-ink">{{ t("app.budgetSelfTitle") }}</div>
+      <div v-for="row in usageRows" :key="row.dimension" class="space-y-1">
+        <div class="flex items-center justify-between text-xs text-ink-muted">
+          <span>{{ t(`app.budgetDimension.${row.dimension}`) }}</span>
+          <span v-if="row.limit === null">{{ t("app.budgetUnlimited") }}</span>
+          <span v-else
+            >{{ formatBudgetNumber(row.used) }} / {{ formatBudgetNumber(row.limit) }}</span
+          >
+        </div>
+        <div v-if="row.percent !== null" class="h-1.5 overflow-hidden rounded-full bg-canvas-soft">
+          <div
+            class="h-full rounded-full"
+            :class="
+              row.percent >= 100
+                ? 'bg-destructive'
+                : row.percent >= (budget.snapshot?.warnPercent ?? 80)
+                  ? 'bg-accent-orange'
+                  : 'bg-primary'
+            "
+            :style="{ width: `${row.percent}%` }"
+          />
+        </div>
       </div>
     </div>
     <form v-if="auth.selfPasswordChangeAllowed" class="space-y-4" @submit.prevent="submit">

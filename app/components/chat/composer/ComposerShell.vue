@@ -10,6 +10,7 @@ import type { ComposerAttachment } from "@/composables/composer/useComposerDraft
 import type { ComposerFileReference } from "@/stores/gateway/types";
 import type { ComposerGoalPendingAction } from "@/composables/composer/useComposerGoalControls";
 import type { SlashMenuItem } from "@/composables/composer/useSlashCommands";
+import ComposerBudgetNotice from "@/components/chat/composer/ComposerBudgetNotice.vue";
 import AttachmentChips from "@/components/chat/composer/AttachmentChips.vue";
 import ComposerLeadControls from "@/components/chat/composer/ComposerLeadControls.vue";
 import ComposerModeStrip from "@/components/chat/composer/ComposerModeStrip.vue";
@@ -99,6 +100,7 @@ function updateFileReferences(value: ComposerFileReference[], sourceScopeKey: st
     "
   >
     <div class="mx-auto w-full max-w-3xl">
+      <ComposerBudgetNotice />
       <ComposerModeStrip
         :plan-mode-active="planModeActive"
         :plan-summary="planSummary"

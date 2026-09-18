@@ -11,6 +11,9 @@ const updateUserSchema = z
     isActive: z.boolean().optional(),
     role: z.enum(["admin", "user"]).optional(),
     password: z.string().min(8).optional(),
+    displayName: z.string().max(64).nullable().optional(),
+    note: z.string().max(500).nullable().optional(),
+    mustChangePassword: z.boolean().optional(),
   })
   .strict();
 
@@ -47,7 +50,13 @@ export default defineGatewayEventHandler(async (event) => {
     admin,
     "user.update",
     { type: "user", id, label: target.username },
-    { isActive: input.isActive, role: input.role, passwordReset: input.password !== undefined },
+    {
+      isActive: input.isActive,
+      role: input.role,
+      passwordReset: input.password !== undefined,
+      displayName: input.displayName,
+      mustChangePassword: input.mustChangePassword,
+    },
   );
   // Disabling or resetting credentials must drop live sessions so existing tabs and sockets die.
   if (input.isActive === false || input.password !== undefined) {
@@ -60,6 +69,9 @@ export default defineGatewayEventHandler(async (event) => {
       role: user.role,
       isActive: user.isActive,
       createdAt: user.createdAt,
+      displayName: user.displayName,
+      note: user.note,
+      mustChangePassword: user.mustChangePassword,
     },
   };
 });

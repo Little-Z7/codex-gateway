@@ -40,6 +40,9 @@ export default defineGatewayEventHandler(async (event) => {
         role: user.role,
         isActive: user.isActive,
         createdAt: user.createdAt,
+        displayName: user.displayName,
+        note: user.note,
+        mustChangePassword: user.mustChangePassword,
         managedHost:
           managed === undefined
             ? null

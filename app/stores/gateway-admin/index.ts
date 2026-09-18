@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import type { AdminUserBudgetRow, BudgetDefaults } from "~~/shared/types";
 import { gatewayApi } from "@/utils/gateway-api";
 
 export interface AdminLockout {
@@ -28,6 +29,9 @@ export interface AdminUserSummary {
   role: "admin" | "user";
   isActive: boolean;
   createdAt: string;
+  displayName: string | null;
+  note: string | null;
+  mustChangePassword: boolean;
   managedHost: AdminManagedHostSummary | null;
   container: AdminContainerSummary | null;
   lastLoginAt: string | null;
@@ -253,11 +257,55 @@ export const useGatewayAdminStore = defineStore("gateway-admin", () => {
     return provisioning.value;
   }
 
+  const budgets = ref<AdminUserBudgetRow[]>([]);
+  const budgetDefaults = ref<BudgetDefaults | null>(null);
+
+  async function loadBudgets() {
+    const response = await gatewayApi<{ defaults: BudgetDefaults; budgets: AdminUserBudgetRow[] }>(
+      "/api/admin/budgets",
+    );
+    budgets.value = response.budgets;
+    budgetDefaults.value = response.defaults;
+    return response;
+  }
+
+  async function updateUserBudget(
+    userId: number,
+    input: {
+      dailyTokens?: number | null;
+      monthlyTokens?: number | null;
+      dailyTurns?: number | null;
+      monthlyTurns?: number | null;
+      useDefaults?: boolean;
+    },
+  ) {
+    await gatewayApi(`/api/admin/users/${userId}/budget`, { method: "PUT", body: input });
+    await loadBudgets();
+  }
+
+  async function resetUserBudget(userId: number) {
+    await gatewayApi(`/api/admin/users/${userId}/budget/reset`, { method: "POST" });
+    await loadBudgets();
+  }
+
+  async function saveBudgetDefaults(input: BudgetDefaults) {
+    const response = await gatewayApi<{ defaults: BudgetDefaults }>("/api/admin/settings/budget", {
+      method: "PUT",
+      body: input,
+    });
+    budgetDefaults.value = response.defaults;
+    await loadBudgets();
+    return response.defaults;
+  }
+
   async function createUser(input: {
     username: string;
     password: string;
     role: string;
     provision?: boolean;
+    mustChangePassword?: boolean;
+    displayName?: string | null;
+    note?: string | null;
   }) {
     await gatewayApi("/api/admin/users", { method: "POST", body: input });
     await listUsers();
@@ -265,7 +313,14 @@ export const useGatewayAdminStore = defineStore("gateway-admin", () => {
 
   async function updateUser(
     userId: number,
-    changes: { isActive?: boolean; role?: string; password?: string },
+    changes: {
+      isActive?: boolean;
+      role?: string;
+      password?: string;
+      displayName?: string | null;
+      note?: string | null;
+      mustChangePassword?: boolean;
+    },
   ) {
     await gatewayApi(`/api/admin/users/${userId}`, { method: "PATCH", body: changes });
     await listUsers();
@@ -634,5 +689,11 @@ export const useGatewayAdminStore = defineStore("gateway-admin", () => {
     stopContainer,
     putManagedHost,
     deleteManagedHost,
+    budgets,
+    budgetDefaults,
+    loadBudgets,
+    updateUserBudget,
+    resetUserBudget,
+    saveBudgetDefaults,
   };
 });

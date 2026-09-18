@@ -21,6 +21,8 @@ export interface AuthenticatedUser {
   id: number;
   username: string;
   role: GatewayUserRole;
+  displayName?: string | null;
+  mustChangePassword?: boolean;
 }
 
 export interface AuthSession {
@@ -35,6 +37,9 @@ export interface AdminUserRecord {
   role: GatewayUserRole;
   isActive: boolean;
   createdAt: string;
+  displayName: string | null;
+  note: string | null;
+  mustChangePassword: boolean;
 }
 
 export interface ManagedHostRecord {
@@ -58,7 +63,16 @@ function sessionDays() {
 }
 
 export const userStore = {
-  createUser(username: string, password: string, role: GatewayUserRole = "user") {
+  createUser(
+    username: string,
+    password: string,
+    role: GatewayUserRole = "user",
+    options: {
+      mustChangePassword?: boolean;
+      displayName?: string | null;
+      note?: string | null;
+    } = {},
+  ) {
     const normalized = normalizeUsername(username);
     if (!normalized) {
       throw new Error("Username is required");
@@ -67,17 +81,33 @@ export const userStore = {
       throw new Error("Password must be at least 8 characters");
     }
     const now = new Date().toISOString();
+    const displayName = emptyToNull(options.displayName);
+    const note = emptyToNull(options.note);
     gatewayDatabase()
       .prepare(
-        "INSERT INTO users (username, password_hash, is_active, role, created_at, updated_at) VALUES (?, ?, 1, ?, ?, ?)",
+        `INSERT INTO users
+           (username, password_hash, is_active, role, display_name, note, must_change_password, created_at, updated_at)
+         VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(normalized, hashPassword(password), role, now, now);
+      .run(
+        normalized,
+        hashPassword(password),
+        role,
+        displayName,
+        note,
+        options.mustChangePassword === true ? 1 : 0,
+        now,
+        now,
+      );
     return this.findByUsername(normalized);
   },
 
   findByUsername(username: string) {
     const row = gatewayDatabase()
-      .prepare("SELECT id, username, password_hash, is_active, role FROM users WHERE username = ?")
+      .prepare(
+        `SELECT id, username, password_hash, is_active, role, display_name, note, must_change_password
+           FROM users WHERE username = ?`,
+      )
       .get(normalizeUsername(username));
     return row
       ? {
@@ -86,20 +116,29 @@ export const userStore = {
           passwordHash: String(row.password_hash),
           isActive: Number(row.is_active) === 1,
           role: rowRole(row.role),
+          displayName: rowText(row.display_name),
+          note: rowText(row.note),
+          mustChangePassword: Number(row.must_change_password) === 1,
         }
       : null;
   },
 
   findById(id: number): AdminUserRecord | null {
     const row = gatewayDatabase()
-      .prepare("SELECT id, username, role, is_active, created_at FROM users WHERE id = ?")
+      .prepare(
+        `SELECT id, username, role, is_active, created_at, display_name, note, must_change_password
+           FROM users WHERE id = ?`,
+      )
       .get(id);
     return row ? adminUserFromRow(row) : null;
   },
 
   listUsers(): AdminUserRecord[] {
     return gatewayDatabase()
-      .prepare("SELECT id, username, role, is_active, created_at FROM users ORDER BY id ASC")
+      .prepare(
+        `SELECT id, username, role, is_active, created_at, display_name, note, must_change_password
+           FROM users ORDER BY id ASC`,
+      )
       .all()
       .map(adminUserFromRow);
   },
@@ -113,10 +152,17 @@ export const userStore = {
 
   updateUser(
     id: number,
-    changes: { isActive?: boolean; role?: GatewayUserRole; password?: string },
+    changes: {
+      isActive?: boolean;
+      role?: GatewayUserRole;
+      password?: string;
+      displayName?: string | null;
+      note?: string | null;
+      mustChangePassword?: boolean;
+    },
   ) {
     const assignments: string[] = [];
-    const values: (string | number)[] = [];
+    const values: (string | number | null)[] = [];
     if (changes.isActive !== undefined) {
       assignments.push("is_active = ?");
       values.push(changes.isActive ? 1 : 0);
@@ -128,6 +174,18 @@ export const userStore = {
     if (changes.password !== undefined) {
       assignments.push("password_hash = ?");
       values.push(hashPassword(changes.password));
+    }
+    if (changes.displayName !== undefined) {
+      assignments.push("display_name = ?");
+      values.push(emptyToNull(changes.displayName));
+    }
+    if (changes.note !== undefined) {
+      assignments.push("note = ?");
+      values.push(emptyToNull(changes.note));
+    }
+    if (changes.mustChangePassword !== undefined) {
+      assignments.push("must_change_password = ?");
+      values.push(changes.mustChangePassword ? 1 : 0);
     }
     if (assignments.length === 0) {
       return this.findById(id);
@@ -158,8 +216,17 @@ export const userStore = {
       throw new Error("Password must be at least 8 characters");
     }
     gatewayDatabase()
-      .prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?")
+      .prepare(
+        "UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = ? WHERE id = ?",
+      )
       .run(hashPassword(newPassword), new Date().toISOString(), userId);
+  },
+
+  mustChangePassword(userId: number) {
+    const row = gatewayDatabase()
+      .prepare("SELECT must_change_password FROM users WHERE id = ?")
+      .get(userId);
+    return Number(row?.must_change_password ?? 0) === 1;
   },
 
   revokeOtherUserSessions(userId: number, keepToken: string) {
@@ -290,7 +357,13 @@ export const userStore = {
     return {
       token,
       expiresAt,
-      user: { id: user.id, username: user.username, role: user.role },
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        displayName: user.displayName,
+        mustChangePassword: user.mustChangePassword,
+      },
     };
   },
 
@@ -441,7 +514,16 @@ function adminUserFromRow(row: SqlRow): AdminUserRecord {
     role: rowRole(row.role),
     isActive: Number(row.is_active) === 1,
     createdAt: String(row.created_at),
+    displayName: rowText(row.display_name),
+    note: rowText(row.note),
+    mustChangePassword: Number(row.must_change_password) === 1,
   };
+}
+
+function emptyToNull(value: string | null | undefined) {
+  if (value === null || value === undefined) return null;
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
 }
 
 function managedHostFromRow(row: SqlRow): ManagedHostRecord {
