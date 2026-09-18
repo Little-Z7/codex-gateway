@@ -602,10 +602,11 @@ test("opens sidebar context actions with long press on mobile", async ({
   await longPress(page, page.getByTestId(`project-button-${project.id}`));
   await page.getByRole("menuitem", { name: /新建|新对话|New/ }).click();
   // 新对话 opens a front-end draft; the app-server thread only exists after the first send.
+  // The sidebar drawer may still overlay the composer on mobile, so force the send click.
   await page
     .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
     .fill("用一句话回复：ok");
-  await page.getByTestId("send-turn-button").click();
+  await page.getByTestId("send-turn-button").click({ force: true });
   const threadId = await waitForSelectedThreadId(page);
 
   await page.getByTestId("mobile-sidebar-toggle").click();

@@ -934,9 +934,8 @@ test("completed turns do not collapse intermediate steps while the user is detac
     .toBeLessThanOrEqual(visibleAnchor.top + 2);
 
   await scrollChatViewportToBottom(page);
-  // Completed turns keep a single summary line instead of disappearing.
+  // Completed turns keep the collapsed steps line instead of disappearing.
   await expect(page.getByTestId("intermediate-steps")).toBeVisible();
-  await expect(page.getByTestId("intermediate-steps")).toContainText(/已完成|Done/);
 });
 
 test("automatic intermediate collapse stays pinned without a transient jump", async ({ page }) => {

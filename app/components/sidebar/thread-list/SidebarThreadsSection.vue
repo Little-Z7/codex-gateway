@@ -82,7 +82,9 @@ const pressHandlers = computed(() => props.longPressHandlers ?? {});
               @click="emit('openPinnedThread', thread)"
             >
               <PinIcon class="size-3.5 shrink-0 text-accent-orange" />
-              <span class="min-w-0 flex-1 truncate text-left">{{ thread.title }}</span>
+              <span class="min-w-0 flex-1 truncate text-left" :title="thread.title">{{
+                thread.title
+              }}</span>
               <ThreadStatusIndicator
                 :status="pinnedRuntimeStatus(thread)"
                 :completion-attention="pinnedCompletionAttention(thread)"
@@ -119,7 +121,9 @@ const pressHandlers = computed(() => props.longPressHandlers ?? {});
               :class="selectedRowClass(String(thread.id) === String(selectedThreadId))"
               @click="emit('openThread', thread)"
             >
-              <span class="min-w-0 flex-1 truncate text-left">{{ titleForThread(thread) }}</span>
+              <span class="min-w-0 flex-1 truncate text-left" :title="titleForThread(thread)">{{
+                titleForThread(thread)
+              }}</span>
               <ThreadStatusIndicator
                 :status="runtimeStatus(thread.hostId, String(thread.id))"
                 :completion-attention="completionAttention(thread.hostId, String(thread.id))"
