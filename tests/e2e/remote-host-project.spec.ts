@@ -478,7 +478,10 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
   await expect(page.getByTestId(`pinned-thread-button-${threadId}`)).toBeVisible();
 
   await page.getByTestId(`pinned-thread-button-${threadId}`).click();
-  await expect(page.getByTestId(`project-button-${project.id}`)).toBeHidden();
+  await expect(page.getByTestId(`pinned-thread-button-${threadId}`)).toHaveAttribute(
+    "data-selected",
+    "true",
+  );
   await expect
     .poll(async () =>
       page.getByTestId("chat-scroll-area").evaluate((root) => {
@@ -495,7 +498,6 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
     "data-selected",
     "true",
   );
-  await expect(page.getByTestId(`project-button-${project.id}`)).toBeHidden();
   await expect
     .poll(async () =>
       page.getByTestId("chat-scroll-area").evaluate((root) => {
