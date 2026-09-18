@@ -29,20 +29,17 @@ import BrowserOpenDialog from "@/components/browser/BrowserOpenDialog.vue";
 import ModelEffortPicker from "@/components/chat/composer/ModelEffortPicker.vue";
 import { useWorkspaceLaunchActions } from "@/composables/workspace/useWorkspaceLaunchActions";
 import { useTmuxMonitorLauncher } from "@/composables/workspace/useTmuxMonitorLauncher";
-import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
 import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
 import { useGatewayWorkspaceLayoutStore } from "@/stores/gateway-workspace-layout";
 import { FILES_WORKSPACE_PANEL_ID } from "@/stores/gateway/workspace-panels";
 import { useInjectedComposerController } from "./composer/context";
 import { useThreadRename } from "@/components/sidebar/thread-list/useThreadRename";
 import ThreadRenameDialog from "@/components/sidebar/thread-list/ThreadRenameDialog.vue";
-import { titleForThread } from "@/stores/gateway/thread-utils/identity";
 
-const props = defineProps<{ layout?: "desktop" | "mobile" }>();
+defineProps<{ layout?: "desktop" | "mobile" }>();
 
 const controller = useInjectedComposerController();
 const navigation = useGatewayNavigationStore();
-const catalog = useGatewayCatalogStore();
 const workspaceLayout = useGatewayWorkspaceLayoutStore();
 const workspaceActions = useWorkspaceLaunchActions();
 const tmuxLauncher = useTmuxMonitorLauncher();
@@ -92,7 +89,9 @@ function openFilesPanel() {
 
     <div class="ml-auto flex min-w-0 items-center justify-end gap-1">
       <slot name="end" />
-      <template v-if="props.layout !== 'mobile'">
+      <!-- Panel toggles stay available on mobile too: the workspace panels (terminal, browser,
+          host metrics, tmux) remain reachable there, matching the old mobile header. -->
+      <div class="contents">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger as-child>
@@ -176,7 +175,7 @@ function openFilesPanel() {
             <TooltipContent>{{ t("app.openTmuxMonitor") }}</TooltipContent>
           </Tooltip>
         </TooltipProvider>
-      </template>
+      </div>
 
       <DropdownMenu v-if="selectedThread !== null">
         <DropdownMenuTrigger as-child>

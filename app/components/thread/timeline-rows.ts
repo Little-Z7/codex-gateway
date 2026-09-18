@@ -24,6 +24,11 @@ export type ThreadTimelineRow =
       open: boolean;
       loading: boolean;
       activeLabel: string | null;
+      summary: {
+        fileItems: { itemId: string | null; path: string }[];
+        commandCount: number;
+        durationMs: number | null;
+      } | null;
     }
   | {
       key: string;
@@ -82,7 +87,37 @@ export function buildThreadTimelineRows(input: {
     const inlineItems = sections.intermediateItems.filter(
       (item) => !collapsibleIntermediateItem(item),
     );
-    if (collapsedItems.length || turn.itemsView !== "full") {
+
+    // Completed-turn summary ("done · N files · M commands · Xs") rides on the intermediate
+    // header row when one exists, matching the single-line ChatGPT "thought" row. Turns without
+    // a collapsible group keep the standalone summary row below.
+    const fileItems: { itemId: string | null; path: string }[] = [];
+    let commandCount = 0;
+    for (const item of turn.items ?? []) {
+      if (item?.type === "commandExecution") commandCount += 1;
+      if (item?.type === "fileChange") {
+        const changes = Array.isArray(item.changes) ? item.changes : [];
+        for (const change of changes) {
+          const record =
+            typeof change === "object" && change !== null
+              ? (change as Record<string, unknown>)
+              : {};
+          const path = record.path ?? record.filePath ?? record.pathAfter ?? record.pathBefore;
+          if (typeof path === "string" && path !== "") {
+            fileItems.push({ itemId: item.id == null ? null : String(item.id), path });
+          }
+        }
+      }
+    }
+    const uniqueFiles = [...new Map(fileItems.map((f) => [f.path, f])).values()];
+    const summary =
+      turn.status === "completed" &&
+      (uniqueFiles.length > 0 || commandCount > 0 || timing.durationMs !== null)
+        ? { fileItems: uniqueFiles, commandCount, durationMs: timing.durationMs }
+        : null;
+
+    const hasIntermediateHeader = collapsedItems.length > 0 || turn.itemsView !== "full";
+    if (hasIntermediateHeader) {
       // The latest-step preview only matters while the group is collapsed; when open it would
       // also duplicate the item's own title in the header's accessible name.
       const activeItem =
@@ -95,6 +130,7 @@ export function buildThreadTimelineRows(input: {
         open: intermediateOpen,
         loading: intermediateLoading,
         activeLabel: activeItem === undefined ? null : intermediateItemSummary(activeItem),
+        summary,
       });
       if (intermediateOpen) {
         appendItemRows(
@@ -124,36 +160,15 @@ export function buildThreadTimelineRows(input: {
       input.agentActionsAvailable,
       turn.responseUsage,
     );
-    if (turn.status === "completed") {
-      const fileItems: { itemId: string | null; path: string }[] = [];
-      let commandCount = 0;
-      for (const item of turn.items ?? []) {
-        if (item?.type === "commandExecution") commandCount += 1;
-        if (item?.type === "fileChange") {
-          const changes = Array.isArray(item.changes) ? item.changes : [];
-          for (const change of changes) {
-            const record =
-              typeof change === "object" && change !== null
-                ? (change as Record<string, unknown>)
-                : {};
-            const path = record.path ?? record.filePath ?? record.pathAfter ?? record.pathBefore;
-            if (typeof path === "string" && path !== "") {
-              fileItems.push({ itemId: item.id == null ? null : String(item.id), path });
-            }
-          }
-        }
-      }
-      const uniqueFiles = [...new Map(fileItems.map((f) => [f.path, f])).values()];
-      if (uniqueFiles.length > 0 || commandCount > 0 || timing.durationMs !== null) {
-        rows.push({
-          key: `${input.threadId}:turn-${turn.id}:summary`,
-          type: "turnSummary",
-          turnId: turn.id,
-          fileItems: uniqueFiles,
-          commandCount,
-          durationMs: timing.durationMs,
-        });
-      }
+    if (!hasIntermediateHeader && summary !== null) {
+      rows.push({
+        key: `${input.threadId}:turn-${turn.id}:summary`,
+        type: "turnSummary",
+        turnId: turn.id,
+        fileItems: summary.fileItems,
+        commandCount: summary.commandCount,
+        durationMs: summary.durationMs,
+      });
     }
     // Completed turns normally render timing beside the final answer's copy action. Keep a
     // standalone row only for interrupted/error turns that never produced an Agent answer.
@@ -242,7 +257,8 @@ function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
       left.open === right.open &&
       left.loading === right.loading &&
       left.turnId === right.turnId &&
-      left.activeLabel === right.activeLabel
+      left.activeLabel === right.activeLabel &&
+      sameIntermediateSummary(left.summary, right.summary)
     );
   }
   if (left.type === "item" && right.type === "item") {
@@ -284,6 +300,31 @@ function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
     );
   }
   return false;
+}
+
+function sameIntermediateSummary(
+  left: {
+    fileItems: { itemId: string | null; path: string }[];
+    commandCount: number;
+    durationMs: number | null;
+  } | null,
+  right: {
+    fileItems: { itemId: string | null; path: string }[];
+    commandCount: number;
+    durationMs: number | null;
+  } | null,
+) {
+  if (left === null || right === null) return left === right;
+  return (
+    left.commandCount === right.commandCount &&
+    left.durationMs === right.durationMs &&
+    left.fileItems.length === right.fileItems.length &&
+    left.fileItems.every(
+      (file, index) =>
+        file.path === right.fileItems[index]?.path &&
+        file.itemId === right.fileItems[index]?.itemId,
+    )
+  );
 }
 
 function sameResponseUsage(

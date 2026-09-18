@@ -23,7 +23,7 @@ type HostConnectionStatusMap = Record<
   { status: string; message?: string | null; updatedAt?: number }
 >;
 import type { HostRecord, ProjectRecord } from "./sidebar-types";
-import { selectedRowClass } from "./sidebar-utils";
+import { hostConnectionLabelKey, selectedRowClass } from "./sidebar-utils";
 import { useHostMfaDialog } from "@/composables/host-mfa/useHostMfaDialog";
 
 const props = defineProps<{
@@ -63,6 +63,11 @@ function hostNeedsMfa(hostId: number) {
 function hostStatusTitle(hostId: number) {
   return props.hostConnectionStatuses[hostId]?.message ?? "";
 }
+
+function hostStatusLabel(hostId: number) {
+  const status = props.hostConnectionStatuses[hostId]?.status ?? "idle";
+  return t(hostConnectionLabelKey(status));
+}
 </script>
 
 <template>
@@ -82,8 +87,10 @@ function hostStatusTitle(hostId: number) {
             class="flex h-8 items-center gap-2 rounded-lg px-3 text-[0.8125rem] font-medium text-ink-muted hover:bg-canvas-soft"
           >
             <span
+              role="img"
               class="size-1.5 shrink-0 rounded-full"
               :class="hostOnline(host.id) ? 'bg-accent-green' : 'bg-ink-faint/50'"
+              :aria-label="hostStatusLabel(host.id)"
               :title="hostStatusTitle(host.id)"
             />
             <span class="min-w-0 flex-1 truncate">{{ host.name }}</span>

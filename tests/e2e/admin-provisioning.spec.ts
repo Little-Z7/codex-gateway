@@ -21,6 +21,7 @@ async function apiStatus(page: Page, request: { url: string; method?: string; bo
 }
 
 async function openUsersTab(page: Page) {
+  await page.getByTestId("sidebar-user-menu").click();
   await page.getByTestId("settings-toggle").click();
   await expect(page.getByTestId("settings-panel")).toBeVisible();
   await page.getByRole("tab", { name: /用户管理|User management/ }).click();
@@ -66,6 +67,7 @@ test("admin provisions a workspace container and the member uses it", async ({ p
   expect(hosts[0]!.managed).toBe(true);
   const managedHostId = hosts[0]!.id;
 
+  await memberPage.getByTestId("sidebar-user-menu").click();
   await memberPage.getByTestId("settings-toggle").click();
   await memberPage.getByRole("tab", { name: /主机|Hosts/ }).click();
   await expect(memberPage.locator(`[data-testid^="managed-badge-"]`)).toBeVisible();

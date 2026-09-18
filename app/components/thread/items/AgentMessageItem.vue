@@ -31,10 +31,8 @@ const hasFooter = computed(
 </script>
 
 <template>
-  <Message from="assistant" class="min-w-0 max-w-full lg:max-w-4xl">
-    <MessageContent
-      class="min-w-0 w-full gap-0 overflow-visible text-[0.9375rem] leading-8 text-ink"
-    >
+  <Message from="assistant" class="group min-w-0 max-w-full lg:max-w-4xl">
+    <MessageContent class="min-w-0 w-full gap-0 overflow-visible text-base leading-7 text-ink">
       <MarkdownContent :content="text" :streaming="inProgress" />
       <AsyncUserQuestionCard
         v-if="hasAsyncQuestions"
@@ -42,12 +40,16 @@ const hasFooter = computed(
         :host-id="hostId"
         :thread-id="threadId"
       />
-      <AgentMessageActions
+      <div
         v-if="hasFooter"
-        :text="text"
-        :turn-timing="turnTiming"
-        :response-usage="responseUsage"
-      />
+        class="opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100"
+      >
+        <AgentMessageActions
+          :text="text"
+          :turn-timing="turnTiming"
+          :response-usage="responseUsage"
+        />
+      </div>
     </MessageContent>
   </Message>
 </template>

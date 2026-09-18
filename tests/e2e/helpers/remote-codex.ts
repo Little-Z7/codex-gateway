@@ -219,25 +219,34 @@ export async function addRemoteProject(
   return project;
 }
 
+const COMPOSER_PLACEHOLDER_RE = /询问任何问题|继续对话|Ask anything|Continue the conversation/;
+
+// "新对话" only opens a front-end draft — no app-server thread exists until the first turn is
+// sent. This helper completes the whole flow so callers still receive a real threadId.
 export async function startRemoteThreadFromProjectMenu(
   page: Page,
   remote: RemoteCodexEnv,
   projectId: number,
+  firstMessage = "用一句话回复：ok",
 ) {
   await page.getByTestId(`project-button-${projectId}`).click({ button: "right" });
   await page.getByRole("menuitem", { name: /新建|新对话|New/ }).click();
-  const threadId = await waitForSelectedThreadId(page);
-  await expect(page.getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/)).toBeEnabled();
-  await expect(page.getByTestId(`thread-button-${threadId}`)).toBeVisible({ timeout: 30_000 });
+  const editor = page.getByPlaceholder(COMPOSER_PLACEHOLDER_RE);
+  await expect(editor).toBeEnabled();
   if (remote.testModel !== undefined && remote.testModel !== "") {
-    await page.evaluate(async (model) => {
+    await page.evaluate((model) => {
       const composer = window.__codexGatewayE2e?.composer;
       if (!composer) {
         throw new Error("Unable to locate gateway composer Pinia store");
       }
-      await composer.saveSelectedThreadSettings({ model });
+      // Draft (pre-thread) settings live on the composer store, not thread settings.
+      composer.draftModel = model;
     }, remote.testModel);
   }
+  await editor.fill(firstMessage);
+  await page.getByTestId("send-turn-button").click();
+  const threadId = await waitForSelectedThreadId(page);
+  await expect(page.getByTestId(`thread-button-${threadId}`)).toBeVisible({ timeout: 60_000 });
   return threadId;
 }
 
@@ -262,7 +271,7 @@ export async function sendTextTurn(
       .toBe(context.threadId);
   }
   await page
-    .getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/)
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
     .fill(`用一句话回复：${marker}`);
   await page.getByTestId("send-turn-button").click();
 }
@@ -287,7 +296,7 @@ export async function selectSidebarThread(page: Page, threadId: string) {
 
 export async function sendSteerText(page: Page, marker: string) {
   await page
-    .getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/)
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
     .fill(`追加要求：${marker}`);
   await page.getByTestId("send-turn-button").click();
 }
@@ -334,6 +343,7 @@ async function openSettings(page: Page) {
   ) {
     return;
   }
+  await page.getByTestId("sidebar-user-menu").click();
   await page.getByTestId("settings-toggle").click();
   await expect(page.getByTestId("settings-panel")).toBeVisible();
 }

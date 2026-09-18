@@ -21,7 +21,7 @@ test("collapses the desktop sidebar and restores the saved layout", async ({ pag
   await expect(page.getByTestId("desktop-sidebar-collapse")).toBeVisible();
 });
 
-test("toggles an expanded project closed from the desktop sidebar", async ({ page }) => {
+test("selecting a project shows its threads in the sidebar", async ({ page }) => {
   await openApp(page);
   await seedGatewayThread(page, {
     hostId: 101,
@@ -53,11 +53,9 @@ test("toggles an expanded project closed from the desktop sidebar", async ({ pag
 
   await expect(page.getByTestId("desktop-layout")).toBeVisible();
   await expect(page.getByTestId("project-button-201")).toBeVisible();
+  await expect(page.getByTestId("thread-button-toggle-thread")).toBeHidden();
   await page.getByTestId("project-button-201").click();
   await expect(page.getByTestId("thread-button-toggle-thread")).toBeVisible();
-
-  await page.getByTestId("project-button-201").click();
-  await expect(page.getByTestId("thread-button-toggle-thread")).toBeHidden();
 });
 
 test("marks completed threads as needing review until they are opened", async ({ page }) => {
@@ -121,111 +119,62 @@ test("marks completed threads as needing review until they are opened", async ({
   ).toBeHidden();
 });
 
-test("keeps non-pinned main threads in recent activity for the page session", async ({ page }) => {
+test("groups the selected project's threads under pinned and time sections", async ({ page }) => {
   await openApp(page);
-  const host = {
-    ...defaultGatewayHost(104),
-    name: "Activity Host",
-    sshHost: "activity.example.internal",
-  };
-  const project = {
-    ...defaultGatewayProject(104, 204),
-    name: "Activity Project",
-    remotePath: "/workspace/activity",
-  };
-  await page.evaluate(
-    ({ host, project }) => {
-      const driver = window.__codexGatewayE2e;
-      if (!driver) throw new Error("Gateway E2E driver is unavailable");
-      const { activity, catalog, config, runtime } = driver;
-      catalog.hosts = [host];
-      catalog.projects = [project];
-      config.gatewayConfig.pinnedThreads = [
-        {
-          hostId: host.id,
-          projectId: project.id,
-          threadId: "already-pinned",
-          title: "Already pinned",
-        },
-      ];
-      activity.ingestMetadata(
-        host.id,
-        [
-          {
-            id: "recent-main",
-            title: "Recent main thread",
-            projectId: project.id,
-            cwd: project.remotePath,
-            parentThreadId: null,
-            agentNickname: null,
-            agentRole: null,
-            name: null,
-            preview: null,
-            recencyAt: null,
-            updatedAt: 3,
-          },
-          {
-            id: "already-pinned",
-            title: "Already pinned",
-            projectId: project.id,
-            cwd: null,
-            parentThreadId: null,
-            agentNickname: null,
-            agentRole: null,
-            name: null,
-            preview: null,
-            recencyAt: null,
-            updatedAt: 2,
-          },
-          {
-            id: "spawned-child",
-            title: "Spawned child",
-            projectId: project.id,
-            parentThreadId: "recent-main",
-            cwd: null,
-            agentNickname: null,
-            agentRole: null,
-            name: null,
-            preview: null,
-            recencyAt: null,
-            updatedAt: 1,
-          },
-          {
-            id: "managed-child-before-parent-hydration",
-            title: "Inherited parent title",
-            projectId: project.id,
-            agentRole: "explorer",
-            agentNickname: "Scout",
-            cwd: null,
-            parentThreadId: null,
-            name: null,
-            preview: null,
-            recencyAt: null,
-            updatedAt: 4,
-          },
-        ],
-        [project],
-      );
-      runtime.setThreadStatus(host.id, "recent-main", "running");
-      runtime.setThreadStatus(host.id, "already-pinned", "running");
-      runtime.setThreadStatus(host.id, "spawned-child", "running");
-      runtime.setThreadStatus(host.id, "managed-child-before-parent-hydration", "running");
-      runtime.setThreadStatus(host.id, "recent-main", "completed");
+  const now = Math.floor(Date.now() / 1000);
+  await seedGatewayThread(page, {
+    hostId: 104,
+    projectId: 204,
+    threadId: null,
+    host: { ...defaultGatewayHost(104), name: "Activity Host" },
+    project: {
+      ...defaultGatewayProject(104, 204),
+      name: "Activity Project",
+      remotePath: "/workspace/activity",
     },
-    { host, project },
-  );
+    threads: [
+      { id: "recent-main", title: "Recent main thread", pinned: false, updatedAt: now },
+      {
+        id: "older-main",
+        title: "Older main thread",
+        pinned: false,
+        updatedAt: now - 10 * 24 * 3600,
+      },
+      {
+        id: "already-pinned",
+        title: "Already pinned",
+        pinned: true,
+        updatedAt: now - 40 * 24 * 3600,
+      },
+    ],
+  });
+  await page.evaluate(() => {
+    const driver = window.__codexGatewayE2e;
+    if (!driver) throw new Error("Gateway E2E driver is unavailable");
+    driver.config.gatewayConfig.pinnedThreads = [
+      {
+        hostId: 104,
+        projectId: 204,
+        threadId: "already-pinned",
+        title: "Already pinned",
+      },
+    ];
+    driver.runtime.setThreadStatus(104, "recent-main", "running");
+  });
 
-  await expect(page.getByText("最近运行", { exact: true })).toBeVisible();
-  await expect(page.getByTestId("recent-thread-button-recent-main")).toBeVisible();
-  await expect(page.getByTestId("recent-thread-button-already-pinned")).toBeHidden();
-  await expect(page.getByTestId("recent-thread-button-spawned-child")).toBeHidden();
+  await expect(page.getByText("已置顶", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("pinned-thread-button-already-pinned")).toBeVisible();
+  await expect(page.getByText("今天", { exact: true })).toBeVisible();
+  await expect(page.getByText("前 30 天", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("thread-button-recent-main")).toBeVisible();
+  await expect(page.getByTestId("thread-button-older-main")).toBeVisible();
   await expect(
-    page.getByTestId("recent-thread-button-managed-child-before-parent-hydration"),
-  ).toBeHidden();
+    page.getByTestId("thread-button-recent-main").getByLabel("运行中", { exact: true }),
+  ).toBeVisible();
 
   const sectionOrder = await page.getByTestId("sidebar-scroll-area").evaluate((root) => {
     const text = root.textContent ?? "";
-    return [text.indexOf("已固定"), text.indexOf("最近运行"), text.indexOf("主机")];
+    return [text.indexOf("已置顶"), text.indexOf("今天"), text.indexOf("前 30 天")];
   });
   expect(sectionOrder[0]).toBeLessThan(sectionOrder[1]!);
   expect(sectionOrder[1]).toBeLessThan(sectionOrder[2]!);
@@ -239,16 +188,19 @@ test("sorts pinned threads for display without rewriting persisted pin order", a
   ];
   const pinnedThreads = [
     { hostId: 302, projectId: null, threadId: "z-alpha", title: "Alpha Thread" },
-    { hostId: 301, projectId: null, threadId: "a-zulu", title: "Zulu Thread" },
-    { hostId: 301, projectId: null, threadId: "a-alpha-b", title: "Alpha Thread" },
-    { hostId: 301, projectId: null, threadId: "a-alpha-a", title: "Alpha Thread" },
+    { hostId: 301, projectId: 401, threadId: "a-zulu", title: "Zulu Thread" },
+    { hostId: 301, projectId: 401, threadId: "a-alpha-b", title: "Alpha Thread" },
+    { hostId: 301, projectId: 401, threadId: "a-alpha-a", title: "Alpha Thread" },
   ];
   await page.evaluate(
     ({ hosts, pinnedThreads }) => {
       const driver = window.__codexGatewayE2e;
       if (!driver) throw new Error("Gateway E2E driver is unavailable");
       driver.catalog.hosts = hosts;
+      driver.catalog.projects = [defaultGatewayProject(301, 401)];
       driver.config.gatewayConfig.pinnedThreads = pinnedThreads;
+      driver.navigation.selectedHostId = 301;
+      driver.navigation.selectedProjectId = 401;
     },
     { hosts, pinnedThreads },
   );
@@ -258,7 +210,8 @@ test("sorts pinned threads for display without rewriting persisted pin order", a
     .evaluateAll((rows) =>
       rows.map((row) => row.getAttribute("data-testid")?.replace("pinned-thread-button-", "")),
     );
-  expect(renderedThreadIds).toEqual(["a-alpha-a", "a-alpha-b", "a-zulu", "z-alpha"]);
+  // Only the selected host's pins render in the conversation group.
+  expect(renderedThreadIds).toEqual(["a-alpha-a", "a-alpha-b", "a-zulu"]);
 
   const storedThreadIds = await page.evaluate(() => {
     const driver = window.__codexGatewayE2e;
@@ -308,6 +261,8 @@ test("long expanded tree labels truncate without displacing trailing statuses", 
       const driver = window.__codexGatewayE2e;
       if (!driver) throw new Error("Gateway E2E driver is unavailable");
       const { catalog, runtime } = driver;
+      // Host sub-headers (and their status dot) render only when more than one host exists.
+      catalog.hosts = [...catalog.hosts, defaultGatewayHost(900)];
       catalog.hostConnectionStatuses = { [hostId]: { status: "connected" } };
       runtime.setThreadStatus(hostId, threadId, "running");
     },

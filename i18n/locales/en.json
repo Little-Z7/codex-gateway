@@ -930,7 +930,6 @@
     "noWorkspaceMemberHint": "You don't have a workspace yet — ask an administrator to provision one",
     "noWorkspaceAdminHint": "No managed workspaces yet — create one for a user in the admin console",
     "gotoAdminConsole": "Open admin console",
-    "newThreadHeroTitle": "What do you want to work on?",
     "newThreadExample1": "Walk me through this project's structure",
     "newThreadExample2": "Fix a recent bug",
     "newThreadExample3": "Write a small utility script",

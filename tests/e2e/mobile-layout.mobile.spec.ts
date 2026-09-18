@@ -45,12 +45,12 @@ test("uses the mobile layout with hidden sidebar and usable composer shell", asy
 
   await expect(page.getByTestId("mobile-layout")).toBeVisible();
   await expect(page.getByTestId("desktop-layout")).toBeHidden();
-  await expect(page.getByTestId("settings-toggle")).toBeHidden();
+  await expect(page.getByTestId("sidebar-user-menu")).toBeHidden();
 
   await page.getByTestId("mobile-sidebar-toggle").click();
-  await expect(page.getByTestId("settings-toggle")).toBeVisible();
+  await expect(page.getByTestId("sidebar-user-menu")).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByTestId("settings-toggle")).toBeHidden();
+  await expect(page.getByTestId("sidebar-user-menu")).toBeHidden();
 
   await expect(page.getByTestId("chat-scroll-area")).toBeVisible();
   // The e2e admin has no workspace hosts yet, so the pane shows the no-hosts empty state.
@@ -159,7 +159,9 @@ test("gives the Goal objective most of the mobile details dialog", async ({ page
   await installSelectedThreadGoalSubmitMock(page, { hostId: 1, threadId });
 
   const longObjective = "移动端目标正文需要保留足够的阅读空间。".repeat(40);
-  const composer = page.getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/);
+  const composer = page.getByPlaceholder(
+    /询问任何问题|继续对话|Ask anything|Continue the conversation/,
+  );
   await composer.fill(`/goal ${longObjective}`);
   await page.keyboard.press("Enter");
   await page.getByTestId("composer-goal-summary").click();
@@ -591,7 +593,7 @@ test("opens sidebar context actions with long press on mobile", async ({
 
   if (
     !(await page
-      .getByTestId("settings-toggle")
+      .getByTestId("sidebar-user-menu")
       .isVisible()
       .catch(() => false))
   ) {
@@ -605,12 +607,12 @@ test("opens sidebar context actions with long press on mobile", async ({
   await page.getByTestId("mobile-sidebar-toggle").click();
   await page.getByTestId(`project-button-${project.id}`).click();
   await expect(page.getByTestId("project-thread-list")).toBeVisible();
-  await expect(page.getByTestId("open-tmux-mobile-button")).toBeVisible();
-  await expect(page.getByTestId("open-host-monitor-mobile-button")).toBeVisible();
-  await page.getByTestId("open-host-monitor-mobile-button").click();
+  await expect(page.getByTestId("open-tmux-button")).toBeVisible();
+  await expect(page.getByTestId("open-host-monitor-button")).toBeVisible();
+  await page.getByTestId("open-host-monitor-button").click();
   await expect(page.getByTestId("host-metrics-panel")).toBeVisible();
   await page.getByRole("tab", { name: /Agent/ }).click();
-  await page.getByTestId("open-terminal-mobile-button").click();
+  await page.getByTestId("open-terminal-button").click();
   await expect(page.getByTestId("terminal-panel")).toBeVisible({ timeout: 30_000 });
   await page.getByRole("tab", { name: /Agent/ }).click();
   await expect(page.getByTestId("project-thread-list")).toBeVisible();

@@ -29,6 +29,7 @@ const emit = defineEmits<{
     :count="props.row.count"
     :loading="props.row.loading"
     :active-label="props.row.activeLabel"
+    :summary="props.row.summary"
     @toggle="emit('intermediateToggle', props.row.turnId, $event)"
   />
   <TurnSummaryRow

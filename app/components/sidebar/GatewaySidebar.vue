@@ -143,7 +143,7 @@ function selectProject(project: ProjectRecord, event: MouseEvent) {
       <span class="truncate text-sm font-semibold text-ink">Codex Gateway</span>
       <SidebarTrigger
         v-if="collapsible"
-        data-testid="sidebar-collapse"
+        data-testid="desktop-sidebar-collapse"
         :title="t('app.collapseSidebar')"
         :aria-label="t('app.collapseSidebar')"
       />

@@ -38,7 +38,7 @@ test("fans out a real remote app-server thread to multiple browser clients acros
 
   const firstMarker = `E2E 第一轮 ${Date.now()}`;
   await page
-    .getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/)
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
     .fill(
       [
         `请执行一个较长命令，然后最终只回复这个标记：${firstMarker}`,
@@ -166,7 +166,7 @@ test("fans out a real remote app-server thread to multiple browser clients acros
       .toBe(backgroundThreadId);
     const backgroundStatusMarker = `E2E 跨浏览器侧边栏状态 ${Date.now()}`;
     await page
-      .getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/)
+      .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
       .fill(
         [
           `请执行较长命令后回复：${backgroundStatusMarker}`,
@@ -179,7 +179,7 @@ test("fans out a real remote app-server thread to multiple browser clients acros
       secondPage.getByTestId(`thread-button-${threadId}`).getByLabel("运行中"),
     ).toBeVisible({ timeout: 30_000 });
     await expect(
-      secondPage.getByTestId(`recent-thread-button-${threadId}`).getByLabel("运行中"),
+      secondPage.getByTestId(`thread-button-${threadId}`).getByLabel("运行中"),
     ).toBeVisible({ timeout: 30_000 });
     await expect
       .poll(() => threadRuntimeStatus(secondPage, host.id, threadId), { timeout: 30_000 })
@@ -193,7 +193,7 @@ test("fans out a real remote app-server thread to multiple browser clients acros
 
     await openThreadFromProjectOrRestoredState(secondPage, project.id, threadId);
     await expect(
-      secondPage.getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/),
+      secondPage.getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/),
     ).toBeEnabled();
     await expect
       .poll(async () => secondPage.getByTestId("chat-scroll-area").getByText(firstMarker).count(), {
@@ -288,7 +288,7 @@ test("fans out a real remote app-server thread to multiple browser clients acros
   const interruptMarker = `E2E interrupt ${Date.now()}`;
   const turnStartMessageOffset = await realtimeClientMessageCount(page);
   await page
-    .getByPlaceholder(/描述你想让 Codex 做的事|继续对话或提出修改/)
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
     .fill(
       [
         `请执行一个较长命令来等待中断：${interruptMarker}`,

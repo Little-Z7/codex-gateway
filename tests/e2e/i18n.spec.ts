@@ -24,6 +24,7 @@ test("requires bearer auth for protected HTTP APIs", async ({ page }) => {
 test("defaults to Chinese and can switch to English", async ({ page }) => {
   await openApp(page);
   await expect(page.getByText("设置")).toBeVisible();
+  await page.getByTestId("sidebar-user-menu").click();
   await page.getByTestId("settings-toggle").click();
   await page.getByRole("tab", { name: "外观" }).click();
   await page.getByRole("combobox").first().click();
@@ -75,6 +76,7 @@ test("synchronizes logout state across same-origin tabs", async ({ page }) => {
 
 test("config JSON editor shows current config by default and scrolls", async ({ page }) => {
   await openApp(page);
+  await page.getByTestId("sidebar-user-menu").click();
   await page.getByTestId("settings-toggle").click();
   const settingsPanel = page.getByTestId("settings-panel");
   await expect(settingsPanel.locator(".dv-groupview")).toHaveCount(1);
@@ -122,6 +124,7 @@ test("config JSON editor shows current config by default and scrolls", async ({ 
 
 test("Bark notification settings are saved to server config", async ({ page }) => {
   await openApp(page);
+  await page.getByTestId("sidebar-user-menu").click();
   await page.getByTestId("settings-toggle").click();
   await page.getByRole("tab", { name: "通知" }).click();
   const barkSwitch = page.getByRole("switch", { name: "启用 Bark" });

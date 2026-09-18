@@ -31,12 +31,14 @@ async function apiStatus(page: Page, request: { url: string; method?: string; bo
 }
 
 async function openUsersTab(page: Page) {
+  await page.getByTestId("sidebar-user-menu").click();
   await page.getByTestId("settings-toggle").click();
   await expect(page.getByTestId("settings-panel")).toBeVisible();
   await page.getByRole("tab", { name: /用户管理|User management/ }).click();
 }
 
 async function openSettingsDialog(page: Page) {
+  await page.getByTestId("sidebar-user-menu").click();
   await page.getByTestId("settings-toggle").click();
   await expect(page.getByTestId("settings-panel")).toBeVisible();
 }

@@ -283,7 +283,9 @@ test("usage statistics capture a real turn", async ({ page, browser }) => {
     await member.locator('[data-testid="composer-input"]').fill("reply with ok");
     await expect(member.getByTestId("send-turn-button")).toBeEnabled({ timeout: 60_000 });
     await member.getByTestId("send-turn-button").click();
-    await expect(member.getByTestId("turn-summary").last()).toBeVisible({ timeout: 240_000 });
+    await expect(member.getByTestId("intermediate-steps").last()).toContainText(/已完成|Done/, {
+      timeout: 240_000,
+    });
   } finally {
     await ctx.close();
   }

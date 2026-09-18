@@ -930,7 +930,6 @@
     "noWorkspaceMemberHint": "你还没有工作区，请联系管理员开通",
     "noWorkspaceAdminHint": "还没有可管理的工作区，去后台为用户创建",
     "gotoAdminConsole": "去后台创建",
-    "newThreadHeroTitle": "今天想做什么？",
     "newThreadExample1": "帮我梳理这个项目的结构",
     "newThreadExample2": "修复一个最近的 bug",
     "newThreadExample3": "写一个小的工具脚本",

@@ -1,6 +1,12 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
-import type { ThreadGoal, ThreadSettingsState } from "~~/shared/types";
+import type {
+  AgentProviderId,
+  ApprovalPolicy,
+  ReasoningEffort,
+  ThreadGoal,
+  ThreadSettingsState,
+} from "~~/shared/types";
 import type { ComposerDraft } from "@/stores/gateway/types";
 import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
 import { useGatewayThreadRuntimeStore } from "@/stores/gateway-thread-runtime";
@@ -15,6 +21,13 @@ export const useGatewayComposerStore = defineStore("gateway-composer", () => {
   const threadGoalsByKey = ref<Record<string, ThreadGoal>>({});
   const threadGoalObservedAtByKey = ref<Record<string, number>>({});
   const composerDraftsByKey = ref<Record<string, ComposerDraft>>({});
+  // Pre-thread ("new chat" draft) settings. The app-server thread does not exist yet, so these
+  // live outside threadSettingsByKey; the top-bar picker and the composer controller must share
+  // one instance, hence store state rather than a composable-local ref.
+  const draftModel = ref("");
+  const draftEffort = ref<ReasoningEffort>("default");
+  const draftApprovalMode = ref<ApprovalPolicy | "custom">("custom");
+  const draftProvider = ref<AgentProviderId>("codex");
   const actions = {
     ...createComposerActions(),
     ...createThreadGoalActions(),
@@ -58,6 +71,10 @@ export const useGatewayComposerStore = defineStore("gateway-composer", () => {
   return {
     threadSettingsByKey,
     dismissedPlanPromptIdsByKey,
+    draftModel,
+    draftEffort,
+    draftApprovalMode,
+    draftProvider,
     threadGoalsByKey,
     threadGoalObservedAtByKey,
     composerDraftsByKey,

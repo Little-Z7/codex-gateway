@@ -52,9 +52,9 @@ async function select(threadId: string, hostId: number, projectId: number | null
 </script>
 
 <template>
-  <CommandDialog v-model:open="open" data-testid="thread-search-dialog">
+  <CommandDialog v-model:open="open">
     <CommandInput v-model="query" :placeholder="t('app.searchThreadsPlaceholder')" />
-    <CommandList>
+    <CommandList data-testid="thread-search-dialog">
       <CommandEmpty>{{ t("app.searchThreadsEmpty") }}</CommandEmpty>
       <CommandGroup>
         <CommandItem
