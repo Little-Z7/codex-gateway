@@ -22,7 +22,9 @@ const inProgress = computed(() => isItemInProgress(props.item));
 const hasAsyncQuestions = computed(
   () => props.item.delivery === "async" && (props.item.questions?.length ?? 0) > 0,
 );
-const showActions = computed(() => Boolean(text.value) && !inProgress.value);
+const showActions = computed(
+  () => Boolean(text.value) && !inProgress.value && props.agentActionsAvailable === true,
+);
 </script>
 
 <template>

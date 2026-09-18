@@ -120,6 +120,18 @@ function budgetExceeded(userId: number) {
   );
 }
 
+function budgetCellLabel(userId: number) {
+  const row = budgetByUser.value.get(userId);
+  if (
+    row === undefined ||
+    row.effective.source === "unlimited" ||
+    row.effective.dailyTokens === null
+  ) {
+    return t("app.budgetUnlimited");
+  }
+  return `${formatBudgetNumber(row.usage.dailyTokens)} / ${formatBudgetNumber(row.effective.dailyTokens)}`;
+}
+
 function budgetBarPercent(userId: number) {
   const row = budgetByUser.value.get(userId);
   const limit = row?.effective.dailyTokens ?? row?.effective.dailyTurns ?? null;
@@ -629,7 +641,7 @@ async function removeManagedHost() {
       </Button>
     </div>
 
-    <div class="hidden md:block">
+    <div class="hidden md:block overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
@@ -651,7 +663,9 @@ async function removeManagedHost() {
             <TableHead v-if="props.extended">{{ t("app.adminUserOnlineSessions") }}</TableHead>
             <TableHead>{{ t("app.adminBudgetColumn") }}</TableHead>
             <TableHead>{{ t("app.adminUserCreatedAt") }}</TableHead>
-            <TableHead class="text-right">{{ t("app.adminUserActions") }}</TableHead>
+            <TableHead class="sticky right-0 bg-surface text-right">{{
+              t("app.adminUserActions")
+            }}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -726,50 +740,37 @@ async function removeManagedHost() {
             <TableCell v-if="props.extended" class="text-ink-secondary">
               {{ user.onlineSessions }}
             </TableCell>
-            <TableCell>
-              <div class="min-w-28 space-y-1" :data-testid="`admin-user-budget-${user.username}`">
-                <template v-if="budgetByUser.get(user.id)?.effective.source === 'unlimited'">
-                  <span class="text-xs text-ink-muted">{{ t("app.budgetUnlimited") }}</span>
-                </template>
-                <template v-else>
-                  <div class="flex items-center justify-between gap-2 text-xs">
-                    <span>{{ t("app.budgetDimension.dailyTokens") }}</span>
-                    <span
-                      :class="
-                        budgetExceeded(user.id)
-                          ? 'text-destructive'
-                          : budgetNear(user.id)
-                            ? 'text-accent-orange'
-                            : 'text-ink-secondary'
-                      "
-                    >
-                      {{
-                        budgetByUser.get(user.id)?.effective.dailyTokens === null
-                          ? t("app.budgetUnlimited")
-                          : `${formatBudgetNumber(budgetByUser.get(user.id)?.usage.dailyTokens ?? 0)} / ${formatBudgetNumber(budgetByUser.get(user.id)?.effective.dailyTokens ?? 0)}`
-                      }}
-                    </span>
-                  </div>
-                  <div class="h-1 overflow-hidden rounded-full bg-canvas-soft">
-                    <div
-                      class="h-full rounded-full"
-                      :class="
-                        budgetExceeded(user.id)
-                          ? 'bg-destructive'
-                          : budgetNear(user.id)
-                            ? 'bg-accent-orange'
-                            : 'bg-primary'
-                      "
-                      :style="{
-                        width: `${budgetBarPercent(user.id)}%`,
-                      }"
-                    />
-                  </div>
-                </template>
+            <TableCell class="whitespace-nowrap">
+              <div class="w-24 space-y-1" :data-testid="`admin-user-budget-${user.username}`">
+                <span
+                  class="text-xs"
+                  :class="
+                    budgetExceeded(user.id)
+                      ? 'text-destructive'
+                      : budgetNear(user.id)
+                        ? 'text-accent-orange'
+                        : 'text-ink-muted'
+                  "
+                >
+                  {{ budgetCellLabel(user.id) }}
+                </span>
+                <div class="h-1 overflow-hidden rounded-full bg-canvas-soft">
+                  <div
+                    class="h-full rounded-full"
+                    :class="
+                      budgetExceeded(user.id)
+                        ? 'bg-destructive'
+                        : budgetNear(user.id)
+                          ? 'bg-accent-orange'
+                          : 'bg-primary'
+                    "
+                    :style="{ width: `${budgetBarPercent(user.id)}%` }"
+                  />
+                </div>
               </div>
             </TableCell>
             <TableCell class="text-ink-secondary">{{ user.createdAt.slice(0, 10) }}</TableCell>
-            <TableCell class="text-right">
+            <TableCell class="sticky right-0 bg-surface text-right">
               <div class="flex flex-wrap justify-end gap-1">
                 <template v-if="provisioning?.enabled">
                   <Button

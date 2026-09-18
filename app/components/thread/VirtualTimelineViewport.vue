@@ -205,7 +205,7 @@ function handleViewportReady() {
       sizer is also invisible to virtual-core and creates a false scroll range.
     -->
     <div class="mx-auto flex min-h-full w-full max-w-3xl flex-col px-[clamp(0.875rem,4vw,2rem)]">
-      <div :ref="chatVirtualizer.containerRef" class="relative shrink-0">
+      <div :ref="chatVirtualizer.containerRef" class="relative mt-auto shrink-0">
         <div
           v-for="virtualRow in virtualRows"
           :key="String(virtualRow.key)"
