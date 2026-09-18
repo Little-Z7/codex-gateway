@@ -10,12 +10,13 @@ import {
 } from "~~/shared/thread-runtime-status";
 import { recordFromUnknown } from "~~/shared/utils/records";
 import { bindGatewayUser } from "../state/memory";
+import { gatewayEventStore } from "../state/gateway-events";
 import { threadSnapshotStore } from "../state/thread-snapshots";
 import { threadRuntimeEvents } from "./thread-runtime-events";
 import type { ThreadOpenSnapshot } from "./types";
 import { createThreadNotificationResolvers } from "./notification-rpc-resolvers";
 import type { AgentRpcClient, ProviderAdapter } from "../agent/provider-adapter";
-import { extractThreadSettings } from "../protocol/thread-payload";
+import { extractThreadSettings, latestThreadSettingsFromEvents } from "../protocol/thread-payload";
 
 export class ThreadController {
   readonly client: AgentRpcClient;
@@ -265,21 +266,24 @@ export class ThreadController {
     );
     this.subscribed = true;
     this.resumeSettings = extractThreadSettings(resumed);
-    const snapshot = this.getOpenSnapshot();
-    if (snapshot !== null) {
+    const latestSettings = latestThreadSettingsFromEvents(
+      gatewayEventStore.list(this.host.id, this.threadId, 0, 200),
+    );
+    if (latestSettings?.collaborationMode !== undefined) {
       this.resumeSettings = {
         ...this.resumeSettings,
-        ...(snapshot.threadSettings?.collaborationMode !== undefined
-          ? { collaborationMode: snapshot.threadSettings.collaborationMode }
-          : {}),
+        collaborationMode: latestSettings.collaborationMode,
       };
+    }
+    const snapshot = this.getOpenSnapshot();
+    if (snapshot !== null) {
       this.setOpenSnapshot({ ...snapshot, threadSettings: this.resumeSettings });
     }
-    // Do not synthesize thread/settings/updated from thread/resume. The resume DTO only contains
-    // model/effort, while the official settings notification also contains collaborationMode. A
-    // partial event under the official method name can therefore overwrite an already observed
-    // Plan mode. The open snapshot carries resume settings directly and real settings events remain
-    // the sole source for the complete app-server state.
+    // thread/resume is authoritative for model, effort, and approval policy, but it does not carry
+    // collaborationMode. Reuse the newest real settings notification already recorded for this
+    // thread instead of letting an older open snapshot overwrite a remote Plan/Default change.
+    // Do not synthesize a settings notification: the app-server event remains the single source of
+    // truth for fields absent from the resume response.
     return resumed;
   }
 }

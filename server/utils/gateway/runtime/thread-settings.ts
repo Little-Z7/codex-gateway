@@ -7,9 +7,10 @@ export class ThreadSettingsService {
   constructor(private readonly registry: ControllerRegistry) {}
 
   async readThreadSettings(host: HostRecord, threadId: string) {
-    // Settings can change in another Codex client while this browser is hidden. thread/read
-    // intentionally omits model/effort, so force one metadata-only resume only on the explicit
-    // recovery path; ordinary thread activation still uses the warm snapshot cache.
+    // Settings can change in another Codex client while this browser is hidden. The official Thread
+    // DTO exposes model and reasoning effort, but not the complete ThreadSettings state (notably
+    // approval policy and collaboration mode), so this explicit recovery path uses one metadata-only
+    // resume. Ordinary thread activation still uses the warm snapshot cache.
     const lease = this.registry.retainSubscription(host, threadId, "scoped", {
       forceUpstreamSubscription: true,
     });
