@@ -94,6 +94,18 @@ export function createThreadListActions() {
         // dependent on which request happened last.
         navigation.threads = sortThreads(mainThreads);
         config.setCatalog(catalog.hosts, catalog.projects);
+        // Rows created by a draft first-send can arrive after the composer already stashed a
+        // preview fallback; apply and clear it now that the row exists.
+        for (const [key, preview] of pendingPreviewFallbacks) {
+          const index = navigation.threads.findIndex(
+            (thread) => previewFallbackKey(thread.hostId, String(thread.id)) === key,
+          );
+          if (index < 0) continue;
+          const thread = navigation.threads[index]!;
+          pendingPreviewFallbacks.delete(key);
+          if (firstNonEmptyString([thread.title, thread.name, thread.preview]) !== null) continue;
+          navigation.threads = navigation.threads.with(index, { ...thread, preview });
+        }
       } catch (error: unknown) {
         if (!sessionIsCurrent()) return;
         if (navigation.selectedHostId !== hostId || navigation.selectedProjectId !== projectId)
@@ -130,16 +142,26 @@ function applyProjectDirectoryAvailability(response: ThreadListResponse) {
 // A brand-new thread reaches the sidebar before app-server supplies name/preview; without this
 // the row shows a raw UUID until the next list refresh. The first user message is the honest
 // fallback title — it is replaced as soon as the server-provided name or preview arrives.
+const pendingPreviewFallbacks = new Map<string, string>();
+const previewFallbackKey = (hostId: number, threadId: string) => `${hostId}:${threadId}`;
+
 export function applyThreadPreviewFallback(hostId: number, threadId: string, text: string) {
+  const preview = text.replace(/\s+/g, " ").trim().slice(0, 40);
+  if (preview === "") return;
   const navigation = useGatewayNavigationStore();
   const index = navigation.threads.findIndex(
     (thread) => thread.hostId === hostId && String(thread.id) === threadId,
   );
   const thread = navigation.threads[index];
-  if (thread === undefined) return;
+  if (thread === undefined) {
+    // Draft-created threads only land in navigation.threads after startThread's list refresh,
+    // which can resolve before the server index exposes the row. Stash the fallback so the
+    // merge below can apply it when the row first appears.
+    pendingPreviewFallbacks.set(previewFallbackKey(hostId, threadId), preview);
+    return;
+  }
+  pendingPreviewFallbacks.delete(previewFallbackKey(hostId, threadId));
   if (firstNonEmptyString([thread.title, thread.name, thread.preview]) !== null) return;
-  const preview = text.replace(/\s+/g, " ").trim().slice(0, 40);
-  if (preview === "") return;
   navigation.threads = navigation.threads.with(index, { ...thread, preview });
   // The "recent activity" list renders ThreadActivitySummary, not navigation.threads; mirror the
   // fallback there too or that row keeps showing the UUID until app-server supplies a name.

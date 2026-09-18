@@ -124,15 +124,11 @@ const heroComposerVisible = computed(
             {{ t("app.gotoAdminConsole") }}
           </Button>
         </div>
-        <div
-          v-else
-          class="max-w-3xl rounded-2xl bg-canvas-soft px-4 py-3 text-[0.9375rem] leading-7 text-ink md:ml-auto md:px-5 md:py-4"
-        >
-          <div class="mb-2 flex items-center gap-2 text-ink-muted">
-            <FolderIcon class="size-4" />
-            {{ selectedProjectId ? t("app.selectThreadFirst") : t("app.selectProjectFirst") }}
-          </div>
-          {{ selectedProjectId ? t("app.noThread") : t("app.chooseProject") }}
+        <div v-else class="mx-auto flex max-w-md flex-col items-center gap-3 px-4 text-center">
+          <FolderIcon class="size-5 text-ink-muted" />
+          <p class="text-[0.9375rem] leading-7 text-ink">
+            {{ selectedProjectId ? t("app.noThread") : t("app.chooseProject") }}
+          </p>
         </div>
       </ChatPanelScrollArea>
 

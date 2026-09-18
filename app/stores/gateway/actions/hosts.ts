@@ -41,6 +41,7 @@ export function createHostActions() {
       writeGatewayRouteSelection({ hostId: host.id, projectId: null, threadId: null });
       await Promise.all([catalog.listModels(), navigation.listThreads()]);
       catalog.ensureSelectedProject();
+      if (navigation.selectedProjectId !== null) await catalog.listModels();
       if (navigation.selectedProjectId !== null) await navigation.listThreads();
       return host;
     },
@@ -111,6 +112,8 @@ export function createHostActions() {
       await catalog.listModels();
       await navigation.listThreads();
       catalog.ensureSelectedProject();
+      // listModels is skipped while no project is selected; load once the ensured project lands.
+      if (navigation.selectedProjectId !== null) await catalog.listModels();
       if (navigation.selectedProjectId !== null) await navigation.listThreads();
     },
   };

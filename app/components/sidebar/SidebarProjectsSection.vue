@@ -91,7 +91,7 @@ function hostStatusLabel(hostId: number) {
 
 <template>
   <div class="min-w-0 space-y-3">
-    <div class="px-3 pt-1 text-[0.75rem] font-medium text-ink-faint">
+    <div class="px-3 pt-1 text-[0.75rem] font-medium uppercase tracking-wider text-ink-faint">
       {{ t("app.projectsSection") }}
     </div>
 
@@ -103,7 +103,7 @@ function hostStatusLabel(hostId: number) {
           <div
             :data-testid="`host-button-${host.id}`"
             v-bind="pressHandlers"
-            class="flex h-8 items-center gap-2 rounded-lg px-3 text-[0.8125rem] font-medium text-ink-muted hover:bg-canvas-soft"
+            class="flex h-7 items-center gap-2 rounded-lg px-3 text-[0.75rem] font-medium uppercase tracking-wider text-ink-faint hover:bg-canvas-soft"
           >
             <span
               role="img"
@@ -112,7 +112,7 @@ function hostStatusLabel(hostId: number) {
               :aria-label="hostStatusLabel(host.id)"
               :title="hostStatusTitle(host.id)"
             />
-            <span class="min-w-0 flex-1 truncate">{{ host.name }}</span>
+            <span class="min-w-0 flex-1 truncate" :title="host.sshHost">{{ host.name }}</span>
             <button
               v-if="hostNeedsMfa(host.id)"
               type="button"
@@ -151,7 +151,10 @@ function hostStatusLabel(hostId: number) {
             data-project-missing="false"
             variant="ghost"
             class="h-9 w-full min-w-0 justify-start gap-2 overflow-hidden rounded-lg px-3 text-sm font-normal hover:bg-canvas-soft"
-            :class="selectedRowClass(project.id === selectedProjectId)"
+            :class="[
+              selectedRowClass(project.id === selectedProjectId),
+              showHostHeader(host) ? 'ml-3' : '',
+            ]"
             @click="emit('selectProject', project, $event)"
           >
             <FolderIcon class="size-4 shrink-0 text-ink-muted" />
@@ -182,6 +185,7 @@ function hostStatusLabel(hostId: number) {
           :data-testid="`missing-projects-toggle-${host.id}`"
           variant="ghost"
           class="h-9 w-full justify-start gap-2 rounded-lg px-3 text-sm font-normal text-ink-faint hover:bg-canvas-soft"
+          :class="showHostHeader(host) ? 'ml-3' : ''"
           :aria-expanded="expandedMissingHosts.has(host.id)"
           @click="toggleMissingProjects(host.id)"
         >
@@ -202,6 +206,7 @@ function hostStatusLabel(hostId: number) {
                 :data-testid="`project-button-${project.id}`"
                 variant="ghost"
                 class="h-9 w-full min-w-0 justify-start gap-2 overflow-hidden rounded-lg px-3 text-sm font-normal text-ink-faint hover:bg-canvas-soft"
+                :class="showHostHeader(host) ? 'ml-3' : ''"
                 data-project-missing="true"
               >
                 <FolderXIcon class="size-4 shrink-0 text-destructive/70" />
@@ -230,6 +235,7 @@ function hostStatusLabel(hostId: number) {
         :data-testid="`sidebar-new-project-${host.id}`"
         variant="ghost"
         class="h-9 w-full justify-start gap-2 rounded-lg px-3 text-sm font-normal text-ink-muted hover:bg-canvas-soft"
+        :class="showHostHeader(host) ? 'ml-3' : ''"
         @click="emit('addProject', host)"
       >
         <PlusIcon class="size-4 shrink-0" />

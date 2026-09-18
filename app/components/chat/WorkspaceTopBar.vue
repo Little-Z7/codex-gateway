@@ -70,6 +70,7 @@ function openFilesPanel() {
     <ModelEffortPicker
       :models="controller.models.value"
       :loading-models="controller.loadingModels.value"
+      :models-unavailable="controller.selectedProjectId.value === null"
       :active-model="controller.activeModel.value"
       :active-model-label="controller.activeModelLabel.value"
       :host-default-model-label="controller.hostDefaultModelLabel.value"

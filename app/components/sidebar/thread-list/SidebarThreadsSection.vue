@@ -59,12 +59,12 @@ const pressHandlers = computed(() => props.longPressHandlers ?? {});
 
 <template>
   <div class="min-w-0 space-y-3">
-    <div class="px-3 pt-1 text-[0.75rem] font-medium text-ink-faint">
+    <div class="px-3 pt-1 text-[0.75rem] font-medium uppercase tracking-wider text-ink-faint">
       {{ t("app.threadsSection") }}
     </div>
 
     <div v-if="pinnedThreads.length" class="min-w-0 space-y-0.5">
-      <div class="px-3 text-[0.6875rem] font-medium text-ink-faint">
+      <div class="px-3 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-faint">
         {{ t("app.threadGroupPinned") }}
       </div>
       <ContextMenu v-for="thread in pinnedThreads" :key="`${thread.hostId}-${thread.threadId}`">
@@ -106,7 +106,7 @@ const pressHandlers = computed(() => props.longPressHandlers ?? {});
     </div>
 
     <div v-for="group in timeGroups" :key="group.bucket" class="min-w-0 space-y-0.5">
-      <div class="px-3 text-[0.6875rem] font-medium text-ink-faint">
+      <div class="px-3 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-faint">
         {{ t(bucketLabelKeys[group.bucket] ?? "app.threadGroupEarlier") }}
       </div>
       <ContextMenu v-for="thread in group.threads" :key="thread.id">

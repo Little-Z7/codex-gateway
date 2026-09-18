@@ -78,10 +78,10 @@ async function respond(result: unknown) {
 <template>
   <Collapsible v-slot="{ open }" class="max-w-4xl text-ink-muted">
     <CollapsibleTrigger
-      class="flex w-full items-center gap-2 rounded-md py-1 text-left text-[0.9375rem] hover:bg-canvas-soft"
+      class="flex w-full items-center gap-2 rounded-md py-1 text-left text-[0.875rem] hover:bg-canvas-soft"
     >
       <TerminalIcon class="size-4 shrink-0" />
-      <span class="min-w-0 flex-1 truncate">{{ title }}</span>
+      <span class="min-w-0 flex-1 truncate font-mono text-[0.8125rem]">{{ title }}</span>
       <Badge v-if="pendingApproval" variant="outline">{{ t("app.waitingApproval") }}</Badge>
       <!-- The icon is the complete command lifecycle indicator. AI Elements owns the spinner
            geometry and animation; use the primary foreground token because accent is a surface

@@ -111,9 +111,8 @@ test("marks completed threads as needing review until they are opened", async ({
   ).toBeVisible();
 
   await page.getByTestId("thread-button-review-thread").click();
-  await expect(
-    page.getByTestId("thread-button-review-thread").getByLabel("已完成", { exact: true }),
-  ).toBeVisible();
+  // Completed threads render no trailing status icon; opening the thread only clears the
+  // unviewed red dot.
   await expect(
     page.getByTestId("thread-button-review-thread").getByLabel("已完成，待查看", { exact: true }),
   ).toBeHidden();

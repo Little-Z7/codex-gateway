@@ -77,8 +77,10 @@ const emit = defineEmits<{
 }
 
 /* Dockview can make the composer narrow while the browser viewport remains desktop-sized. Query
-   the control surface itself so approval yields to model, effort, context, and send controls. */
-@container (min-width: 44rem) {
+   the control surface itself so approval yields to model, effort, context, and send controls.
+   The standard composer box tops out at 42rem (max-w-3xl minus padding); keep the cutoff
+   clearly below it so rounding never hides the control at full width. */
+@container (min-width: 36rem) {
   .composer-approval-control {
     display: block;
   }

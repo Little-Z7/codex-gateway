@@ -231,7 +231,7 @@
     "cancel": "取消",
     "singleUser": "单用户",
     "noThread": "打开或创建一个会话",
-    "chooseProject": "选择一个项目查看会话",
+    "chooseProject": "选择或创建一个项目开始",
     "loadingGateway": "正在加载远端会话",
     "loadOlder": "加载更早消息",
     "loadingOlder": "正在加载更早消息",
@@ -1087,7 +1087,9 @@
     "roleMember": "成员",
     "recentThreads": "最近对话",
     "startThreadFailed": "创建会话失败",
-    "openFilesPanel": "打开文件"
+    "openFilesPanel": "打开文件",
+    "thought": "思考",
+    "selectProjectForModels": "选择项目后可用"
   },
   "errors": {
     "auth.invalidCredentials": "用户名或密码错误",

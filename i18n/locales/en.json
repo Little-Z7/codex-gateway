@@ -231,7 +231,7 @@
     "cancel": "Cancel",
     "singleUser": "single user",
     "noThread": "Open or create a thread",
-    "chooseProject": "Choose a project to view threads",
+    "chooseProject": "Select or create a project to begin",
     "loadingGateway": "Loading remote threads",
     "loadOlder": "Load earlier messages",
     "loadingOlder": "Loading earlier messages",
@@ -1087,7 +1087,9 @@
     "roleMember": "Member",
     "recentThreads": "Recent chats",
     "startThreadFailed": "Failed to start the thread",
-    "openFilesPanel": "Open files"
+    "openFilesPanel": "Open files",
+    "thought": "Thought",
+    "selectProjectForModels": "Select a project to enable"
   },
   "errors": {
     "auth.invalidCredentials": "Invalid username or password",

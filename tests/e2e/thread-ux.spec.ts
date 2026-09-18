@@ -140,11 +140,12 @@ test("new chat draft, send, sidebar groups, search, user menu", async ({ page, b
     await expect(member.locator('[data-testid="composer-box"]').last()).toBeVisible();
     expect(await threadCount()).toBe(beforeCount + 1);
 
-    // The sidebar shows the first message as the title, never a bare UUID.
+    // The sidebar shows the first message as the title, never a bare UUID. The preview lands
+    // with the next thread-metadata sync, which can lag a slow first turn.
     const sidebarRow = member.locator(`[data-testid^="thread-button-"]`, {
       hasText: prompt.slice(0, 20),
     });
-    await expect(sidebarRow.first()).toBeVisible({ timeout: 15_000 });
+    await expect(sidebarRow.first()).toBeVisible({ timeout: 90_000 });
 
     // 3. Time-grouped conversation list: the new thread lands under "今天".
     await expect(member.getByText("对话", { exact: true })).toBeVisible();

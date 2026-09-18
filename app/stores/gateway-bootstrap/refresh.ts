@@ -117,6 +117,9 @@ async function hydrateNavigationData(sessionEpoch: number) {
   await navigation.listThreads();
   if (!canContinue()) return;
   if (navigation.selectedProjectId === null) catalog.ensureSelectedProject();
+  // listModels is skipped while no project is selected; once one is ensured here, the project
+  // page's composer still needs the picker populated.
+  if (canContinue() && navigation.selectedProjectId !== null) await catalog.listModels();
   if (canContinue() && navigation.selectedProjectId !== null) await navigation.listThreads();
 }
 
