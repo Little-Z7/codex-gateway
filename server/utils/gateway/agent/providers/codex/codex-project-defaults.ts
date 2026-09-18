@@ -28,9 +28,12 @@ export async function readCodexProjectDefaults(
     provider: "codex",
     model: response.config.model,
     effort: response.config.model_reasoning_effort,
-    approvalPolicy: approvalPolicyFromConfig(
-      response.config.approval_policy ?? response.config.approvalPolicy,
-    ),
+    // config.toml may omit approval_policy. Codex still starts threads as on-request
+    // (AskForApproval::default). Surface that effective default so the draft pill matches
+    // the thread composer instead of showing "custom".
+    approvalPolicy:
+      approvalPolicyFromConfig(response.config.approval_policy ?? response.config.approvalPolicy) ??
+      "on-request",
   };
 }
 

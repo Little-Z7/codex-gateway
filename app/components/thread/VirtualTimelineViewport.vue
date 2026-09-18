@@ -19,6 +19,7 @@ const props = defineProps<{
   rows: TimelineViewportRow[];
   estimateSize: (row: unknown, index: number) => number;
   scrollToLatestToken?: number;
+  olderTurnsCursor?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -35,6 +36,16 @@ const historyStartThreshold = 80;
 const startControlsVisible = ref(false);
 const viewportReady = ref(false);
 const didInitialScroll = ref(false);
+// Short, fully loaded threads top-align (no mt-auto). Threads that still have older pages keep
+// mt-auto for the viewport lifetime so an underfilled prepend grows upward instead of jumping.
+const stickToEnd = ref(false);
+watch(
+  () => props.olderTurnsCursor,
+  (cursor) => {
+    if (cursor) stickToEnd.value = true;
+  },
+  { immediate: true },
+);
 
 const chatVirtualizer = useChatVirtualizer({
   count: () => props.rows.length,
@@ -205,7 +216,11 @@ function handleViewportReady() {
       sizer is also invisible to virtual-core and creates a false scroll range.
     -->
     <div class="mx-auto flex min-h-full w-full max-w-3xl flex-col px-[clamp(0.875rem,4vw,2rem)]">
-      <div :ref="chatVirtualizer.containerRef" class="relative mt-auto shrink-0">
+      <div
+        :ref="chatVirtualizer.containerRef"
+        class="relative shrink-0"
+        :class="stickToEnd ? 'mt-auto' : ''"
+      >
         <div
           v-for="virtualRow in virtualRows"
           :key="String(virtualRow.key)"

@@ -164,6 +164,7 @@ watch(
     :rows="rows"
     :estimate-size="estimateRowSize"
     :scroll-to-latest-token="scrollToLatestToken"
+    :older-turns-cursor="olderTurnsCursor"
     @reach-start="handleReachStart"
     @user-detached-change="handleUserDetachedChange"
   >

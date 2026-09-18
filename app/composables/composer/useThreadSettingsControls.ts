@@ -92,7 +92,7 @@ export function useThreadSettingsControls() {
         return selectedThreadSettings.value.approvalPolicy ?? "custom";
       }
       if (newThreadApprovalMode.value !== null) return newThreadApprovalMode.value;
-      return newThreadProjectDefaults.value?.approvalPolicy ?? "custom";
+      return newThreadProjectDefaults.value?.approvalPolicy ?? "on-request";
     },
     set: (approvalPolicy) => {
       if (selectedThreadId.value === null) {

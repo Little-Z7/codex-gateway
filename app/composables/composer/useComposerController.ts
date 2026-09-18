@@ -51,6 +51,7 @@ export function useComposerController() {
   );
 
   const { turnText, attachedFiles, fileReferences, clearDraft } = useComposerDraft();
+  const { draftApprovalMode } = storeToRefs(composer);
   const goalControls = useComposerGoalControls(turnText);
   const settings = useThreadSettingsControls();
   const attachmentUpload = useAttachmentUpload(selectedHostId, attachedFiles);
@@ -71,8 +72,11 @@ export function useComposerController() {
       // Existing-thread settings are projected from thread/resume instead of inferred here.
       model: settings.selectedModel.value === "" ? undefined : settings.selectedModel.value,
       effort,
+      // A still-null draft approval is the remote default (on-request). Omit it so thread.start
+      // does not freeze today's default as a Gateway override the way an explicit pill choice does.
       approvalPolicy:
-        settings.selectedApprovalMode.value === "custom"
+        settings.selectedApprovalMode.value === "custom" ||
+        (selectedThreadId.value === null && draftApprovalMode.value === null)
           ? undefined
           : settings.selectedApprovalMode.value,
       // Provider is a thread-creation choice. Existing threads already have a provider-bound
