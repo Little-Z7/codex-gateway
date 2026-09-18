@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { RealtimeServerMessage } from "../../types";
 import { threadTimelineItemTypes } from "../../thread-history/types";
-import { gatewayThreadSchema, threadGoalSchema } from "../app-server";
+import { gatewayThreadSchema, threadAttachmentSchema, threadGoalSchema } from "../app-server";
 import { agentEventSchema } from "../../agent/events";
 import { realtimeClientMessageSchema } from "./client-message-schema";
 import {
@@ -401,7 +401,6 @@ const agentProjectDefaultsSchema = z
     effort: z.string().nullable(),
   })
   .strict();
-
 // Top-level Gateway messages are closed protocol objects. Nested app-server thread/envelope
 // records intentionally remain extensible because upstream adds fields between releases; their
 // required identity and lifecycle fields are still parsed by the shared app-server schemas.
@@ -589,6 +588,31 @@ export const realtimeServerMessageSchema: z.ZodType<RealtimeServerMessage> = z.d
         items: z.array(projectedHistoryItemSchema),
         nextCursor: z.string().nullable(),
         backwardsCursor: z.string().nullable(),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal("thread.attachments.page"),
+        ...requestIdField,
+        ...threadScopeFields,
+        data: z.array(threadAttachmentSchema),
+        nextCursor: z.string().nullable(),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal("thread.attachment.added"),
+        ...requestIdField,
+        ...threadScopeFields,
+        outcome: z.enum(["created", "existing"]),
+        attachment: threadAttachmentSchema,
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal("thread.attachment.removed"),
+        ...requestIdField,
+        ...threadScopeFields,
       })
       .strict(),
     z

@@ -4,6 +4,8 @@ import type {
   ApprovalPolicy,
   RpcEnvelope,
   ThreadCollaborationMode,
+  ThreadAttachment,
+  ThreadAttachmentsPage,
   ThreadGoal,
   ThreadHistoryItem,
   ThreadHistoryTurn,
@@ -223,6 +225,17 @@ export function appServerThreadStatusFromUnknown(value: unknown) {
 export const appServerThreadSchema = z
   .object({
     id: z.string().min(1),
+    environments: z
+      .array(
+        z
+          .object({
+            environmentId: z.string().min(1),
+            cwd: z.string().min(1),
+            runtimeWorkspaceRoots: z.array(z.string().min(1)),
+          })
+          .strict(),
+      )
+      .nullable(),
     extra: z.object({}).strict().nullable(),
     sessionId: z.string().min(1),
     forkedFromId: z.string().nullable(),
@@ -256,6 +269,7 @@ export const appServerThreadSchema = z
     path: z.string().nullable(),
     cwd: z.string(),
     cliVersion: z.string(),
+    originator: z.string().nullable(),
     name: z.string().nullable(),
     source: z.union([
       z.enum(["cli", "vscode", "exec", "appServer", "unknown"]),
@@ -286,6 +300,7 @@ export const appServerThreadSchema = z
     threadSource: z.string().nullable(),
     agentNickname: z.string().nullable(),
     agentRole: z.string().nullable(),
+    daybreakEnabled: z.boolean().nullable(),
     gitInfo: z
       .object({
         sha: z.string().nullable(),
@@ -490,4 +505,44 @@ const threadResumeResultSchema = z
 
 export function parseThreadResumeResult(value: unknown) {
   return threadResumeResultSchema.parse(value);
+}
+
+export const threadAttachmentSchema = z
+  .object({
+    id: z.string().min(1),
+    attachmentType: z.string().min(1),
+    identityKey: z.string().min(1),
+    payload: z.unknown(),
+    createdAt: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const threadAttachmentsPageSchema = z
+  .object({
+    data: z.array(threadAttachmentSchema),
+    nextCursor: z.string().nullable().optional(),
+  })
+  .loose();
+
+export function parseThreadAttachment(value: unknown): ThreadAttachment {
+  return threadAttachmentSchema.parse(value);
+}
+
+export function parseThreadAttachmentsPage(value: unknown): ThreadAttachmentsPage {
+  const page = threadAttachmentsPageSchema.parse(value);
+  return { data: page.data, nextCursor: page.nextCursor ?? null };
+}
+
+export function parseThreadAttachmentAddResponse(value: unknown) {
+  return z
+    .object({
+      outcome: z.enum(["created", "existing"]),
+      attachment: threadAttachmentSchema,
+    })
+    .strict()
+    .parse(value);
+}
+
+export function parseThreadAttachmentRemoveResponse(value: unknown) {
+  return z.object({}).loose().parse(value);
 }

@@ -122,6 +122,34 @@ export const realtimeClientMessageSchema: z.ZodType<RealtimeClientMessage> = z.d
       .strict(),
     z
       .object({
+        type: z.literal("thread.attachments.list"),
+        ...requestIdField,
+        ...threadScopeFields,
+        cursor: nullableString,
+        limit: positiveId.optional(),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal("thread.attachment.add"),
+        ...requestIdField,
+        ...threadScopeFields,
+        attachmentType: nonEmptyString,
+        identityKey: nonEmptyString,
+        payload: z.unknown(),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal("thread.attachment.remove"),
+        ...requestIdField,
+        ...threadScopeFields,
+        attachmentType: nonEmptyString,
+        identityKey: nonEmptyString,
+      })
+      .strict(),
+    z
+      .object({
         type: z.literal("thread.start"),
         ...requestIdField,
         hostId: positiveId,

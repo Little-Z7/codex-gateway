@@ -118,12 +118,18 @@ test("plan-mode user questions render and notify through Sonner and Bark", async
   await page.getByTestId("model-select").click();
   await page.getByTestId("model-option-gpt-6-astra").click();
   await page.getByTestId("model-selector-close").click();
+  // Model settings are persisted through the real app-server request. Wait for the visible
+  // trigger to reflect the selected model before sending the turn; otherwise the turn can race
+  // the settings update and run with the host default model.
+  await expect(page.getByTestId("model-select")).toContainText(/gpt-6-astra/i, {
+    timeout: 30_000,
+  });
 
   const question = `请选择 E2E 方案 ${Date.now()}`;
   await page
     .getByPlaceholder("输入后续修改要求")
     .fill(
-      `先不要制定计划或回复正文。立即调用 request_user_input，只询问“${question}”，提供“方案 A”和“方案 B”两个选项。`,
+      `先不要制定计划或回复正文。立即调用 request_user_input_async，只询问“${question}”，提供“方案 A”和“方案 B”两个选项。`,
     );
   await page.getByTestId("send-turn-button").click();
 

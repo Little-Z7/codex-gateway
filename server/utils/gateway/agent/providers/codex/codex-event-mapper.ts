@@ -315,6 +315,31 @@ export function mapCodexNotification(notification: CodexNotification): MapperRes
     return { event: { type: "thread.goal.cleared" }, emittedAt: emittedAtMs };
   }
 
+  if (method === "thread/attachment/updated") {
+    const attachmentId = stringFromUnknown(p.attachmentId);
+    const attachmentType = stringFromUnknown(p.attachmentType);
+    const identityKey = stringFromUnknown(p.identityKey);
+    const operation = p.operation;
+    if (
+      !attachmentId ||
+      !attachmentType ||
+      !identityKey ||
+      (operation !== "created" && operation !== "deleted")
+    ) {
+      return null;
+    }
+    return {
+      event: {
+        type: "thread.attachment.updated",
+        attachmentId,
+        attachmentType,
+        identityKey,
+        operation,
+      },
+      emittedAt: emittedAtMs,
+    };
+  }
+
   // ── Response usage ────────────────────────────────────────────
   if (method === "rawResponse/completed") {
     const completed = rawResponseCompletedFromUnknown(p);

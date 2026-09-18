@@ -19,7 +19,7 @@ export class CodexUpgradeWorkflow {
 
   async repair(host: HostWithSecret): Promise<RemoteCodexVersionState> {
     return await this.runExclusive(host, async (resources, attempt) => {
-      const beforeVersion = await this.readVersionForRepair(host);
+      const beforeVersion = (await this.readVersionForRepair(host)).version;
       await this.stopRuntimeIfPresent(host);
       const version = await this.upgrader.upgrade(
         host,
@@ -31,6 +31,7 @@ export class CodexUpgradeWorkflow {
 
       return {
         version,
+        installationLayout: "standalone",
         appServerVersion: null,
         supportedVersion: SUPPORTED_CODEX_VERSION,
         beforeVersion,
@@ -48,16 +49,20 @@ export class CodexUpgradeWorkflow {
       // Hosts can wait in this queue for several minutes. Re-read both CLI and app-server state
       // when this Host reaches the front so a newly started thread is never interrupted and an
       // externally completed upgrade is not repeated.
-      const beforeVersion = await this.versionChecker.readVersionOrRecoverableMissing(host);
+      const installed = await this.versionChecker.readVersionOrRecoverableMissing(host);
+      const beforeVersion = installed.version;
       const runtimeState = await this.runtime.readState(host);
       const currentRuntimeVersion = runtimeState.appServerVersion ?? beforeVersion;
-      const cliVersionSupported = isCodexVersionAtLeast(beforeVersion, supportedVersion);
+      const cliVersionSupported =
+        isCodexVersionAtLeast(beforeVersion, supportedVersion) &&
+        installed.installationLayout === "standalone";
       const runtimeVersionSupported = isCodexVersionAtLeast(
         currentRuntimeVersion,
         supportedVersion,
       );
       codexUpgradeLog("remote version inspected", host, {
         observedVersion: beforeVersion,
+        installationLayout: installed.installationLayout,
         appServerVersion: runtimeState.appServerVersion,
         targetVersion: supportedVersion,
         runtimeRunning: runtimeState.running,
@@ -90,6 +95,7 @@ export class CodexUpgradeWorkflow {
         });
         return {
           version: beforeVersion,
+          installationLayout: installed.installationLayout,
           appServerVersion: runtimeVersionSupported ? runtimeState.appServerVersion : null,
           supportedVersion,
           beforeVersion: observedBeforeVersion,
@@ -100,6 +106,7 @@ export class CodexUpgradeWorkflow {
       const version = await this.install(host, supportedVersion, beforeVersion, resources, attempt);
       return {
         version,
+        installationLayout: "standalone",
         appServerVersion: null,
         supportedVersion,
         beforeVersion,
@@ -122,7 +129,7 @@ export class CodexUpgradeWorkflow {
     hostLifecycleBus.emit({
       hostId: host.id,
       status: "upgrading",
-      message: `正在为 ${hostDisplayName(host)} 准备 Codex ${supportedVersion} 官方 npm 安装包`,
+      message: `正在为 ${hostDisplayName(host)} 准备 Codex ${supportedVersion} 官方 standalone 安装包`,
     });
     const version = await this.upgrader.withPreparedUpgrade(
       host,
@@ -184,7 +191,7 @@ export class CodexUpgradeWorkflow {
     try {
       return await this.versionChecker.readVersionOrRecoverableMissing(host);
     } catch {
-      return "0.0.0";
+      return { version: "0.0.0", installationLayout: "npm-or-external" } as const;
     }
   }
 

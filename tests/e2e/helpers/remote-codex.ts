@@ -4,11 +4,7 @@ import { z } from "zod";
 import { envFile, mfaEnvFile, upgradeEnvFile } from "../docker-environment";
 import { connectTestSsh, execTestSsh } from "./ssh-client";
 
-export type RemoteRuntimeFixture =
-  | "empty-runtime"
-  | "legacy-node"
-  | "legacy-codex"
-  | "current-codex";
+export type RemoteRuntimeFixture = "empty-runtime" | "legacy-node" | "npm-codex" | "current-codex";
 
 const remoteCodexEnvSchema = z
   .object({
@@ -19,10 +15,11 @@ const remoteCodexEnvSchema = z
     projectPath: z.string().min(1),
     imagePath: z.string().min(1),
     runtimeFixture: z
-      .enum(["empty-runtime", "legacy-node", "legacy-codex", "current-codex"])
+      .enum(["empty-runtime", "legacy-node", "npm-codex", "current-codex"])
       .optional(),
     initialNodeVersion: z.string().min(1).nullable().optional(),
     initialCodexVersion: z.string().min(1).nullable().optional(),
+    initialCodexBin: z.string().min(1).nullable().optional(),
     supportedCodexVersion: z.string().min(1).optional(),
     testModel: z.string().min(1).optional(),
     codexBin: z.string().min(1).optional(),
@@ -120,14 +117,13 @@ if [ -n "$pids" ]; then
   kill -KILL $pids >/dev/null 2>&1 || true
 fi
 rm -f "$socket"
-rm -f "$daemon_dir"/app-server.pid "$daemon_dir"/app-server.pid.lock "$daemon_dir"/app-server.stderr.log
+rm -f "$daemon_dir"/app-server.pid "$daemon_dir"/app-server.pid.lock "$daemon_dir"/app-server.stderr.log "$daemon_dir"/loaded-threads.json
 `,
   );
 }
 
 export async function startRemotePreviewServer(remote: RemoteCodexEnv) {
-  const nodeBin = remote.codexBin?.replace(/\/codex$/, "/node");
-  if (nodeBin === undefined || nodeBin === "") throw new Error("Missing managed remote Node path");
+  const previewNode = "/opt/codex-preview-runtime/bin/node";
   await execRemoteSsh(
     remote,
     `
@@ -135,10 +131,10 @@ set -eu
 if [ -f /tmp/codex-preview-server.pid ]; then
   kill "$(cat /tmp/codex-preview-server.pid)" >/dev/null 2>&1 || true
 fi
-nohup ${shellQuote(nodeBin)} /usr/local/lib/codex-preview-server.mjs >/tmp/codex-preview-server.log 2>&1 </dev/null &
+nohup ${shellQuote(previewNode)} /opt/codex-preview-runtime/preview-server.mjs >/tmp/codex-preview-server.log 2>&1 </dev/null &
 echo $! >/tmp/codex-preview-server.pid
 for i in $(seq 1 50); do
-  if ${shellQuote(nodeBin)} -e 'const s=require("net").connect(4173,"127.0.0.1",()=>{s.end();process.exit(0)});s.on("error",()=>process.exit(1))' >/dev/null 2>&1; then
+  if ${shellQuote(previewNode)} -e 'const s=require("net").connect(4173,"127.0.0.1",()=>{s.end();process.exit(0)});s.on("error",()=>process.exit(1))' >/dev/null 2>&1; then
     exit 0
   fi
   sleep 0.1
@@ -369,10 +365,13 @@ async function runRemoteCodexVersion(remote: RemoteCodexEnv) {
   return stdout.trim();
 }
 
-export function remoteCodexCommand(remote: RemoteCodexEnv) {
-  if (remote.codexBin !== undefined && remote.codexBin !== "") {
-    const binDirectory = remote.codexBin.replace(/\/[^/]+$/, "");
-    return `env PATH=${shellQuote(binDirectory)}:"$PATH" ${shellQuote(remote.codexBin)}`;
+export function remoteCodexCommand(
+  remote: RemoteCodexEnv,
+  bin: string | null | undefined = remote.codexBin,
+) {
+  if (bin !== undefined && bin !== null && bin !== "") {
+    const binDirectory = bin.replace(/\/[^/]+$/, "");
+    return `env PATH=${shellQuote(binDirectory)}:"$PATH" ${shellQuote(bin)}`;
   }
   const candidates = ["$HOME/.npm-global/bin/codex", "$HOME/.local/bin/codex"];
   const candidateList = candidates.map(shellQuote).join(" ");

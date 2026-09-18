@@ -33,10 +33,10 @@ services:
         E2E_GID: ${E2E_GID:-12345}
     <<: *ssh-target
 
-  ssh-target-legacy-codex:
+  ssh-target-npm-codex:
     build:
       context: ./docker
-      target: legacy-codex
+      target: npm-codex
       args:
         CODEX_CLI_VERSION: ${E2E_CODEX_CLI_VERSION:-0.140.0}
         E2E_UID: ${E2E_UID:-12345}
@@ -76,7 +76,7 @@ services:
     depends_on:
       - ssh-target
       - ssh-target-legacy-node
-      - ssh-target-legacy-codex
+      - ssh-target-npm-codex
       - ssh-target-mfa
       - bark-target
     environment:
@@ -139,7 +139,7 @@ services:
       E2E_CODEX_HOME: /codex-auth
       E2E_REMOTE_HOST: ssh-target
       E2E_LEGACY_NODE_REMOTE_HOST: ssh-target-legacy-node
-      E2E_LEGACY_CODEX_REMOTE_HOST: ssh-target-legacy-codex
+      E2E_NPM_CODEX_REMOTE_HOST: ssh-target-npm-codex
       E2E_MFA_REMOTE_HOST: ssh-target-mfa
       E2E_REMOTE_PORT: "22"
       E2E_REMOTE_USERNAME: codex

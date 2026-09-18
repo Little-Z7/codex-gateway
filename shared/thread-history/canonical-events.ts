@@ -68,6 +68,7 @@ export function applyCanonicalEventToHistory(
     case "notice":
     case "thread.goal.cleared":
     case "thread.goal.updated":
+    case "thread.attachment.updated":
     case "thread.realtime.error":
     case "thread.settings.updated":
     case "thread.started":
