@@ -40,6 +40,15 @@ test("upgrades empty, legacy Node, and npm Codex SSH hosts with bounded concurre
 
   for (const environment of environments) {
     await verifyInitialRuntime(environment);
+    if (environment.runtimeFixture === "npm-codex") {
+      // A previous interrupted migration can leave `current` as a real directory. This is a
+      // legacy upgrade state, not a mocked transport; keep it in the real SSH fixture so the
+      // standalone switch is verified against the failure seen in production.
+      await execRemoteSsh(
+        environment,
+        `mkdir -p "$HOME/.codex/packages/standalone/current" && printf stale > "$HOME/.codex/packages/standalone/current/stale-marker"`,
+      );
+    }
   }
 
   await openApp(page);

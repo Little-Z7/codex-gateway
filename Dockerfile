@@ -18,7 +18,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY patches ./patches
 COPY packages ./packages
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm install --frozen-lockfile
+    pnpm install --frozen-lockfile --reporter=silent
 
 FROM deps AS build
 COPY i18n ./i18n
@@ -30,7 +30,7 @@ COPY server ./server
 COPY app ./app
 # Nuxt 4.5.1 buildCache can restore the Vue bundle without wiring its renderer virtual modules
 # (nuxt/nuxt#35894). Keep dependency layers cached, but always produce a complete app bundle.
-RUN pnpm exec nuxt build
+RUN pnpm exec nuxt build --logLevel silent
 
 FROM node:${NODE_VERSION} AS runner
 ENV NODE_ENV=production
