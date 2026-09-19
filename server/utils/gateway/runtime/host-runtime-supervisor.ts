@@ -226,16 +226,27 @@ class HostRuntimeSupervisor {
         return;
       }
       slot.retryCount += 1;
+      // Release the failed attempt before publishing the actionable state. The lifecycle event is
+      // delivered synchronously to the browser; if the user clicks MFA immediately, the next
+      // connect must not be rejected by the old attempt's `connecting` flag.
+      this.releaseConnectAttempt(slot, connection);
       publishHostRuntimeFailure(slot, error);
       if (!hostMfaManager.isMfaHost(slot.userId, slot.hostId)) {
         this.scheduleConnect(slot, retryDelay(slot.retryCount));
       }
     } finally {
-      if (slot.connectPromise === connection) {
-        slot.connectPromise = null;
-        slot.connecting = false;
-      }
+      // A replaced slot may already own a newer connection attempt. Never clear state belonging
+      // to that newer generation while an older promise is unwinding.
+      this.releaseConnectAttempt(slot, connection);
     }
+  }
+
+  private releaseConnectAttempt(slot: HostRuntimeSlot, connection: Promise<void>) {
+    if (slot.connectPromise !== connection) {
+      return;
+    }
+    slot.connectPromise = null;
+    slot.connecting = false;
   }
 
   private isCurrent(slot: HostRuntimeSlot, generation: number) {
