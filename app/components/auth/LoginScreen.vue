@@ -4,19 +4,10 @@ import { Button } from "@codex-gateway/ui/button";
 import { Input } from "@codex-gateway/ui/input";
 import { useAuthStore } from "@/stores/auth";
 import { gatewayErrorPayload, gatewayErrorMessage } from "@/utils/gateway-error";
-import SetupScreen from "./SetupScreen.vue";
+import { gatewayPath } from "@/utils/gateway-url";
 
 const auth = useAuthStore();
 const { t, te } = useI18n();
-const needsSetup = ref<boolean | null>(null);
-
-onMounted(async () => {
-  try {
-    needsSetup.value = (await $fetch<{ needsSetup: boolean }>("/api/setup/status")).needsSetup;
-  } catch {
-    needsSetup.value = false;
-  }
-});
 const username = ref("");
 const password = ref("");
 const loading = ref(false);
@@ -45,8 +36,7 @@ async function submit() {
 </script>
 
 <template>
-  <SetupScreen v-if="needsSetup" />
-  <main v-else class="flex min-h-dvh items-center justify-center bg-canvas px-4 py-10">
+  <main class="flex min-h-dvh items-center justify-center bg-canvas px-4 py-10">
     <form
       class="w-full max-w-sm rounded-2xl border border-hairline bg-surface p-6 shadow-xl"
       data-testid="login-form"
@@ -86,6 +76,15 @@ async function submit() {
         <Loader2Icon v-if="loading" class="size-4 animate-spin" />
         {{ t("app.login") }}
       </Button>
+      <p class="mt-4 text-center text-sm text-ink-muted">
+        <a
+          :href="gatewayPath('')"
+          class="underline-offset-4 hover:text-ink hover:underline"
+          data-testid="login-back-to-landing"
+        >
+          {{ t("landing.backToIntro") }}
+        </a>
+      </p>
     </form>
   </main>
 </template>

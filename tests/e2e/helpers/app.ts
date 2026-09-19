@@ -112,6 +112,11 @@ async function loginIfNeeded(
     password: E2E_PASSWORD,
   },
 ) {
+  const landingLogin = page.getByTestId("landing-login");
+  if (await landingLogin.isVisible().catch(() => false)) {
+    await landingLogin.click();
+    await expect(page.getByTestId("login-form")).toBeVisible({ timeout: 30_000 });
+  }
   if (
     !(await page
       .getByTestId("login-form")

@@ -3,8 +3,11 @@ import { computed, onMounted, ref } from "vue";
 import { storeToRefs } from "pinia";
 import { Toaster } from "@codex-gateway/ui/sonner";
 import ForcePasswordChangeScreen from "@/components/auth/ForcePasswordChangeScreen.vue";
+import LandingScreen from "@/components/auth/LandingScreen.vue";
 import LoginScreen from "@/components/auth/LoginScreen.vue";
+import SetupScreen from "@/components/auth/SetupScreen.vue";
 import { useAuthStore } from "@/stores/auth";
+import { gatewayRouteKey, isGatewayLandingRoute } from "@/utils/gateway-route";
 import { gatewayPath } from "@/utils/gateway-url";
 import AdminConsole from "@/components/admin/AdminConsole.vue";
 import { useGatewayBootstrapStore } from "@/stores/gateway-bootstrap";
@@ -30,11 +33,30 @@ let activeSessionToken = "";
 const layoutName = computed(() => (device.isMobileOrTablet ? "mobile" : "default"));
 const appBase = useRuntimeConfig().app.baseURL;
 const route = useRoute();
+const requestURL = import.meta.server ? useRequestURL() : null;
+const unauthenticatedPath = computed(() => {
+  if (import.meta.server) {
+    return requestURL?.pathname || route.path || "/";
+  }
+  return route.path || window.location.pathname;
+});
+const isLandingRoute = computed(() => isGatewayLandingRoute(unauthenticatedPath.value, appBase));
 const isAdminRoute = computed(() =>
   route.path
     .replace(new RegExp(`^${appBase}`), "")
     .replace(/^\/+/, "")
     .startsWith("admin"),
+);
+const { data: needsSetup } = await useAsyncData(
+  "gateway-setup-status",
+  async () => {
+    try {
+      return (await $fetch<{ needsSetup: boolean }>("/api/setup/status")).needsSetup;
+    } catch {
+      return false;
+    }
+  },
+  { server: true },
 );
 const pageTitle = computed(() => {
   if (!selectedThreadId.value || !currentThread.value) {
@@ -71,6 +93,20 @@ watch([initialized, isAdmin], ([ready, admin]) => {
   }
 });
 
+watch(isAuthenticated, (authenticated, wasAuthenticated) => {
+  if (!import.meta.client) return;
+  const pageKey = gatewayRouteKey(window.location.pathname, appBase);
+  if (authenticated && wasAuthenticated === false) {
+    if (pageKey === "" || pageKey === "landing" || pageKey === "login") {
+      void navigateTo("/");
+    }
+    return;
+  }
+  if (!authenticated && wasAuthenticated === true && pageKey !== "login") {
+    window.location.replace(gatewayPath("login"));
+  }
+});
+
 watch(
   [initialized, token],
   ([authInitialized, currentToken]) => {
@@ -103,7 +139,9 @@ watch(
     >ready</span
   >
   <Toaster rich-colors position="top-right" />
-  <LoginScreen v-if="mounted && !isAuthenticated" />
+  <SetupScreen v-if="needsSetup && !isAuthenticated" />
+  <LandingScreen v-else-if="!isAuthenticated && isLandingRoute" />
+  <LoginScreen v-else-if="!isAuthenticated" />
   <ForcePasswordChangeScreen v-else-if="mustChangePassword" />
   <AdminConsole v-else-if="isAdminRoute && isAdmin" />
   <NuxtLayout v-else :name="layoutName" />
