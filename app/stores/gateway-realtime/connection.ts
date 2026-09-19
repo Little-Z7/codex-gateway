@@ -9,6 +9,7 @@ const RESUME_PING_TIMEOUT_MS = 4_000;
 interface RealtimeConnectionOptions {
   disconnectedMessage: () => string;
   onMessage: (message: RealtimeServerMessage) => void;
+  onBinaryMessage: (data: Uint8Array) => void;
   onDisconnected: (error: Error) => void;
 }
 
@@ -64,6 +65,7 @@ export function createRealtimeConnection(options: RealtimeConnectionOptions) {
     state.generation = generation;
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const socket = new WebSocket(`${protocol}//${window.location.host}/api/realtime`);
+    socket.binaryType = "arraybuffer";
     state.socket = socket;
 
     socket.addEventListener("open", () => {
@@ -76,8 +78,12 @@ export function createRealtimeConnection(options: RealtimeConnectionOptions) {
 
     socket.addEventListener("message", (event) => {
       if (state.generation !== generation) return;
+      if (typeof event.data !== "string") {
+        void readBinaryMessage(event.data).then(options.onBinaryMessage);
+        return;
+      }
       try {
-        options.onMessage(parseRealtimeServerMessage(JSON.parse(String(event.data))));
+        options.onMessage(parseRealtimeServerMessage(JSON.parse(event.data)));
       } catch (error: unknown) {
         // A malformed or protocol-incompatible frame cannot be ignored while the socket remains
         // healthy: the request broker would wait until its deadline for a response already lost.
@@ -158,6 +164,14 @@ export function createRealtimeConnection(options: RealtimeConnectionOptions) {
     const socket = state.socket;
     if (socket === null || socket.readyState !== WebSocket.OPEN) return false;
     socket.send(JSON.stringify(message));
+    return true;
+  }
+
+  function sendBinary(data: Uint8Array) {
+    connect();
+    const socket = state.socket;
+    if (socket === null || socket.readyState !== WebSocket.OPEN) return false;
+    socket.send(Uint8Array.from(data).buffer);
     return true;
   }
 
@@ -259,5 +273,15 @@ export function createRealtimeConnection(options: RealtimeConnectionOptions) {
     acknowledgePong,
     markReady,
     waitForReady,
+    sendBinary,
   };
+}
+
+async function readBinaryMessage(data: unknown) {
+  if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  if (ArrayBuffer.isView(data)) {
+    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  }
+  if (data instanceof Blob) return new Uint8Array(await data.arrayBuffer());
+  return new Uint8Array();
 }
