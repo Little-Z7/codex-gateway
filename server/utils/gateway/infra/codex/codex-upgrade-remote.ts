@@ -72,6 +72,20 @@ replace_path_with_symlink() {
   if mv -hf "$tmp_link" "$link_path" 2>/dev/null; then
     return
   fi
+  # Older standalone attempts could leave current as a real directory. rm -f cannot remove
+  # that path, and replacing it in place would make every later upload fail after transfer. Move
+  # the stale directory aside before installing the new symlink, then remove only that old tree.
+  if [ -d "$link_path" ] && [ ! -L "$link_path" ]; then
+    stale_path="$link_path.stale.$$"
+    rm -rf "$stale_path"
+    mv "$link_path" "$stale_path"
+    if mv "$tmp_link" "$link_path"; then
+      rm -rf "$stale_path"
+      return
+    fi
+    mv "$stale_path" "$link_path"
+    return 1
+  fi
   rm -f "$link_path"
   mv -f "$tmp_link" "$link_path"
 }
