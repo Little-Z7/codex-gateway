@@ -10,6 +10,8 @@ import { shellQuote } from "../infra/ssh/shell";
 import { trimmedOrFallback, trimmedOrNull } from "~~/shared/utils/strings";
 import { sshConnections } from "../infra/host-services";
 import { terminalEventBus } from "./events";
+import { TerminalOutputCoalescer } from "./output-coalescer";
+import { encodeTerminalOutputFrame } from "~~/shared/runtime/terminal-stream";
 
 const MAX_OUTPUT_BUFFER_BYTES = 256 * 1024;
 
@@ -30,6 +32,7 @@ interface TerminalSession {
   output: string;
   seq: number;
   channel: ClientChannel;
+  outputCoalescer: TerminalOutputCoalescer;
 }
 
 export class TerminalManager {
@@ -60,6 +63,9 @@ export class TerminalManager {
       output: "",
       seq: 0,
       channel,
+      outputCoalescer: new TerminalOutputCoalescer({
+        onFlush: (data) => this.publishOutput(sessionId, data),
+      }),
     };
     this.sessions.set(sessionId, session);
     this.bindChannel(session);
@@ -102,32 +108,13 @@ export class TerminalManager {
 
   private bindChannel(session: TerminalSession) {
     session.channel.on("data", (chunk: Buffer) => {
-      const data = chunk.toString("utf8");
-      session.output = trimOutput(session.output + data);
-      session.seq += 1;
-      session.lastActiveAt = new Date().toISOString();
-      terminalEventBus.publish(session.userId, {
-        type: "terminal.output",
-        sessionId: session.sessionId,
-        data,
-        seq: session.seq,
-        createdAt: session.lastActiveAt,
-      });
+      session.outputCoalescer.handle(chunk.toString("utf8"));
     });
     session.channel.stderr.on("data", (chunk: Buffer) => {
-      const data = chunk.toString("utf8");
-      session.output = trimOutput(session.output + data);
-      session.seq += 1;
-      session.lastActiveAt = new Date().toISOString();
-      terminalEventBus.publish(session.userId, {
-        type: "terminal.output",
-        sessionId: session.sessionId,
-        data,
-        seq: session.seq,
-        createdAt: session.lastActiveAt,
-      });
+      session.outputCoalescer.handle(chunk.toString("utf8"));
     });
     session.channel.on("error", (error: Error) => {
+      session.outputCoalescer.flush();
       terminalEventBus.publish(session.userId, {
         type: "terminal.error",
         sessionId: session.sessionId,
@@ -135,11 +122,13 @@ export class TerminalManager {
       });
     });
     session.channel.on("close", (code: number | null, signal: string | null) => {
+      session.outputCoalescer.flush();
       if (session.status === "closed") {
         return;
       }
       session.status = "closed";
       this.sessions.delete(session.sessionId);
+      session.outputCoalescer.dispose();
       terminalEventBus.publish(session.userId, {
         type: "terminal.exited",
         sessionId: session.sessionId,
@@ -169,12 +158,27 @@ export class TerminalManager {
     if (session.status === "closed") {
       return;
     }
+    session.outputCoalescer.flush();
     session.status = "closed";
     this.sessions.delete(session.sessionId);
+    session.outputCoalescer.dispose();
     session.channel.close();
     terminalEventBus.publish(session.userId, {
       type: "terminal.closed.event",
       sessionId: session.sessionId,
+    });
+  }
+
+  private publishOutput(sessionId: string, data: string) {
+    const session = this.sessions.get(sessionId);
+    if (session === undefined || session.status !== "open") return;
+    session.output = trimOutput(session.output + data);
+    session.seq += 1;
+    session.lastActiveAt = new Date().toISOString();
+    terminalEventBus.publish(session.userId, {
+      type: "terminal.output.binary",
+      sessionId,
+      frame: encodeTerminalOutputFrame(sessionId, data),
     });
   }
 

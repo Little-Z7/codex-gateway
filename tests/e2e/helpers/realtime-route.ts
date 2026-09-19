@@ -168,7 +168,14 @@ function handleClientMessage(
   connection: RealtimeRouteConnection,
   raw: string | Buffer,
 ) {
-  const message = parseRealtimeClientMessage(JSON.parse(raw.toString()));
+  const text = textRealtimeMessage(raw);
+  if (text === null) {
+    // Terminal input and resize use the production binary transport. The route only virtualizes
+    // selected JSON requests; binary frames must remain a transparent browser-to-Gateway path.
+    connection.upstream.send(raw);
+    return;
+  }
+  const message = parseRealtimeClientMessage(JSON.parse(text));
   if (message.type === "thread.activate" && state.snapshots !== null) {
     handleThreadActivate(state, connection, message);
     return;
@@ -188,6 +195,16 @@ function handleClientMessage(
     return;
   }
   connection.upstream.send(raw);
+}
+
+function textRealtimeMessage(raw: string | Buffer) {
+  if (typeof raw === "string") return raw;
+  const firstByte = raw.find((value) => !isAsciiWhitespace(value));
+  return firstByte === 0x7b || firstByte === 0x5b ? raw.toString("utf8") : null;
+}
+
+function isAsciiWhitespace(value: number) {
+  return value === 0x09 || value === 0x0a || value === 0x0d || value === 0x20;
 }
 
 function isThreadTurnsLoad(

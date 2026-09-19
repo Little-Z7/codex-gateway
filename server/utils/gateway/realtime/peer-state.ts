@@ -3,9 +3,11 @@ import { runWithGatewayUser } from "../state/memory";
 import type { OwnedSubscription } from "./subscription-map";
 
 export interface RealtimePeer {
-  send(message: string): void;
+  send(message: string | Uint8Array): void;
   close(code?: number, reason?: string): void;
   context: Record<string, unknown>;
+  bufferedAmount?: number;
+  waitForDrain?: (options?: { threshold?: number; signal?: AbortSignal }) => Promise<void>;
 }
 
 export interface RealtimePeerState {
@@ -14,6 +16,7 @@ export interface RealtimePeerState {
   authTimer?: ReturnType<typeof setTimeout>;
   hostLifecycleUnsubscribe?: () => void;
   terminalUnsubscribe?: () => void;
+  terminalOutputStream?: { dispose: () => void };
   notificationUnsubscribe?: () => void;
   pinnedThreadsUnsubscribe?: () => void;
   threadRuntimeStatusUnsubscribe?: () => void;
