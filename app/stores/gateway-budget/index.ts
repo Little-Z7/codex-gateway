@@ -2,11 +2,12 @@ import { defineStore } from "pinia";
 import { toast } from "@codex-gateway/ui/sonner";
 import type { BudgetSnapshot } from "~~/shared/types";
 import { gatewayApi } from "@/utils/gateway-api";
+import { useGatewayTranslator } from "@/composables/i18n/useGatewayTranslator";
 
 export const useGatewayBudgetStore = defineStore("gateway-budget", () => {
   const snapshot = ref<BudgetSnapshot | null>(null);
   const toastedExceeded = ref<string | null>(null);
-  const i18n = useI18n();
+  const { t, te } = useGatewayTranslator();
 
   const exceeded = computed(() => snapshot.value?.exceeded ?? null);
   const warning = computed(() => snapshot.value?.warning ?? null);
@@ -42,8 +43,8 @@ export const useGatewayBudgetStore = defineStore("gateway-budget", () => {
   ) {
     const kind = blocking ? "exceeded" : "warning";
     const specific = `errors.budget.${kind}${dimension.charAt(0).toUpperCase()}${dimension.slice(1)}`;
-    const key = i18n.te(specific) ? specific : `errors.budget.${kind}`;
-    return i18n.t(key, {
+    const key = te(specific) ? specific : `errors.budget.${kind}`;
+    return t(key, {
       used: formatBudgetNumber(used),
       limit: formatBudgetNumber(limit),
       resetAt: formatResetClock(resetAt),

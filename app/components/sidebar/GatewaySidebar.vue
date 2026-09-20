@@ -10,11 +10,13 @@ import {
   DialogTitle,
 } from "@codex-gateway/ui/dialog";
 import { SidebarFooter, SidebarTrigger } from "@codex-gateway/ui/sidebar";
+import { toast } from "@codex-gateway/ui/sonner";
 import SettingsPanel from "@/components/settings/SettingsPanel.vue";
 import { useAuthStore } from "@/stores/auth";
 import { gatewayPath } from "@/utils/gateway-url";
 import { useLongPressContextMenu } from "@/composables/interactions/useLongPressContextMenu";
 import { useWorkspaceLaunchActions } from "@/composables/workspace/useWorkspaceLaunchActions";
+import { useGatewayBootstrapStore } from "@/stores/gateway-bootstrap";
 import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
 import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
 import { gatewayDomainEvents } from "@/stores/gateway/domain-events";
@@ -34,6 +36,7 @@ import type { HostRecord, ProjectRecord } from "./sidebar-types";
 
 const catalog = useGatewayCatalogStore();
 const navigation = useGatewayNavigationStore();
+const bootstrap = useGatewayBootstrapStore();
 const auth = useAuthStore();
 const { t } = useI18n();
 const showSettings = ref(false);
@@ -87,7 +90,12 @@ function startNewThread() {
   if (host !== null) {
     // No project selected: guide the user into the project creation dialog instead of failing.
     openAddProject(host);
+    return;
   }
+  // No workspace host is available at all yet: give explicit feedback instead of a silent no-op.
+  toast.error(
+    bootstrap.initializing ? t("app.newThreadWorkspaceLoading") : t("app.newThreadNoWorkspace"),
+  );
 }
 
 onScopeDispose(gatewayDomainEvents.on("new-thread-requested", () => startNewThread()));

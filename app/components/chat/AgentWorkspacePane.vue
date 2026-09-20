@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { FolderIcon, Loader2Icon } from "@lucide/vue";
+import { AlertTriangleIcon, FolderIcon, Loader2Icon } from "@lucide/vue";
 import { Button } from "@codex-gateway/ui/button";
 import { computed } from "vue";
 import ChatComposer from "@/components/chat/ChatComposer.vue";
@@ -14,6 +14,7 @@ import { useGatewayThreadTurnsStore } from "@/stores/gateway-thread-turns";
 import { useAuthStore } from "@/stores/auth";
 import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
 import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
+import { refreshGatewayClient } from "@/stores/gateway-bootstrap/refresh";
 import { gatewayPath } from "@/utils/gateway-url";
 import { useChatWorkspaceState } from "./chat-workspace-state";
 
@@ -40,11 +41,14 @@ const navigation = useGatewayNavigationStore();
 const hasNoHosts = computed(() => catalog.hosts.length === 0);
 
 const { t } = useI18n();
+// A visible error always wins over the loading spinner: a stuck bootstrap or thread restore must
+// surface its error instead of spinning forever (see showBootstrapError below for where it goes).
 const showThreadLoading = computed(
   () =>
-    initializing.value ||
-    openingThread.value ||
-    (Boolean(selectedThreadId.value) && !selectedThreadViewReady.value && !visibleError.value),
+    !visibleError.value &&
+    (initializing.value ||
+      openingThread.value ||
+      (Boolean(selectedThreadId.value) && !selectedThreadViewReady.value)),
 );
 const heroComposerVisible = computed(
   () =>
@@ -53,6 +57,16 @@ const heroComposerVisible = computed(
         historyTurns.value.length === 0 &&
         !visibleError.value)) &&
     selectedProjectId.value !== null,
+);
+// Only takes over when nothing else in the chain has content to show (no hero, no open thread, no
+// project list): a thread- or turn-scoped error must keep the timeline visible and rely on the
+// existing Sonner toast, not blank out an already-loaded conversation.
+const showBootstrapError = computed(
+  () =>
+    visibleError.value !== null &&
+    !heroComposerVisible.value &&
+    selectedThreadId.value === null &&
+    selectedProjectId.value === null,
 );
 </script>
 
@@ -104,6 +118,21 @@ const heroComposerVisible = computed(
       <ChatPanelScrollArea v-else-if="selectedProjectId" class="flex flex-col">
         <div class="pt-[clamp(3.5rem,14vh,7rem)] pb-10">
           <ProjectThreadList />
+        </div>
+      </ChatPanelScrollArea>
+
+      <ChatPanelScrollArea v-else-if="showBootstrapError" class="flex items-center justify-center">
+        <div
+          data-testid="bootstrap-error"
+          class="mx-auto flex max-w-md flex-col items-center gap-3 px-4 text-center"
+        >
+          <AlertTriangleIcon class="size-5 text-destructive" />
+          <p class="whitespace-pre-wrap text-[0.9375rem] leading-7 text-destructive">
+            {{ visibleError }}
+          </p>
+          <Button variant="outline" size="sm" @click="refreshGatewayClient()">
+            {{ t("app.retry") }}
+          </Button>
         </div>
       </ChatPanelScrollArea>
 
