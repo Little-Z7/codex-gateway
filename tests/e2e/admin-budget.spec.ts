@@ -254,7 +254,7 @@ test("creating a user with must-change-password forces the password screen", asy
   const ctx = await browser.newContext();
   const member = await ctx.newPage();
   try {
-    await member.goto("/login", { waitUntil: "domcontentloaded" });
+    await member.goto("/gw/login", { waitUntil: "domcontentloaded" });
     await expect(member.getByTestId("login-form")).toBeVisible({ timeout: 30_000 });
     await member.getByTestId("login-username").fill(username);
     await member.getByTestId("login-password").fill(password);
