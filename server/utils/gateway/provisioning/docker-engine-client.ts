@@ -1,4 +1,6 @@
 import http from "node:http";
+import { Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { recordFromUnknown } from "~~/shared/utils/records";
 
 const DOCKER_API_VERSION = "v1.43";
@@ -146,6 +148,37 @@ export class DockerEngineClient {
         request.end();
       }
     });
+  }
+
+  /**
+   * Streams a (potentially multiplexed) Docker Engine API response body straight to `dest`
+   * instead of buffering it in memory like `requestRaw` does. Volume backups can be hundreds of
+   * MB now that the Codex standalone install lives under the user's home volume — buffering one
+   * (plus the extra Buffer.concat/demux copies that used to follow) was enough to spike the
+   * Gateway past its cgroup memory limit. `demuxChannel` filters the frame channel exactly like
+   * `demuxDockerFrames` — 1 is stdout, 2 is stderr, undefined keeps both untouched.
+   */
+  async requestRawToStream(
+    method: string,
+    path: string,
+    timeoutMs: number,
+    dest: NodeJS.WritableStream,
+    demuxChannel?: 1 | 2,
+  ): Promise<void> {
+    const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
+      const request = http.request(
+        { socketPath: this.socketPath, method, path: `/${DOCKER_API_VERSION}${path}` },
+        resolve,
+      );
+      request.setTimeout(timeoutMs, () => request.destroy(new Error("Docker request timed out")));
+      request.on("error", reject);
+      request.end();
+    });
+    if (demuxChannel === undefined) {
+      await pipeline(response, dest);
+    } else {
+      await pipeline(response, createDockerFrameDemuxTransform(demuxChannel), dest);
+    }
   }
 
   /**
@@ -320,6 +353,33 @@ export function demuxDockerFrames(buffer: Buffer, stream?: 1 | 2): Buffer {
 /** Docker multiplexes log streams into frames: [stream(1), 0,0,0, length(4 BE)] + payload. */
 export function demuxDockerLogFrames(buffer: Buffer) {
   return demuxDockerFrames(buffer).toString();
+}
+
+/**
+ * Streaming counterpart to `demuxDockerFrames`: same frame format, but processes chunks
+ * incrementally so memory stays bounded by one frame instead of the whole archive. Used by
+ * `requestRawToStream` for volume backups.
+ */
+function createDockerFrameDemuxTransform(channel: 1 | 2): Transform {
+  let pending: Buffer = Buffer.alloc(0);
+  return new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      pending = pending.length === 0 ? chunk : Buffer.concat([pending, chunk]);
+      let offset = 0;
+      while (offset + 8 <= pending.length) {
+        const frameChannel = pending.readUInt8(offset);
+        const length = pending.readUInt32BE(offset + 4);
+        const frameEnd = offset + 8 + length;
+        if (frameEnd > pending.length) break;
+        if (frameChannel === channel) this.push(pending.subarray(offset + 8, frameEnd));
+        offset = frameEnd;
+      }
+      // Copy the small leftover instead of keeping a subarray view that would pin the whole
+      // (much larger) source chunk's backing buffer alive until the next frame completes.
+      pending = offset > 0 ? Buffer.from(pending.subarray(offset)) : pending;
+      callback();
+    },
+  });
 }
 
 export function defaultDockerSocket() {

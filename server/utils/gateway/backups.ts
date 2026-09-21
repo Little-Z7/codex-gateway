@@ -1,13 +1,18 @@
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { gatewayDatabase } from "./storage/database";
 import { provisioningConfig } from "./provisioning/provisioning-config";
-import {
-  demuxDockerFrames,
-  DockerEngineClient,
-  isDockerNotFound,
-} from "./provisioning/docker-engine-client";
-import { tarTree } from "./provisioning/tar";
+import { DockerEngineClient, isDockerNotFound } from "./provisioning/docker-engine-client";
+import { tarTreeReadable, tarTreeToStream } from "./provisioning/tar";
 import { trimmedOrFallback } from "~~/shared/utils/strings";
 import { runtimeLog } from "./runtime/runtime-log";
 
@@ -81,20 +86,36 @@ async function exportVolumeTar(docker: DockerEngineClient, volume: string, dest:
   });
   const id = typeof created?.Id === "string" ? created.Id : "";
   if (id === "") throw new Error(`backup container create returned no Id for ${volume}`);
+  // Write to a temp path and rename into place only on success, matching the previous
+  // write-the-whole-Buffer-at-the-end behavior: a failed export must not leave a partial/corrupt
+  // "completed" tar file sitting in the backup directory.
+  const tempDest = `${dest}.part`;
   try {
     await docker.startContainer(id);
-    // follow=1 streams until the container exits; stdout frames carry the archive bytes.
-    const raw = await docker.requestRaw(
-      "GET",
-      `/containers/${encodeURIComponent(id)}/logs?stdout=1&stderr=1&follow=1`,
-      120_000,
-    );
+    // follow=1 streams until the container exits; stdout frames carry the archive bytes. Streamed
+    // straight to disk instead of buffered in memory — a volume's tar can be hundreds of MB now
+    // that the Codex standalone install lives under the user's home volume.
+    const fileStream = createWriteStream(tempDest);
+    try {
+      await docker.requestRawToStream(
+        "GET",
+        `/containers/${encodeURIComponent(id)}/logs?stdout=1&stderr=1&follow=1`,
+        120_000,
+        fileStream,
+        1,
+      );
+    } finally {
+      fileStream.close();
+    }
     const waited = await docker.request("POST", `/containers/${encodeURIComponent(id)}/wait`);
     const statusCode = Number(waited?.StatusCode ?? -1);
     if (statusCode !== 0) {
       throw new Error(`volume ${volume} export exited with status ${statusCode}`);
     }
-    writeFileSync(dest, demuxDockerFrames(raw, 1));
+    renameSync(tempDest, dest);
+  } catch (error) {
+    rmSync(tempDest, { force: true });
+    throw error;
   } finally {
     await docker.removeContainer(id, { force: true }).catch(() => {});
   }
@@ -114,7 +135,7 @@ export async function runBackup(): Promise<{ name: string; files: string[] }> {
   const config = provisioningConfig();
   // The shared auth dir is mounted read-only inside the Gateway container at sharedAuthMount.
   if (existsSync(config.sharedAuthMount)) {
-    writeFileSync(join(dir, "shared-auth.tar"), tarTree(config.sharedAuthMount));
+    await tarTreeToStream(config.sharedAuthMount, createWriteStream(join(dir, "shared-auth.tar")));
     files.push("shared-auth.tar");
   }
 
@@ -155,8 +176,13 @@ export async function runBackup(): Promise<{ name: string; files: string[] }> {
   return { name, files };
 }
 
-export function backupTarStream(name: string): Buffer | null {
+/**
+ * A tar of the named backup directory (db + shared-auth + every volume tar), streamed lazily.
+ * Building this as a single Buffer used to re-buffer everything a backup already wrote to disk —
+ * including the potentially hundreds-of-MB volume tars — a second time, in memory, per download.
+ */
+export function backupTarStream(name: string) {
   const path = backupPath(name);
   if (path === null) return null;
-  return tarTree(path);
+  return tarTreeReadable(path);
 }
