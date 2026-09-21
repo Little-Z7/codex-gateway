@@ -9,8 +9,21 @@ import { RealtimeAuthenticationRequiredError } from "./message-dispatcher";
 import { hostStore } from "../state/hosts";
 import { browserPreviewManager } from "../browser-preview/browser-preview-manager";
 import { recordFromUnknown } from "~~/shared/utils/records";
-import { runPeerScoped, sendRealtimePeerMessage, stateFor, type RealtimePeer } from "./peer-state";
+import {
+  authenticatedUserId,
+  runPeerScoped,
+  sendRealtimePeerMessage,
+  stateFor,
+  type RealtimePeer,
+} from "./peer-state";
 import { clearOwnedSubscriptions, clearSubscriptions } from "./subscription-map";
+import {
+  decodeTerminalResizePayload,
+  decodeTerminalStreamFrame,
+  decodeTerminalTextPayload,
+  terminalStreamOpcode,
+} from "~~/shared/runtime/terminal-stream";
+import { terminalManager } from "../terminal/terminal-manager";
 
 const activePeers = new WeakSet<RealtimePeer>();
 let activePeerCount = 0;
@@ -61,6 +74,41 @@ export async function handleRealtimePeerMessage(peer: RealtimePeer, rawMessage: 
   }
 }
 
+export async function handleRealtimePeerBinaryMessage(peer: RealtimePeer, data: Uint8Array) {
+  const frame = decodeTerminalStreamFrame(data);
+  if (frame === null) {
+    sendRealtimePeerMessage(peer, { type: "error", message: "Invalid realtime binary frame" });
+    return;
+  }
+
+  try {
+    const userId = authenticatedUserId(peer);
+    if (frame.opcode === terminalStreamOpcode.input) {
+      const input = decodeTerminalTextPayload(frame);
+      if (input !== null) terminalManager.input(userId, frame.sessionId, input);
+      return;
+    }
+    if (frame.opcode === terminalStreamOpcode.resize) {
+      const resize = decodeTerminalResizePayload(frame);
+      if (resize !== null) {
+        terminalManager.resize(userId, frame.sessionId, resize.cols, resize.rows);
+      }
+      return;
+    }
+    if (frame.opcode === terminalStreamOpcode.output) {
+      sendRealtimePeerMessage(peer, {
+        type: "error",
+        message: "Invalid terminal output direction",
+      });
+    }
+  } catch (error: unknown) {
+    sendRealtimePeerMessage(peer, {
+      type: "error",
+      message: error instanceof Error ? error.message : "Realtime binary message failed",
+    });
+  }
+}
+
 export function cleanupRealtimePeer(peer: RealtimePeer) {
   if (activePeers.delete(peer)) activePeerCount -= 1;
   const state = stateFor(peer);
@@ -72,6 +120,8 @@ export function cleanupRealtimePeer(peer: RealtimePeer) {
   state.hostLifecycleUnsubscribe = undefined;
   state.terminalUnsubscribe?.();
   state.terminalUnsubscribe = undefined;
+  state.terminalOutputStream?.dispose();
+  state.terminalOutputStream = undefined;
   state.notificationUnsubscribe?.();
   state.notificationUnsubscribe = undefined;
   state.pinnedThreadsUnsubscribe?.();

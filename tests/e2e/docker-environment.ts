@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -14,9 +14,9 @@ const runtimeDir = join(rootDir, ".e2e-runtime", "ssh-container");
 const envFile = join(runtimeDir, "env.json");
 const upgradeEnvFile = join(runtimeDir, "upgrade-env.json");
 const mfaEnvFile = join(runtimeDir, "mfa-env.json");
-const managedCodexBin = `/home/codex/.nvm/versions/node/v${process.versions.node}/bin/codex`;
+const standaloneCodexBin = "/home/codex/.local/bin/codex";
 
-type RuntimeFixture = "empty-runtime" | "legacy-node" | "legacy-codex" | "current-codex";
+type RuntimeFixture = "empty-runtime" | "legacy-node" | "npm-codex" | "current-codex";
 
 interface RemoteEnv {
   host: string;
@@ -28,6 +28,7 @@ interface RemoteEnv {
   runtimeFixture: RuntimeFixture;
   initialNodeVersion: string | null;
   initialCodexVersion: string | null;
+  initialCodexBin: string | null;
   supportedCodexVersion: string;
   testModel: string;
   codexBin: string;
@@ -56,7 +57,8 @@ export async function startDockerEnvironment() {
       runtimeFixture: "empty-runtime",
       initialNodeVersion: null,
       initialCodexVersion: null,
-      codexBin: managedCodexBin,
+      initialCodexBin: standaloneCodexBin,
+      codexBin: standaloneCodexBin,
     },
     {
       ...shared,
@@ -65,26 +67,27 @@ export async function startDockerEnvironment() {
       runtimeFixture: "legacy-node",
       initialNodeVersion: "14.21.3",
       initialCodexVersion: null,
-      codexBin: managedCodexBin,
+      initialCodexBin: standaloneCodexBin,
+      codexBin: standaloneCodexBin,
     },
     {
       ...shared,
-      host:
-        firstNonEmptyString([process.env.E2E_LEGACY_CODEX_REMOTE_HOST]) ??
-        "ssh-target-legacy-codex",
-      runtimeFixture: "legacy-codex",
+      host: firstNonEmptyString([process.env.E2E_NPM_CODEX_REMOTE_HOST]) ?? "ssh-target-npm-codex",
+      runtimeFixture: "npm-codex",
       initialNodeVersion: "22.23.1",
       initialCodexVersion: firstNonEmptyString([process.env.E2E_CODEX_CLI_VERSION]) ?? "0.140.0",
-      codexBin: "/home/codex/.nvm/versions/node/v22.23.1/bin/codex",
+      initialCodexBin: "/home/codex/.nvm/versions/node/v22.23.1/bin/codex",
+      codexBin: standaloneCodexBin,
     },
   ];
   const mfaEnvironment: RemoteEnv = {
     ...shared,
     host: firstNonEmptyString([process.env.E2E_MFA_REMOTE_HOST]) ?? "ssh-target-mfa",
     runtimeFixture: "current-codex",
-    initialNodeVersion: "22.23.1",
+    initialNodeVersion: null,
     initialCodexVersion: SUPPORTED_CODEX_VERSION,
-    codexBin: "/home/codex/.nvm/versions/node/v22.23.1/bin/codex",
+    initialCodexBin: standaloneCodexBin,
+    codexBin: standaloneCodexBin,
     mfaCode: "123456",
   };
 
@@ -166,6 +169,22 @@ async function prepareRemoteCodexHome(env: RemoteEnv) {
   try {
     await execTestSsh(connection, "rm -rf /home/codex/.codex && mkdir -p /home/codex/.codex");
     await uploadDirectory(connection, codexHome, "/home/codex/.codex");
+    if (env.runtimeFixture === "current-codex") {
+      // Codex auth/config is uploaded into CODEX_HOME, so restore the standalone fixture after:
+      // the actual package intentionally lives beside those files in the official layout.
+      await execTestSsh(
+        connection,
+        `
+set -eu
+codex_home=/home/codex/.codex
+release_dir="$codex_home/packages/standalone/releases/e2e"
+mkdir -p "$release_dir" /home/codex/.local/bin
+cp -a /opt/codex-standalone/. "$release_dir/"
+ln -sfn "$release_dir" "$codex_home/packages/standalone/current"
+ln -sfn "$codex_home/packages/standalone/current/bin/codex" /home/codex/.local/bin/codex
+`,
+      );
+    }
   } finally {
     connection.end();
   }
@@ -267,6 +286,12 @@ async function prepareCodexHome(sourceCodexHome: string, codexHome: string) {
     copyOptional(join(sourceCodexHome, "auth.json"), join(codexHome, "auth.json")),
     copyOptional(join(sourceCodexHome, "config.toml"), join(codexHome, "config.toml")),
     copyOptional(join(sourceCodexHome, "version.json"), join(codexHome, "version.json")),
+    // config.toml may reference CODEX_HOME-relative catalogs. Copy them with the config so the
+    // real app-server does not fall back to invalid defaults inside the isolated SSH fixtures.
+    copyOptionalDirectory(
+      join(sourceCodexHome, "model-catalogs"),
+      join(codexHome, "model-catalogs"),
+    ),
   ]);
 
   // When the run enables the custom model provider, the ssh-target fixtures need a config.toml
@@ -302,6 +327,16 @@ async function copyOptional(source: string, target: string) {
   try {
     await mkdir(dirname(target), { recursive: true });
     await copyFile(source, target);
+  } catch (error: unknown) {
+    if (nodeErrorCode(error) !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+async function copyOptionalDirectory(source: string, target: string) {
+  try {
+    await cp(source, target, { recursive: true });
   } catch (error: unknown) {
     if (nodeErrorCode(error) !== "ENOENT") {
       throw error;

@@ -5,6 +5,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(cd "$script_dir/../.." && pwd)"
 compose_file="$script_dir/docker-compose.yml"
 project_name="${E2E_COMPOSE_PROJECT_NAME:-codex-gateway-e2e}"
+compose=(docker compose --ansi never --progress quiet -p "$project_name" -f "$compose_file")
 
 if [ "${1:-}" = "--turn" ]; then
   export E2E_CODEX_TURN=1
@@ -60,13 +61,13 @@ if [ -n "${E2E_MODEL_PROVIDER_API_KEY:-}" ]; then
 fi
 
 cleanup() {
-  status=$?
+  local status=$?
   if [ "$status" -ne 0 ]; then
-    docker compose -p "$project_name" -f "$compose_file" logs --no-color \
-      gateway-under-test ssh-target ssh-target-legacy-node ssh-target-legacy-codex \
+    "${compose[@]}" logs --no-color \
+      gateway-under-test ssh-target ssh-target-legacy-node ssh-target-npm-codex \
       ssh-target-mfa >&2 || true
   fi
-  docker compose -p "$project_name" -f "$compose_file" down --remove-orphans >/dev/null 2>&1 || true
+  "${compose[@]}" down --remove-orphans >/dev/null 2>&1 || true
   # Provisioned user containers live outside the compose project; remove them plus their volumes.
   for container in $(docker ps -aq --filter "label=codex-gateway.managed=true" \
     --filter "name=codex-e2e-user-"); do
@@ -83,15 +84,15 @@ docker build -t codex-gateway-e2e-user:latest \
   --build-arg "CODEX_CLI_VERSION=$E2E_SUPPORTED_CODEX_VERSION" \
   "$project_dir/deploy/user-container" >/dev/null
 
-docker compose -p "$project_name" -f "$compose_file" build \
-  build-runner ssh-target ssh-target-legacy-node ssh-target-legacy-codex ssh-target-mfa
+"${compose[@]}" build --quiet \
+  build-runner ssh-target ssh-target-legacy-node ssh-target-npm-codex ssh-target-mfa
 # The application server and browser runner use separate 2 GiB cgroups (the build runner gets 4
-# GiB). The browser runner
-# shares the gateway network namespace so same-origin preview requests reach the same listener.
-docker compose -p "$project_name" -f "$compose_file" run --rm build-runner \
-  bash -lc 'rm -rf .output .nuxt .data-e2e/* /e2e-output/* && pnpm exec nuxt build --extends ./tests/e2e/nuxt-layer && cp -a .output/. /e2e-output/ && node scripts/create-user.mjs --admin "$E2E_GATEWAY_USERNAME" "$E2E_GATEWAY_PASSWORD" && node scripts/create-user.mjs "$E2E_GATEWAY_MEMBER_USERNAME" "$E2E_GATEWAY_MEMBER_PASSWORD"'
-docker compose -p "$project_name" -f "$compose_file" up -d --wait \
+# GiB). Browser preview now routes same-origin through the gateway container itself (no separate
+# ingress service), so only gateway-under-test needs to come up before the test runner.
+"${compose[@]}" run --rm build-runner \
+  bash -lc 'rm -rf .output .nuxt .data-e2e/* /e2e-output/* && pnpm exec nuxt build --logLevel=silent --extends ./tests/e2e/nuxt-layer && cp -a .output/. /e2e-output/ && node scripts/create-user.mjs --admin "$E2E_GATEWAY_USERNAME" "$E2E_GATEWAY_PASSWORD" && node scripts/create-user.mjs "$E2E_GATEWAY_MEMBER_USERNAME" "$E2E_GATEWAY_MEMBER_PASSWORD"'
+"${compose[@]}" up -d --wait \
   gateway-under-test
-docker compose -p "$project_name" -f "$compose_file" run --rm test-runner \
-  bash -lc 'exec pnpm exec playwright test "$@"' \
+"${compose[@]}" run --rm test-runner \
+  bash -lc 'exec pnpm exec playwright test --reporter=dot "$@"' \
   e2e "$@"

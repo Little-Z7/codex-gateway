@@ -9,6 +9,7 @@ export function gatewayThreadFixture(
   const now = Math.floor(Date.now() / 1000);
   const name = fixture.name ?? null;
   return {
+    environments: null,
     extra: null,
     sessionId: fixture.id,
     forkedFromId: null,
@@ -28,12 +29,14 @@ export function gatewayThreadFixture(
     status: { type: "idle" },
     path: null,
     cwd: "/tmp/e2e",
-    cliVersion: "0.153.4",
+    cliVersion: "0.155.0",
+    originator: "app-server",
     source: "appServer",
     canAcceptDirectInput: true,
     threadSource: null,
     agentNickname: null,
     agentRole: null,
+    daybreakEnabled: null,
     gitInfo: null,
     name,
     turns: [],

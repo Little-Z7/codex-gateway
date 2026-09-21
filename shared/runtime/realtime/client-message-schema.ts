@@ -94,6 +94,13 @@ export const realtimeClientMessageSchema: z.ZodType<RealtimeClientMessage> = z.d
     z.object({ type: z.literal("thread.unsubscribe"), ...threadScopeFields }).strict(),
     z
       .object({
+        type: z.literal("thread.settings.read"),
+        ...requestIdField,
+        ...threadScopeFields,
+      })
+      .strict(),
+    z
+      .object({
         type: z.literal("thread.turns.load"),
         ...requestIdField,
         ...threadScopeFields,
@@ -111,6 +118,34 @@ export const realtimeClientMessageSchema: z.ZodType<RealtimeClientMessage> = z.d
         cursor: nullableString,
         limit: positiveId.optional(),
         sortDirection: z.enum(["asc", "desc"]).optional(),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal("thread.attachments.list"),
+        ...requestIdField,
+        ...threadScopeFields,
+        cursor: nullableString,
+        limit: positiveId.optional(),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal("thread.attachment.add"),
+        ...requestIdField,
+        ...threadScopeFields,
+        attachmentType: nonEmptyString,
+        identityKey: nonEmptyString,
+        payload: z.unknown(),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal("thread.attachment.remove"),
+        ...requestIdField,
+        ...threadScopeFields,
+        attachmentType: nonEmptyString,
+        identityKey: nonEmptyString,
       })
       .strict(),
     z

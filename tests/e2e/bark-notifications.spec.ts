@@ -11,7 +11,7 @@ test("Bark sends ordinary turn notifications and only notifies when an app-serve
 }) => {
   const bark = await useBarkReceiver();
   await openApp(page);
-  await configureBarkNotifications(page, bark.url);
+  await configureBarkNotifications(page, bark.url, bark.deviceKey);
 
   const { host, project } = await remoteWorkspace.provision({
     hostName: `bark-notification-host-${Date.now()}`,
@@ -70,7 +70,7 @@ test("Bark keeps monitoring an active main turn after the last browser closes", 
 }) => {
   const bark = await useBarkReceiver();
   await openApp(page);
-  await configureBarkNotifications(page, bark.url);
+  await configureBarkNotifications(page, bark.url, bark.deviceKey);
 
   const { project } = await remoteWorkspace.provision({
     hostName: `bark-handoff-host-${Date.now()}`,
@@ -107,7 +107,7 @@ test("plan-mode user questions render and notify through Sonner and Bark", async
 }) => {
   const bark = await useBarkReceiver();
   await openApp(page);
-  await configureBarkNotifications(page, bark.url);
+  await configureBarkNotifications(page, bark.url, bark.deviceKey);
 
   const hostName = `bark-plan-question-host-${Date.now()}`;
   const { project } = await remoteWorkspace.provision({ hostName });
@@ -124,12 +124,18 @@ test("plan-mode user questions render and notify through Sonner and Bark", async
   await page.getByTestId("model-select").click();
   await page.getByTestId("model-option-gpt-6-astra").click();
   await page.getByTestId("model-selector-close").click();
+  // Model settings are persisted through the real app-server request. Wait for the visible
+  // trigger to reflect the selected model before sending the turn; otherwise the turn can race
+  // the settings update and run with the host default model.
+  await expect(page.getByTestId("model-select")).toContainText(/gpt-6-astra/i, {
+    timeout: 30_000,
+  });
 
   const question = `请选择 E2E 方案 ${Date.now()}`;
   await page
     .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
     .fill(
-      `先不要制定计划或回复正文。立即调用 request_user_input，只询问“${question}”，提供“方案 A”和“方案 B”两个选项。`,
+      `先不要制定计划或回复正文。立即调用 request_user_input_async，只询问“${question}”，提供“方案 A”和“方案 B”两个选项。`,
     );
   await page.getByTestId("send-turn-button").click();
 

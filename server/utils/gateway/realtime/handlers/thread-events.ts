@@ -36,6 +36,23 @@ export async function subscribeThread(
   subscribeThreadEvents(peer, host, threadId, afterId, message.afterEpoch);
 }
 
+export async function readThreadSettings(
+  peer: RealtimePeer,
+  message: Extract<RealtimeClientMessage, { type: "thread.settings.read" }>,
+) {
+  const hostId = Number(message.hostId);
+  const threadId = String(message.threadId);
+  const host = requireRecord(hostStore.getWithSecret(hostId), "Host not found");
+  const threadSettings = await threadBroker.readThreadSettings(host, threadId);
+  sendRealtimePeerMessage(peer, {
+    type: "thread.settings.snapshot",
+    requestId: message.requestId,
+    hostId,
+    threadId,
+    threadSettings,
+  });
+}
+
 export async function activateThread(
   peer: RealtimePeer,
   message: Extract<RealtimeClientMessage, { type: "thread.activate" }>,

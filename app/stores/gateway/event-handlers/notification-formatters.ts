@@ -35,6 +35,9 @@ export const visibleNotificationMethods = [
   "hook/completed",
   "item/autoApprovalReview/started",
   "item/autoApprovalReview/completed",
+  // Internal-only app-server notification intended for Codex Cloud, not user-visible UI by
+  // default. Kept visible-but-gated so the protocol debug toggle can still surface it; see the
+  // "rawResponseItem/completed" check in gateway/event-handlers/notification-events.ts.
   "rawResponseItem/completed",
   "item/commandExecution/terminalInteraction",
   "item/mcpToolCall/progress",

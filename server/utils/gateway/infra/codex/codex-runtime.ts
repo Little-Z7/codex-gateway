@@ -57,11 +57,14 @@ export class CodexRuntimeService {
         message: `正在检查 ${hostDisplayName(host)} 的远端 Codex 版本`,
       });
       const supportedVersion = SUPPORTED_CODEX_VERSION;
-      const beforeVersion = await this.versionChecker.readVersionOrRecoverableMissing(host);
+      const installed = await this.versionChecker.readVersionOrRecoverableMissing(host);
+      const beforeVersion = installed.version;
       const runtimeState = await this.appServerRuntime.readState(host);
       const appServerVersion = runtimeState.appServerVersion;
       const currentRuntimeVersion = appServerVersion ?? beforeVersion;
-      const cliVersionSupported = isCodexVersionAtLeast(beforeVersion, supportedVersion);
+      const cliVersionSupported =
+        isCodexVersionAtLeast(beforeVersion, supportedVersion) &&
+        installed.installationLayout === "standalone";
       const runtimeVersionSupported = isCodexVersionAtLeast(
         currentRuntimeVersion,
         supportedVersion,
@@ -80,6 +83,7 @@ export class CodexRuntimeService {
         await this.appServerRuntime.terminateUnmanaged(host);
         return {
           version: beforeVersion,
+          installationLayout: installed.installationLayout,
           appServerVersion: null,
           supportedVersion,
           beforeVersion,
@@ -95,6 +99,7 @@ export class CodexRuntimeService {
         });
         return {
           version: beforeVersion,
+          installationLayout: installed.installationLayout,
           appServerVersion,
           supportedVersion,
           beforeVersion,
@@ -111,6 +116,7 @@ export class CodexRuntimeService {
           });
           return {
             version: beforeVersion,
+            installationLayout: installed.installationLayout,
             appServerVersion,
             supportedVersion,
             beforeVersion,
@@ -132,6 +138,7 @@ export class CodexRuntimeService {
       });
       return {
         version: beforeVersion,
+        installationLayout: installed.installationLayout,
         appServerVersion: null,
         supportedVersion,
         beforeVersion,

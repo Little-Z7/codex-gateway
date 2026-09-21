@@ -12,6 +12,7 @@ import {
   stateFor,
   type RealtimePeer,
 } from "../peer-state";
+import { TerminalPeerStream } from "../../terminal/terminal-peer-stream";
 
 export async function openTerminal(
   peer: RealtimePeer,
@@ -71,7 +72,14 @@ export function closeTerminal(
 export function subscribeTerminalEvents(peer: RealtimePeer) {
   const state = stateFor(peer);
   state.terminalUnsubscribe?.();
+  state.terminalOutputStream?.dispose();
+  const outputStream = new TerminalPeerStream(peer);
+  state.terminalOutputStream = outputStream;
   state.terminalUnsubscribe = terminalEventBus.subscribe(authenticatedUserId(peer), (event) => {
+    if (event.type === "terminal.output.binary") {
+      outputStream.send(event.frame);
+      return;
+    }
     sendRealtimePeerMessage(peer, event);
   });
 }

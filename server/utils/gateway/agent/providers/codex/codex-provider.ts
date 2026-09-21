@@ -104,6 +104,7 @@ function isKnownCodexNotificationMethod(method: string) {
     "thread/started",
     "thread/goal/updated",
     "thread/goal/cleared",
+    "thread/attachment/updated",
     "rawResponse/completed",
     "error",
     "thread/realtime/error",

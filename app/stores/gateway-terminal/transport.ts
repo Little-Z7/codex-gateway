@@ -8,6 +8,10 @@ import type { GatewayErrorContext } from "../gateway/errors";
 import type { TerminalOpenInput } from "../gateway/types";
 import { expectTerminalOpened } from "../gateway-realtime/response-parsers";
 import { captureSessionEpoch } from "@/utils/session-epoch";
+import {
+  encodeTerminalInputFrame,
+  encodeTerminalResizeFrame,
+} from "~~/shared/runtime/terminal-stream";
 
 export interface GatewayTerminalTransportContext {
   t: (key: string, values?: Record<string, unknown>) => string;
@@ -55,7 +59,7 @@ export function sendTerminalInput(
   sessionId: string,
   data: string,
 ) {
-  useGatewayRealtimeStore().send({ type: "terminal.input", sessionId, data });
+  useGatewayRealtimeStore().sendBinary(encodeTerminalInputFrame(sessionId, data));
 }
 
 export function resizeTerminal(
@@ -64,7 +68,7 @@ export function resizeTerminal(
   cols: number,
   rows: number,
 ) {
-  useGatewayRealtimeStore().send({ type: "terminal.resize", sessionId, cols, rows });
+  useGatewayRealtimeStore().sendBinary(encodeTerminalResizeFrame(sessionId, cols, rows));
 }
 
 export async function closeTerminalSession(

@@ -23,6 +23,8 @@ export type {
   ThreadGoal,
   ThreadGoalStatus,
   ThreadGoalTimelineItem,
+  ThreadAttachment,
+  ThreadAttachmentsPage,
   ThreadOpenResult,
   ThreadRuntimeStatus,
   ThreadRuntimeStatusUpdate,

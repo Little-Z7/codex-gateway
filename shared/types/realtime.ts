@@ -3,6 +3,7 @@ import type {
   ComposerTurnOptions,
   ThreadGoal,
   ThreadGoalStatus,
+  ThreadAttachment,
   ThreadItemsPageResult,
   ThreadOpenResult,
   ThreadRuntimeStatusUpdate,
@@ -91,6 +92,12 @@ export type RealtimeClientMessage =
       threadId: string;
     }
   | {
+      type: "thread.settings.read";
+      requestId: string;
+      hostId: number;
+      threadId: string;
+    }
+  | {
       type: "thread.turns.load";
       requestId: string;
       hostId: number;
@@ -108,6 +115,31 @@ export type RealtimeClientMessage =
       cursor?: string | null;
       limit?: number;
       sortDirection?: "asc" | "desc";
+    }
+  | {
+      type: "thread.attachments.list";
+      requestId: string;
+      hostId: number;
+      threadId: string;
+      cursor?: string | null;
+      limit?: number;
+    }
+  | {
+      type: "thread.attachment.add";
+      requestId: string;
+      hostId: number;
+      threadId: string;
+      attachmentType: string;
+      identityKey: string;
+      payload: unknown;
+    }
+  | {
+      type: "thread.attachment.remove";
+      requestId: string;
+      hostId: number;
+      threadId: string;
+      attachmentType: string;
+      identityKey: string;
     }
   | {
       type: "thread.start";
@@ -416,6 +448,35 @@ export type RealtimeServerMessage =
       hostId: number;
       threadId: string;
     } & ThreadItemsPageResult)
+  | {
+      type: "thread.attachments.page";
+      requestId: string;
+      hostId: number;
+      threadId: string;
+      data: ThreadAttachment[];
+      nextCursor: string | null;
+    }
+  | {
+      type: "thread.attachment.added";
+      requestId: string;
+      hostId: number;
+      threadId: string;
+      outcome: "created" | "existing";
+      attachment: ThreadAttachment;
+    }
+  | {
+      type: "thread.attachment.removed";
+      requestId: string;
+      hostId: number;
+      threadId: string;
+    }
+  | {
+      type: "thread.settings.snapshot";
+      requestId: string;
+      hostId: number;
+      threadId: string;
+      threadSettings: ThreadSettingsState;
+    }
   | {
       type: "turn.start.accepted";
       requestId: string;

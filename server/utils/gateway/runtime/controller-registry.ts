@@ -17,6 +17,7 @@ export interface ThreadSubscriptionLease {
 interface RetainSubscriptionOptions {
   upstreamAlreadySubscribed?: boolean;
   deferUpstreamSubscription?: boolean;
+  forceUpstreamSubscription?: boolean;
 }
 
 interface SubscriptionLeases {
@@ -84,7 +85,7 @@ export class ControllerRegistry {
         // Adopt that protocol-owned subscription instead of issuing a redundant thread/resume.
         controller.adoptExistingSubscription();
       } else if (options.deferUpstreamSubscription !== true) {
-        await controller.ensureSubscribed();
+        await controller.ensureSubscribed(options.forceUpstreamSubscription === true);
       }
       return controller;
     });
