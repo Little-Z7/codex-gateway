@@ -1,6 +1,6 @@
 import type { ThreadResponseUsage, ThreadTimelineItem, ThreadTimelineTurn } from "~~/shared/types";
 import type { DisplayedTurnTiming } from "@/utils/turn-timing";
-import { itemKey, userMessageVariant, type ThreadTurnSections } from "./thread-turn-sections";
+import { itemKey, type ThreadTurnSections } from "./thread-turn-sections";
 
 export type { ThreadTimelineTurn } from "~~/shared/types";
 
@@ -29,7 +29,6 @@ export type ThreadTimelineRow =
       turnId: string;
       section: ThreadTimelineItemSection;
       item: ThreadTimelineItem;
-      userMessageVariant: "normal" | "steer";
       turnTiming: DisplayedTurnTiming | null;
       responseUsage: ThreadResponseUsage[] | undefined;
       agentActionsAvailable: boolean;
@@ -64,41 +63,17 @@ export function buildThreadTimelineRows(input: {
     const rows: ThreadTimelineRow[] = [];
     const timing = displayedTurnTiming(turn);
     const timingTarget = sections.finalItems.findLast((item) => item.type === "agentMessage");
-    appendItemRows(rows, input.threadId, turn.id, "user", sections.userItems, sections);
-
-    if (sections.intermediateItems.length || turn.itemsView !== "full") {
-      rows.push({
-        key: `${input.threadId}:turn-${turn.id}:intermediate-header`,
-        type: "intermediateHeader",
-        turnId: turn.id,
-        count: sections.intermediateItems.length,
-        open: intermediateOpen,
-        loading: intermediateLoading,
-      });
-      if (intermediateOpen) {
-        appendItemRows(
-          rows,
-          input.threadId,
-          turn.id,
-          "intermediate",
-          sections.intermediateItems,
-          sections,
-        );
-      }
-    }
-
-    appendItemRows(
+    appendTurnItemsInOrder({
       rows,
-      input.threadId,
-      turn.id,
-      "final",
-      sections.finalItems,
+      threadId: input.threadId,
+      turn,
       sections,
+      intermediateOpen,
+      intermediateLoading,
       timingTarget,
       timing,
-      input.agentActionsAvailable,
-      turn.responseUsage,
-    );
+      agentActionsAvailable: input.agentActionsAvailable,
+    });
     // Completed turns normally render timing beside the final answer's copy action. Keep a
     // standalone row only for interrupted/error turns that never produced an Agent answer.
     if (
@@ -116,6 +91,64 @@ export function buildThreadTimelineRows(input: {
     }
     return rows;
   });
+}
+
+function appendTurnItemsInOrder(input: {
+  rows: ThreadTimelineRow[];
+  threadId: string | null;
+  turn: ThreadTimelineTurn;
+  sections: ThreadTurnSections;
+  intermediateOpen: boolean;
+  intermediateLoading: boolean;
+  timingTarget: ThreadTimelineItem | undefined;
+  timing: DisplayedTurnTiming;
+  agentActionsAvailable: boolean;
+}) {
+  const { rows, threadId, turn, sections } = input;
+  const intermediateItems = new Set(sections.intermediateItems);
+  let intermediateHeaderAdded = false;
+
+  sections.items.forEach((item, index) => {
+    const isFinal = sections.hasFinalAnswer && index >= sections.finalAgentIndex;
+    const isIntermediate = intermediateItems.has(item) && !isFinal;
+    if (isIntermediate && !intermediateHeaderAdded) {
+      rows.push({
+        key: `${threadId}:turn-${turn.id}:intermediate-header`,
+        type: "intermediateHeader",
+        turnId: turn.id,
+        count: sections.intermediateItems.length,
+        open: input.intermediateOpen,
+        loading: input.intermediateLoading,
+      });
+      intermediateHeaderAdded = true;
+    }
+    if (isIntermediate && !input.intermediateOpen) return;
+
+    const section = isIntermediate ? "intermediate" : isFinal ? "final" : "user";
+    appendItemRows(
+      rows,
+      threadId,
+      turn.id,
+      section,
+      [item],
+      sections,
+      item === input.timingTarget ? item : undefined,
+      item === input.timingTarget ? input.timing : null,
+      item === input.timingTarget && input.agentActionsAvailable,
+      item === input.timingTarget ? turn.responseUsage : undefined,
+    );
+  });
+
+  if (!intermediateHeaderAdded && turn.itemsView !== "full") {
+    rows.push({
+      key: `${threadId}:turn-${turn.id}:intermediate-header`,
+      type: "intermediateHeader",
+      turnId: turn.id,
+      count: sections.intermediateItems.length,
+      open: input.intermediateOpen,
+      loading: input.intermediateLoading,
+    });
+  }
 }
 
 export function reuseUnchangedTimelineRows(
@@ -156,7 +189,6 @@ function appendItemRows(
       turnId,
       section,
       item,
-      userMessageVariant: userMessageVariant(item, sections),
       turnTiming: item === timingTarget ? timing : null,
       responseUsage: item === timingTarget ? responseUsage : undefined,
       agentActionsAvailable: item === timingTarget && agentActionsAvailable,
@@ -196,7 +228,6 @@ function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
       left.item === right.item &&
       left.turnId === right.turnId &&
       left.section === right.section &&
-      left.userMessageVariant === right.userMessageVariant &&
       left.agentActionsAvailable === right.agentActionsAvailable &&
       sameResponseUsage(left.responseUsage, right.responseUsage) &&
       sameTurnTiming(left.turnTiming, right.turnTiming)
