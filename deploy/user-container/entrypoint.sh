@@ -21,8 +21,9 @@ fi
 
 # Shared Codex login: symlink rather than copy — Codex rewrites auth.json in place, so the link
 # keeps pointing at the shared file every container can refresh from. Link even when auth.json
-# does not exist yet: an admin can provision before running the shared login, and a dangling
-# link is harmless — Codex creates the target through the symlink on first write.
+# does not exist yet: an admin can provision before running the shared login, and Codex creates
+# the target through the symlink on first write. The dangling link itself is harmless, but running
+# without ChatGPT auth is not side-effect free: see the remote-control block below.
 if [ -d /srv/codex-auth ]; then
   ln -sfn /srv/codex-auth/auth.json "${HOME_DIR}/.codex/auth.json"
 fi
@@ -110,6 +111,20 @@ if [ "${CODEX_GATEWAY_MODEL_PROVIDER:-openai}" = "custom" ] \
 else
   rm -f "${PROFILE_FILE}"
 fi
+
+# Disable codex app-server's remote control. It pairs app-server with ChatGPT's remote-control
+# relay, which Gateway never uses: browsers reach app-server only through Gateway's own SSH/RPC
+# channel. Left enabled, whenever no ChatGPT auth is present (always, with an API-key provider)
+# app-server retries resolving its remote-control preference once per second forever
+# (codex-rs app-server-transport remote_control/websocket.rs, resolve_unknown_desired_state),
+# flooding ~/.codex/logs_2.sqlite and burning CPU.
+# CODEX_INTERNAL_APP_SERVER_REMOTE_CONTROL_DISABLED is an internal Codex marker, not a public flag:
+# re-verify it still exists (codex-rs/app-server/src/main.rs) when bumping SUPPORTED_CODEX_VERSION.
+# Delivered via profile.d like the provider env above, since sshd does not pass container Env into
+# SSH sessions.
+echo 'export CODEX_INTERNAL_APP_SERVER_REMOTE_CONTROL_DISABLED=1' \
+  > /etc/profile.d/codex-gateway-remote-control.sh
+chmod 644 /etc/profile.d/codex-gateway-remote-control.sh
 
 ssh-keygen -A
 exec /usr/sbin/sshd -D -e
