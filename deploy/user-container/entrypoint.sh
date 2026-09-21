@@ -112,19 +112,20 @@ else
   rm -f "${PROFILE_FILE}"
 fi
 
-# Disable codex app-server's remote control. It pairs app-server with ChatGPT's remote-control
-# relay, which Gateway never uses: browsers reach app-server only through Gateway's own SSH/RPC
-# channel. Left enabled, whenever no ChatGPT auth is present (always, with an API-key provider)
-# app-server retries resolving its remote-control preference once per second forever
-# (codex-rs app-server-transport remote_control/websocket.rs, resolve_unknown_desired_state),
-# flooding ~/.codex/logs_2.sqlite and burning CPU.
-# CODEX_INTERNAL_APP_SERVER_REMOTE_CONTROL_DISABLED is an internal Codex marker, not a public flag:
-# re-verify it still exists (codex-rs/app-server/src/main.rs) when bumping SUPPORTED_CODEX_VERSION.
-# Delivered via profile.d like the provider env above, since sshd does not pass container Env into
-# SSH sessions.
-echo 'export CODEX_INTERNAL_APP_SERVER_REMOTE_CONTROL_DISABLED=1' \
-  > /etc/profile.d/codex-gateway-remote-control.sh
-chmod 644 /etc/profile.d/codex-gateway-remote-control.sh
+# Remove a stale drop-in from images built before the Codex standalone daemon migration: Gateway
+# used to launch app-server as `app-server --listen unix://` without `--remote-control`, which put
+# remote control in its "resolve persisted preference" state and, with no ChatGPT auth (always,
+# with an API-key provider), retried once per second forever (codex-rs app-server-transport
+# remote_control/websocket.rs, resolve_unknown_desired_state), flooding ~/.codex/logs_2.sqlite.
+# Gateway now always launches through `app-server daemon bootstrap --remote-control`
+# (server/utils/gateway/infra/ssh/remote-command.ts), which forces remote control straight into
+# its "enabled ephemeral" state and skips that resolution loop entirely; reconnection without
+# ChatGPT auth instead uses the normal exponential backoff capped at 30s
+# (codex-rs/app-server-transport/src/transport/remote_control/websocket.rs), verified empirically
+# against 0.155.0. `--remote-control` takes priority over
+# CODEX_INTERNAL_APP_SERVER_REMOTE_CONTROL_DISABLED (codex-rs/app-server/src/main.rs), so the env
+# var no longer has any effect on Gateway's own launch path; only the stale file removal remains.
+rm -f /etc/profile.d/codex-gateway-remote-control.sh
 
 ssh-keygen -A
 exec /usr/sbin/sshd -D -e
