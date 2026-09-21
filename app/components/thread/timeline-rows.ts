@@ -106,12 +106,17 @@ function appendTurnItemsInOrder(input: {
 }) {
   const { rows, threadId, turn, sections } = input;
   const intermediateItems = new Set(sections.intermediateItems);
+  const finalItems = new Set(sections.finalItems);
   let intermediateHeaderAdded = false;
 
-  sections.items.forEach((item, index) => {
-    const isFinal = sections.hasFinalAnswer && index >= sections.finalAgentIndex;
+  // The shared history reducer owns protocol race normalization. Rendering must preserve that
+  // canonical order verbatim; a second presentation sort would make live events, cached history,
+  // and other consumers disagree about the same Turn.
+  sections.items.forEach((item) => {
+    const isFinal = finalItems.has(item);
     const isIntermediate = intermediateItems.has(item) && !isFinal;
-    if (isIntermediate && !intermediateHeaderAdded) {
+    const needsUnloadedIntermediateHeader = isFinal && turn.itemsView !== "full";
+    if (!intermediateHeaderAdded && (isIntermediate || needsUnloadedIntermediateHeader)) {
       rows.push({
         key: `${threadId}:turn-${turn.id}:intermediate-header`,
         type: "intermediateHeader",
@@ -139,6 +144,9 @@ function appendTurnItemsInOrder(input: {
     );
   });
 
+  // An active summary can temporarily contain only its lead message. In that case the lazy-load
+  // control still belongs at this turn's tail; once a final answer arrives, the branch above moves
+  // it before that answer without changing the canonical app-server item order.
   if (!intermediateHeaderAdded && turn.itemsView !== "full") {
     rows.push({
       key: `${threadId}:turn-${turn.id}:intermediate-header`,
