@@ -2,8 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { z } from "zod";
 import { openApp } from "./helpers/app";
 import { dockerInspectContainer } from "./helpers/docker-engine";
-
-const SUPPORTED_CODEX = "0.153.4";
+import { SUPPORTED_CODEX_VERSION as SUPPORTED_CODEX } from "../../server/utils/gateway/infra/codex/codex-version";
 
 const usersSchema = z.looseObject({
   users: z.array(

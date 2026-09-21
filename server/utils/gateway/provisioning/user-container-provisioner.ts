@@ -449,7 +449,7 @@ async function waitForCodex(containerName: string, privateKey: string, container
   while (Date.now() < deadline) {
     try {
       const version = await probeCodexVersion(containerName, privateKey);
-      // `codex --version` prints e.g. "codex-cli 0.153.4".
+      // `codex --version` prints e.g. "codex-cli 0.155.0".
       if (version.trim().endsWith(SUPPORTED_CODEX_VERSION)) return;
       lastError = new Error(`codex --version returned ${version.trim() || "<empty>"}`);
     } catch (error) {
