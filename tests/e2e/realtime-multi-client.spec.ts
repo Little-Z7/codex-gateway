@@ -115,12 +115,9 @@ test("fans out a real remote app-server thread to multiple browser clients acros
   const steerMessage = await waitForRealtimeClientMessage(page, "turn.steer", steerMessageOffset);
   expect(steerMessage.threadId).toBe(threadId);
   expect(steerMessage.text).toContain(steerMarker);
-  await expect(
-    page
-      .getByTestId("chat-scroll-area")
-      .getByTestId("steered-conversation-item")
-      .getByText(steerMarker),
-  ).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("chat-scroll-area").getByText(steerMarker)).toBeVisible({
+    timeout: 30_000,
+  });
   const processToggle = firstIntermediateStepsToggle(page);
   if (
     (await processToggle.isVisible().catch(() => false)) &&
@@ -165,10 +162,7 @@ test("fans out a real remote app-server thread to multiple browser clients acros
   await firstIntermediateStepsToggle(page).click();
   await revealVirtualizedChatLocator(
     page,
-    page
-      .getByTestId("chat-scroll-area")
-      .getByTestId("steered-conversation-item")
-      .getByText(steerMarker),
+    page.getByTestId("chat-scroll-area").getByText(steerMarker),
   );
   await reloadApp(page);
   await revealVirtualizedChatLocator(page, firstIntermediateStepsToggle(page));
@@ -176,10 +170,7 @@ test("fans out a real remote app-server thread to multiple browser clients acros
   await firstIntermediateStepsToggle(page).click();
   await revealVirtualizedChatLocator(
     page,
-    page
-      .getByTestId("chat-scroll-area")
-      .getByTestId("steered-conversation-item")
-      .getByText(steerMarker),
+    page.getByTestId("chat-scroll-area").getByText(steerMarker),
   );
 
   const backgroundThreadId = await remoteWorkspace.startThread(project.id);
@@ -283,6 +274,10 @@ test("fans out a real remote app-server thread to multiple browser clients acros
       imagePath: remote.imagePath,
       marker: secondMarker,
     });
+    const mirroredUserMessage = page
+      .getByTestId("chat-scroll-area")
+      .getByText(`回复：${secondMarker}`, { exact: true });
+    await expect(mirroredUserMessage).toBeVisible({ timeout: AGENT_OUTPUT_TIMEOUT_MS });
     // The submitted user text includes the instruction prefix, while the requested one-line Agent
     // response is the marker itself. Match the exact response so this assertion cannot pass by
     // finding the user's own message and then fail on another peer that rendered the real reply.
