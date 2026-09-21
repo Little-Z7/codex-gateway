@@ -150,8 +150,16 @@ app-server notification
 
 服务端错误统一用 `server/utils/gateway/http/errors.ts:gatewayApiError(code, ...)` 抛出稳定机器码，前端在 `errors.<code>` 下取文案（`te()` 判断存在性，缺失回退到服务端原始 message）。新增错误码必须补 `zh.json` 和 `en.json` 的 `errors.*`。
 
-Store 里取翻译用 `app/composables/i18n/useGatewayTranslator.ts`（走 `useNuxtApp().$i18n`），不是标准 `useI18n()`——后者依赖组件实例，在 Pinia setup 里不可用。
+**Pinia store 里禁止调用 `useI18n()`**，必须用 `app/composables/i18n/useGatewayTranslator.ts`（走 `useNuxtApp().$i18n`，不依赖组件实例）。`app/stores/gateway-bootstrap/index.ts` 是正确范例。
+
+这条违反了不会被任何检查拦下：`useI18n` 是 Nuxt 全局自动导入，源码里没有 import 语句，`no-restricted-imports` 匹配不到；oxlint 1.80 也不支持 `no-restricted-syntax`。typecheck 同样是绿的。它只在运行时炸，而且表现极具误导性：
+
+- 登录后 `app.vue` 的 `watch([initialized, token])` 回调调用 `resetGatewayClientSession()`，在**非组件 setup 上下文**里首次实例化所有 store
+- 任一 store 的 setup 里有 `useI18n()` 就抛 vue-i18n 的 `MUST_BE_CALL_SETUP_TOP`，函数中断，其后的 `refreshGatewayClient()` 永不执行
+- 界面表现：**永久「正在加载远端会话」、零网络请求、零 WebSocket**，看起来像后端或网络问题，实际是前端同步异常
+- 诊断信号：浏览器 console 出现 `SyntaxError: <数字>`，数字是 vue-i18n 错误码（26 = `MUST_BE_CALL_SETUP_TOP`）。看到"一直加载但没有任何请求在等"，先开 console，不要去查后端
+- 它是**必现**而非偶发：Pinia store 只在首次 `useStore()` 时执行 setup，而 `resetGatewayClientSession()` 在任何登录后组件挂载之前运行，对只在登录后界面用到的 store 来说它永远是首个实例化点。所以每次登录都会炸；改动后若没发现，说明没跑 E2E。`tests/e2e/bootstrap-completes.spec.ts` 守着这条路径
 
 ### Codex 版本基准
 
-`server/utils/gateway/infra/codex/codex-version.ts:SUPPORTED_CODEX_VERSION` 是远端安装、升级和 RPC client metadata 共用的唯一版本闸门，`third_party/openai-codex/` submodule 对齐该 tag，E2E 脚本也从这个文件读版本。升级 Codex 时这几处要一起动。
+`server/utils/gateway/infra/codex/codex-version.ts:SUPPORTED_CODEX_VERSION` 是远端安装、升级和 RPC client metadata 共用的唯一版本闸门，`third_party/openai-codex/` submodule 对齐该 tag，E2E 脚本也从这个文件读版本。升级 Codex 时这几处要一起动；另外 `deploy/user-container/entrypoint.sh` 依赖 Codex 的**内部**环境变量 `CODEX_INTERNAL_APP_SERVER_REMOTE_CONTROL_DISABLED` 关闭 remote control，它不是公开接口，升级时须到新版本源码确认仍然存在，否则 app-server 会重新陷入每秒一次的认证重试。
