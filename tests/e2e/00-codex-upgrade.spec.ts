@@ -101,7 +101,11 @@ test("upgrades empty, legacy Node, and legacy Codex SSH hosts with bounded concu
   await expect(page.getByTestId("chat-scroll-area").getByText(marker)).toBeVisible({
     timeout: 120_000,
   });
-  await expect(page.getByTestId(`thread-button-${threadId}`).getByLabel("已完成")).toBeVisible({
+  // The sidebar row for the thread that is currently open never carries the completion badge
+  // (ThreadStatusIndicator only surfaces it for a completed turn nobody has looked at yet; see
+  // app/stores/gateway/thread-runtime/completion-attention.ts:syncThreadCompletionAttention). The
+  // composer's own aria-label is the real, always-on signal that the turn finished.
+  await expect(page.getByTestId("send-turn-button")).toHaveAttribute("aria-label", "已完成", {
     timeout: 120_000,
   });
 });
@@ -212,7 +216,11 @@ rm -f "$daemon_dir"/app-server.pid "$daemon_dir"/app-server.pid.lock "$daemon_di
   await expect(page.getByTestId("chat-scroll-area").getByText(marker)).toBeVisible({
     timeout: 120_000,
   });
-  await expect(page.getByTestId(`thread-button-${threadId}`).getByLabel("已完成")).toBeVisible({
+  // The sidebar row for the thread that is currently open never carries the completion badge
+  // (ThreadStatusIndicator only surfaces it for a completed turn nobody has looked at yet; see
+  // app/stores/gateway/thread-runtime/completion-attention.ts:syncThreadCompletionAttention). The
+  // composer's own aria-label is the real, always-on signal that the turn finished.
+  await expect(page.getByTestId("send-turn-button")).toHaveAttribute("aria-label", "已完成", {
     timeout: 120_000,
   });
 });

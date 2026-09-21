@@ -85,7 +85,11 @@ test("fans out a real remote app-server thread to multiple browser clients acros
   await expect(page.getByTestId("send-turn-button")).toHaveAttribute("aria-label", "已完成", {
     timeout: AGENT_OUTPUT_TIMEOUT_MS,
   });
-  await expect(page.getByTestId(`thread-button-${threadId}`).getByLabel("已完成")).toBeVisible();
+  // The sidebar row never shows the completion badge for the thread that is currently open
+  // (ThreadStatusIndicator suppresses it once the user has already seen the result; see
+  // app/stores/gateway/thread-runtime/completion-attention.ts:syncThreadCompletionAttention).
+  // What the sidebar does guarantee is that its running indicator clears once the turn is done.
+  await expect(page.getByTestId(`thread-button-${threadId}`).getByLabel("运行中")).toBeHidden();
   await expect(page.getByText("加载回合内容失败")).toHaveCount(0);
   await revealVirtualizedChatLocator(page, firstIntermediateStepsToggle(page));
   // This scenario owns realtime reconnection and cross-browser fanout. Whether completion
@@ -113,7 +117,8 @@ test("fans out a real remote app-server thread to multiple browser clients acros
   await expect(page.getByTestId("send-turn-button")).toHaveAttribute("aria-label", "已完成", {
     timeout: AGENT_OUTPUT_TIMEOUT_MS,
   });
-  await expect(page.getByTestId(`thread-button-${threadId}`).getByLabel("已完成")).toBeVisible();
+  // Same suppression as above: the open thread's sidebar row never shows the completion badge.
+  await expect(page.getByTestId(`thread-button-${threadId}`).getByLabel("运行中")).toBeHidden();
   await revealVirtualizedChatLocator(page, firstIntermediateStepsToggle(page));
   await firstIntermediateStepsToggle(page).click();
   await revealVirtualizedChatLocator(

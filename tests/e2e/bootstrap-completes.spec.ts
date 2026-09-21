@@ -34,6 +34,22 @@ function trackBootstrapFailures(page: Page) {
   return () => failures.filter((entry) => !IGNORED_NOISE.some((noise) => noise.test(entry)));
 }
 
+// A stuck bootstrap also never opens the realtime WebSocket, since resetGatewayClientSession()
+// aborting means refreshGatewayClient() (which installs the connection) never runs. Register the
+// listener before openApp() navigates so Playwright observes the socket from creation.
+function trackRealtimeReady(page: Page) {
+  let ready = false;
+  page.on("websocket", (socket) => {
+    if (!socket.url().endsWith("/gw/api/realtime")) return;
+    socket.on("framereceived", (frame) => {
+      if (typeof frame.payload === "string" && frame.payload.includes('"type":"ready"')) {
+        ready = true;
+      }
+    });
+  });
+  return () => ready;
+}
+
 const accounts = [
   ["admin", { username: E2E_USERNAME, password: E2E_PASSWORD }],
   ["member", { username: E2E_MEMBER_USERNAME, password: E2E_MEMBER_PASSWORD }],
@@ -44,12 +60,14 @@ for (const [label, credentials] of accounts) {
     page,
   }) => {
     const failures = trackBootstrapFailures(page);
+    const realtimeReady = trackRealtimeReady(page);
     await openApp(page, { resetConfig: false, credentials });
 
     // While authenticated, app-ready is only rendered once `initializing` has been reset. A stuck
     // bootstrap leaves the spinner forever and never re-attaches this marker.
     await expect(page.getByTestId("app-ready")).toBeAttached({ timeout: 30_000 });
     await expect(page.getByText("正在加载远端会话")).toHaveCount(0, { timeout: 30_000 });
+    await expect.poll(realtimeReady, { timeout: 30_000 }).toBe(true);
     expect(failures()).toEqual([]);
   });
 }
