@@ -18,6 +18,12 @@ fi
 
 export E2E_UID="${E2E_UID:-12345}"
 export E2E_GID="${E2E_GID:-12345}"
+# Optional outbound HTTP(S) proxy for sandboxes/CI runners with no direct internet route. Feeds
+# the same product config item gateway-under-test uses in real deployments
+# (CODEX_GATEWAY_OUTBOUND_PROXY, see deploy/gateway-entrypoint.sh) plus the ssh-target-mfa
+# fixture's build-time Codex release download (tests/e2e/docker-compose.yml). Empty by default --
+# behavior is unchanged.
+export E2E_OUTBOUND_PROXY="${E2E_OUTBOUND_PROXY:-}"
 export E2E_CODEX_HOME="${E2E_CODEX_HOME:-$HOME/.codex}"
 # Keep the MFA fixture on the same Codex version as the application protocol gate. The dedicated
 # legacy fixtures own upgrade coverage; mixing a 130 MB upgrade into the MFA browser flow makes

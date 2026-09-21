@@ -51,6 +51,14 @@ services:
       target: mfa-runtime
       args:
         CURRENT_CODEX_CLI_VERSION: ${E2E_SUPPORTED_CODEX_VERSION}
+        # This stage's own `curl` (tests/e2e/docker/Dockerfile, current-codex-runtime) bakes a
+        # Codex release straight into the image at build time, so it needs the same outbound
+        # proxy as everything else when the sandbox has no direct internet route. `docker build`
+        # does not read the invoking shell's http_proxy/https_proxy -- compose has to pass it
+        # explicitly as a build arg, which is what this does.
+        http_proxy: ${E2E_OUTBOUND_PROXY:-}
+        https_proxy: ${E2E_OUTBOUND_PROXY:-}
+        no_proxy: localhost,127.0.0.1
         E2E_UID: ${E2E_UID:-12345}
         E2E_GID: ${E2E_GID:-12345}
     <<: *ssh-target
@@ -101,6 +109,13 @@ services:
       CODEX_GATEWAY_SHARED_DATA_DIR: ${E2E_SHARED_DATA_DIR:?E2E_SHARED_DATA_DIR is required}
       CODEX_GATEWAY_USER_CONTAINER_PREFIX: codex-e2e-user-
       CODEX_GATEWAY_SANDBOX_MODE: danger-full-access
+      # Outbound proxy for sandboxes with no direct internet route, using the real product config
+      # item (see deploy/gateway-entrypoint.sh and CLAUDE.md's "出站代理" section) instead of a
+      # test-only workaround. Empty by default -- behavior is unchanged. The extra no-proxy hosts
+      # are the E2E fixture containers themselves, reached over the compose network rather than
+      # through the sandbox's outbound proxy.
+      CODEX_GATEWAY_OUTBOUND_PROXY: ${E2E_OUTBOUND_PROXY:-}
+      CODEX_GATEWAY_OUTBOUND_NO_PROXY: ${E2E_OUTBOUND_PROXY:+ssh-target,ssh-target-legacy-node,ssh-target-npm-codex,ssh-target-mfa,bark-target}
       # Custom model provider path (E2E_MODEL_PROVIDER_API_KEY set by run-in-containers.sh).
       CODEX_GATEWAY_MODEL_PROVIDER: ${E2E_MODEL_PROVIDER:-openai}
       CODEX_GATEWAY_MODEL_PROVIDER_ID: ${E2E_MODEL_PROVIDER_ID:-ollama-cloud}
