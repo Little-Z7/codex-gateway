@@ -258,7 +258,7 @@ async function loginStatus(
 }
 
 test("usage statistics capture a real turn", async ({ page, browser }) => {
-  test.setTimeout(420_000);
+  test.setTimeout(480_000);
   const suffix = Date.now().toString(36);
   const usageUser = `cu-${suffix}`;
   const usagePassword = "usage-password-ok-1234";
@@ -280,7 +280,12 @@ test("usage statistics capture a real turn", async ({ page, browser }) => {
     await member.getByTestId("sidebar-new-thread").click();
     await expect(member.getByTestId("new-thread-hero")).toBeVisible({ timeout: 30_000 });
     await member.locator('[data-testid="composer-input"]').fill("reply with ok");
-    await expect(member.getByTestId("send-turn-button")).toBeEnabled({ timeout: 60_000 });
+    // A freshly provisioned container's first real host connection includes a one-time Codex
+    // standalone-migration download (server/utils/gateway/infra/rpc/rpc.ts CodexRpcClient.connect
+    // -> codex-upgrader.ts): ~140 MB through whatever outbound path the Gateway has, which alone
+    // measured ~67s over this project's sandboxed proxy. 60s was tuned for the pre-0.155.0 flow
+    // and is no longer enough margin.
+    await expect(member.getByTestId("send-turn-button")).toBeEnabled({ timeout: 150_000 });
     await member.getByTestId("send-turn-button").click();
     await expect(member.getByTestId("intermediate-steps").last()).toContainText(/已完成|Done/, {
       timeout: 240_000,

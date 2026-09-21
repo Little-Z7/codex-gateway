@@ -124,7 +124,7 @@ test("member dailyTurns budget intercepts the second turn and reset restores sen
   page,
   browser,
 }) => {
-  test.setTimeout(360_000);
+  test.setTimeout(480_000);
   const username = `budget-${Date.now().toString(36)}`.slice(0, 32);
   const password = "budget-user-password-ok";
 
@@ -155,8 +155,13 @@ test("member dailyTurns budget intercepts the second turn and reset restores sen
     const first = `budget first ${Date.now().toString(36)}`;
     await member.locator('[data-testid="composer-input"]').fill(first);
     await member.getByTestId("send-turn-button").click();
+    // A freshly provisioned container's first real host connection includes a one-time Codex
+    // standalone-migration download (server/utils/gateway/infra/rpc/rpc.ts CodexRpcClient.connect
+    // -> codex-upgrader.ts): ~140 MB through whatever outbound path the Gateway has, which alone
+    // measured ~67s over this project's sandboxed proxy. 60s was tuned for the pre-0.155.0 flow
+    // and is no longer enough margin.
     await expect
-      .poll(() => new URL(member.url()).searchParams.get("threadId"), { timeout: 60_000 })
+      .poll(() => new URL(member.url()).searchParams.get("threadId"), { timeout: 150_000 })
       .not.toBeNull();
     await expect(member.getByTestId("send-turn-button")).toHaveAttribute(
       "aria-label",

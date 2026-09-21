@@ -86,7 +86,7 @@ async function memberPageWithHost(browser: Browser, username: string, password: 
 }
 
 test("provisioned members only see and reach their own workspace", async ({ page, browser }) => {
-  test.setTimeout(300_000);
+  test.setTimeout(480_000);
   const suffix = Date.now().toString(36);
   const nameA = `iso-a-${suffix}`.slice(0, 32);
   const nameB = `iso-b-${suffix}`.slice(0, 32);
@@ -158,10 +158,16 @@ test("provisioned members only see and reach their own workspace", async ({ page
       .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
       .fill("用一句话回复：ok");
     await a.page.getByTestId("send-turn-button").click();
+    // Both A and B's freshly provisioned containers go through the one-time Codex
+    // standalone-migration download on their first real connection
+    // (server/utils/gateway/infra/rpc/rpc.ts CodexRpcClient.connect -> codex-upgrader.ts): ~140 MB
+    // each through whatever outbound path the Gateway has. Measured at ~67s per container with no
+    // contention; two containers competing for the same outbound path can comfortably exceed the
+    // 120s this was tuned for pre-0.155.0.
     await a.page.waitForFunction(
       () => new URLSearchParams(window.location.search).get("threadId") !== null,
       undefined,
-      { timeout: 120_000 },
+      { timeout: 240_000 },
     );
     const bThreads = await authenticatedFetch(
       b.page,

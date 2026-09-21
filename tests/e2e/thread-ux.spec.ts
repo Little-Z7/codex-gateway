@@ -85,7 +85,7 @@ test("member without a workspace sees the empty-state hint", async ({ page, brow
 });
 
 test("new chat draft, send, sidebar groups, search, user menu", async ({ page, browser }) => {
-  test.setTimeout(300_000);
+  test.setTimeout(480_000);
   const username = `ux-turn-${Date.now().toString(36)}`.slice(0, 32);
   const password = "ux-turn-password-ok";
 
@@ -101,8 +101,15 @@ test("new chat draft, send, sidebar groups, search, user menu", async ({ page, b
       credentials: { username, password },
     });
 
-    // Single managed host: flat sidebar (no host-button rows).
-    await expect(member.locator('[data-testid^="host-button-"]')).toHaveCount(0);
+    // Single managed host: flat sidebar (no host-button rows) once the host finishes connecting.
+    // A freshly provisioned container's first real connection includes a one-time Codex
+    // standalone-migration download (server/utils/gateway/infra/rpc/rpc.ts CodexRpcClient.connect
+    // -> codex-upgrader.ts): ~140 MB through whatever outbound path the Gateway has, which alone
+    // measured ~67s over this project's sandboxed proxy -- comfortably past the suite's 30s
+    // default expect timeout, which was tuned for the pre-0.155.0 flow.
+    await expect(member.locator('[data-testid^="host-button-"]')).toHaveCount(0, {
+      timeout: 150_000,
+    });
 
     const threadCount = async () =>
       member.evaluate(async () => {
@@ -134,7 +141,7 @@ test("new chat draft, send, sidebar groups, search, user menu", async ({ page, b
     await member.locator('[data-testid="composer-input"]').fill(prompt);
     await member.getByTestId("send-turn-button").click();
     await expect
-      .poll(() => new URL(member.url()).searchParams.get("threadId"), { timeout: 60_000 })
+      .poll(() => new URL(member.url()).searchParams.get("threadId"), { timeout: 150_000 })
       .not.toBeNull();
     await expect(member.getByTestId("new-thread-hero")).toBeHidden({ timeout: 60_000 });
     await expect(member.locator('[data-testid="composer-box"]').last()).toBeVisible();
