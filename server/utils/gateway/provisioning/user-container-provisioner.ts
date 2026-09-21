@@ -315,6 +315,15 @@ async function provisionContainer(userId: number) {
       env.push(`CODEX_GATEWAY_MODEL_PROVIDER_API_KEY=${provider.apiKey}`);
     if (provider.model !== null) env.push(`CODEX_GATEWAY_MODEL=${provider.model}`);
     if (provider.webSearch !== null) env.push(`CODEX_GATEWAY_WEB_SEARCH=${provider.webSearch}`);
+    // Same outbound proxy the Gateway process itself uses (see deploy/gateway-entrypoint.sh),
+    // shared here so Codex's own model-API calls inside the container can reach the internet
+    // through it too. The entrypoint moves it into /etc/profile.d for the same reason as the
+    // model provider API key: sshd does not propagate container Env to SSH sessions.
+    if (config.outboundProxy !== null) {
+      env.push(`CODEX_GATEWAY_OUTBOUND_PROXY=${config.outboundProxy}`);
+      if (config.outboundNoProxy !== null)
+        env.push(`CODEX_GATEWAY_OUTBOUND_NO_PROXY=${config.outboundNoProxy}`);
+    }
     const binds = [`${volumeName}:/home/dev`, `${config.sharedAuthDir}:/srv/codex-auth:rw`];
     if (config.sharedDataDir !== null) binds.push(`${config.sharedDataDir}:/data/shared:rw`);
 

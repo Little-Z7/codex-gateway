@@ -81,6 +81,10 @@ export interface ProvisioningConfig {
   userContainerLogMaxFiles: string;
   sandboxMode: string;
   modelProvider: ModelProviderConfig;
+  /** Outbound HTTP(S) proxy shared by the Gateway process itself and every user container. */
+  outboundProxy: string | null;
+  /** Extra comma-separated no-proxy hosts, appended to the built-in localhost bypass. */
+  outboundNoProxy: string | null;
 }
 
 export function provisioningConfig(): ProvisioningConfig {
@@ -104,5 +108,7 @@ export function provisioningConfig(): ProvisioningConfig {
     userContainerLogMaxFiles:
       trimmedOrNull(process.env.CODEX_GATEWAY_USER_CONTAINER_LOG_MAX_FILES) ?? "3",
     modelProvider: resolveModelProvider(modelProviderConfig()),
+    outboundProxy: trimmedOrNull(process.env.CODEX_GATEWAY_OUTBOUND_PROXY),
+    outboundNoProxy: trimmedOrNull(process.env.CODEX_GATEWAY_OUTBOUND_NO_PROXY),
   };
 }

@@ -158,6 +158,45 @@ docker compose up -d codex-gateway
 
 已有容器内 Codex 版本偏低时，Gateway 走既有的运行时升级路径；或重建容器换新镜像。
 
+## 出站代理
+
+部署机只能经代理（例如 Clash/mihomo）访问外网时，设置一个配置项即可：
+
+```dotenv
+CODEX_GATEWAY_OUTBOUND_PROXY=http://172.17.0.1:7890
+#CODEX_GATEWAY_OUTBOUND_NO_PROXY=internal.example.com,10.0.0.5
+```
+
+不设置时行为完全不变。设置后覆盖两条路径：
+
+- **Gateway 进程自身**的出站 `fetch()`：Codex standalone 发行包下载（`releases.openai.com`/GitHub，见
+  `server/utils/gateway/infra/codex/codex-artifacts.ts`）、管理台"检查 npm 最新版本"、Bark 推送。Codex 发行包**由 Gateway
+  自己下载后经 SSH 上传给远端主机/用户容器**（`CodexRpcClient.connect()` 触发的 standalone 迁移），不是主机自己下载，所以这一项就覆盖了升级链路。
+- **用户容器内的 Codex**：调模型 API、以及容器内可能发生的下载。provisioning 把它写进容器 Env，`deploy/user-container/entrypoint.sh`
+  再落到 `/etc/profile.d/`（sshd 不会把容器 Env 带进 SSH 会话，与共享 API-key provider 用同一套机制）。改配置后对已有容器要
+  `docker restart <容器>`（或管理面板"停止/启动"）触发 entrypoint 重写，新建容器自动生效。
+
+机制细节（`deploy/gateway-entrypoint.sh`）：Node 原生 `fetch()` 默认不读 `http_proxy`/`https_proxy`；`NODE_USE_ENV_PROXY=1`
+让 Node 用 undici 的 `EnvHttpProxyAgent` 读取它们，但这个开关**必须在进程启动时就存在于环境变量里**，进程起来后再用 JS 设置
+`process.env` 无效——已用 `node:24-bookworm-slim` 实测验证。Gateway 镜像的 ENTRYPOINT 因此是一层 shell 包装脚本，只在
+`CODEX_GATEWAY_OUTBOUND_PROXY` 非空时补上这几个变量再 `exec` 真正的 `node`。同样经过实测：只有小写的
+`http_proxy`/`https_proxy`/`no_proxy` 生效，大写的 `HTTP_PROXY`/`HTTPS_PROXY` 不生效。
+
+`CODEX_GATEWAY_OUTBOUND_NO_PROXY` 只是逗号分隔的**额外**直连主机名/IP；`localhost`/`127.0.0.1`/`::1` 始终直连，不受它影响。
+**不支持 CIDR 网段写法**（同样已实测：Node 的代理匹配只认精确主机名/IP 和域名后缀，`10.0.0.0/8` 这类写法不会被当成直连）——
+需要整段私网直连时，要么逐个列出主机名，要么依赖上游代理自身的规则（mihomo/Clash 默认规则集通常已经把私网段直连）。
+
+构建 `codex-gateway-user` 镜像本身（`npm install -g @openai/codex`）走的是 `docker compose build`，这一步的代理与
+`CODEX_GATEWAY_OUTBOUND_PROXY` 无关（那是运行时配置，构建时容器还不存在）。`docker build`/`docker compose build` 不会
+读取执行 shell 里的 `http_proxy` 环境变量（已实测：只认 Docker CLI 自己的 `~/.docker/config.json` 的 `proxies` 配置，或显式
+`--build-arg`），需要代理时用：
+
+```bash
+docker compose --profile build-only build --build-arg http_proxy=<proxy> --build-arg https_proxy=<proxy> codex-gateway-user
+```
+
+或者一次性在部署机的 `~/.docker/config.json` 里配置 `proxies.default`，让 Docker CLI 对所有构建/容器都生效。
+
 ## 常见故障
 
 - **docker.sock 权限**：Gateway 容器内必须能访问 `/var/run/docker.sock`（compose 已挂载）；用户管理页顶部的诊断卡会显示 Docker 不可达。

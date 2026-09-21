@@ -112,6 +112,22 @@ else
   rm -f "${PROFILE_FILE}"
 fi
 
+# Same reasoning as the model provider key above: sshd drops container Env from SSH sessions, so
+# the outbound proxy Codex needs for its own model-API calls (and the Gateway shares for its own
+# Codex release downloads, see deploy/gateway-entrypoint.sh) has to be re-exported here too.
+PROXY_PROFILE_FILE=/etc/profile.d/codex-gateway-outbound-proxy.sh
+if [ -n "${CODEX_GATEWAY_OUTBOUND_PROXY:-}" ]; then
+  {
+    printf "export http_proxy='%s'\n" "${CODEX_GATEWAY_OUTBOUND_PROXY}"
+    printf "export https_proxy='%s'\n" "${CODEX_GATEWAY_OUTBOUND_PROXY}"
+    printf "export no_proxy='localhost,127.0.0.1,::1%s'\n" \
+      "${CODEX_GATEWAY_OUTBOUND_NO_PROXY:+,${CODEX_GATEWAY_OUTBOUND_NO_PROXY}}"
+  } > "${PROXY_PROFILE_FILE}"
+  chmod 644 "${PROXY_PROFILE_FILE}"
+else
+  rm -f "${PROXY_PROFILE_FILE}"
+fi
+
 # Remove a stale drop-in from images built before the Codex standalone daemon migration: Gateway
 # used to launch app-server as `app-server --listen unix://` without `--remote-control`, which put
 # remote control in its "resolve persisted preference" state and, with no ChatGPT auth (always,

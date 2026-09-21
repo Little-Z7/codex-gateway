@@ -43,6 +43,11 @@ services:
       CODEX_GATEWAY_MODEL_PROVIDER_WIRE_API: ${CODEX_GATEWAY_MODEL_PROVIDER_WIRE_API:-responses}
       CODEX_GATEWAY_MODEL: ${CODEX_GATEWAY_MODEL:-}
       CODEX_GATEWAY_WEB_SEARCH: ${CODEX_GATEWAY_WEB_SEARCH:-}
+      # Optional outbound HTTP(S) proxy for the Gateway's own network calls (Codex release
+      # downloads, npm version checks, Bark push) and for Codex inside user containers (model API
+      # calls). Unset by default; see deploy/gateway-entrypoint.sh and .env.example.
+      CODEX_GATEWAY_OUTBOUND_PROXY: ${CODEX_GATEWAY_OUTBOUND_PROXY:-}
+      CODEX_GATEWAY_OUTBOUND_NO_PROXY: ${CODEX_GATEWAY_OUTBOUND_NO_PROXY:-}
     volumes:
       - ./data:/data
       - /var/run/docker.sock:/var/run/docker.sock
