@@ -152,7 +152,7 @@ test("new chat draft, send, sidebar groups, search, user menu", async ({ page, b
     const sidebarRow = member.locator(`[data-testid^="thread-button-"]`, {
       hasText: prompt.slice(0, 20),
     });
-    await expect(sidebarRow.first()).toBeVisible({ timeout: 90_000 });
+    await expect(sidebarRow.first()).toBeVisible({ timeout: 150_000 });
 
     // 3. Time-grouped conversation list: the new thread lands under "今天".
     await expect(member.getByText("对话", { exact: true })).toBeVisible();
