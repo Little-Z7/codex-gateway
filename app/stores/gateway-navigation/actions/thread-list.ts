@@ -94,16 +94,22 @@ export function createThreadListActions() {
         // dependent on which request happened last.
         navigation.threads = sortThreads(mainThreads);
         config.setCatalog(catalog.hosts, catalog.projects);
-        // Rows created by a draft first-send can arrive after the composer already stashed a
-        // preview fallback; apply and clear it now that the row exists.
+        // A brand-new thread can reach the sidebar before app-server supplies a name/preview, and
+        // with some model providers it may never (title generation is provider-dependent
+        // upstream). Re-apply the client-side first-message fallback on every refresh, keeping it
+        // in pendingPreviewFallbacks until the server row itself carries a real title. Deleting
+        // the entry after a single apply let the very next full-list replacement above silently
+        // revert the row back to a bare "Untitled".
         for (const [key, preview] of pendingPreviewFallbacks) {
           const index = navigation.threads.findIndex(
             (thread) => previewFallbackKey(thread.hostId, String(thread.id)) === key,
           );
           if (index < 0) continue;
           const thread = navigation.threads[index]!;
-          pendingPreviewFallbacks.delete(key);
-          if (firstNonEmptyString([thread.title, thread.name, thread.preview]) !== null) continue;
+          if (firstNonEmptyString([thread.title, thread.name, thread.preview]) !== null) {
+            pendingPreviewFallbacks.delete(key);
+            continue;
+          }
           navigation.threads = navigation.threads.with(index, { ...thread, preview });
         }
       } catch (error: unknown) {
@@ -141,13 +147,18 @@ function applyProjectDirectoryAvailability(response: ThreadListResponse) {
 
 // A brand-new thread reaches the sidebar before app-server supplies name/preview; without this
 // the row shows a raw UUID until the next list refresh. The first user message is the honest
-// fallback title — it is replaced as soon as the server-provided name or preview arrives.
+// fallback title. The entry is kept (not consumed after one apply) because app-server can take a
+// while — or, with some model providers, never — to supply a real name/preview, and every full
+// listThreads() refresh replaces navigation.threads wholesale from the server response; only a
+// genuine server-provided title/name/preview clears the entry (see the two delete sites below).
 const pendingPreviewFallbacks = new Map<string, string>();
 const previewFallbackKey = (hostId: number, threadId: string) => `${hostId}:${threadId}`;
 
 export function applyThreadPreviewFallback(hostId: number, threadId: string, text: string) {
   const preview = text.replace(/\s+/g, " ").trim().slice(0, 40);
   if (preview === "") return;
+  const key = previewFallbackKey(hostId, threadId);
+  pendingPreviewFallbacks.set(key, preview);
   const navigation = useGatewayNavigationStore();
   const index = navigation.threads.findIndex(
     (thread) => thread.hostId === hostId && String(thread.id) === threadId,
@@ -155,19 +166,20 @@ export function applyThreadPreviewFallback(hostId: number, threadId: string, tex
   const thread = navigation.threads[index];
   if (thread === undefined) {
     // Draft-created threads only land in navigation.threads after startThread's list refresh,
-    // which can resolve before the server index exposes the row. Stash the fallback so the
-    // merge below can apply it when the row first appears.
-    pendingPreviewFallbacks.set(previewFallbackKey(hostId, threadId), preview);
+    // which can resolve before the server index exposes the row. listThreads() applies the
+    // pending entry above once the row first appears, and again on every later refresh.
     return;
   }
-  pendingPreviewFallbacks.delete(previewFallbackKey(hostId, threadId));
-  if (firstNonEmptyString([thread.title, thread.name, thread.preview]) !== null) return;
+  if (firstNonEmptyString([thread.title, thread.name, thread.preview]) !== null) {
+    pendingPreviewFallbacks.delete(key);
+    return;
+  }
   navigation.threads = navigation.threads.with(index, { ...thread, preview });
   // The "recent activity" list renders ThreadActivitySummary, not navigation.threads; mirror the
   // fallback there too or that row keeps showing the UUID until app-server supplies a name.
   const activity = useGatewayThreadActivityStore();
-  const key = pinnedKey(hostId, threadId);
-  const summary = activity.summariesByKey[key];
+  const activityKey = pinnedKey(hostId, threadId);
+  const summary = activity.summariesByKey[activityKey];
   if (summary !== undefined && summary.title === summary.threadId) {
     activity.updateTitle(hostId, threadId, preview);
   }
