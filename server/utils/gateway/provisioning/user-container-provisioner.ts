@@ -381,6 +381,7 @@ async function provisionContainer(userId: number) {
       Binds: binds,
       RestartPolicy: { Name: "unless-stopped" },
       Init: true,
+      PidsLimit: config.pidsLimit,
       LogConfig: {
         Type: "json-file",
         Config: {
@@ -389,6 +390,7 @@ async function provisionContainer(userId: number) {
         },
       },
     };
+    if (config.cgroupParent !== null) hostConfig.CgroupParent = config.cgroupParent;
     // Per-user quota overrides stored on the managed_hosts row beat the global env limits.
     const quota = userStore.getManagedHost(userId);
     const memory = quota?.memoryLimit ?? config.memory;

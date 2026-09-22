@@ -77,6 +77,12 @@ export interface ProvisioningConfig {
   containerPrefix: string;
   memory: string | null;
   cpus: string | null;
+  /** HostConfig.PidsLimit sent to Docker: a positive fork-bomb guard, or -1 for unlimited. */
+  pidsLimit: number;
+  /** HostConfig.CgroupParent (a systemd slice name, e.g. "codex-gateway-users.slice", under the
+   *  systemd cgroup driver) so the host can cap the aggregate resource usage of every user
+   *  container via `systemctl set-property <slice> ...`. Unset by default. */
+  cgroupParent: string | null;
   userContainerLogMaxSize: string;
   userContainerLogMaxFiles: string;
   sandboxMode: string;
@@ -85,6 +91,12 @@ export interface ProvisioningConfig {
   outboundProxy: string | null;
   /** Extra comma-separated no-proxy hosts, appended to the built-in localhost bypass. */
   outboundNoProxy: string | null;
+}
+
+function parsePidsLimit(raw: string | null): number {
+  if (raw === null) return 512;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : -1;
 }
 
 export function provisioningConfig(): ProvisioningConfig {
@@ -102,6 +114,8 @@ export function provisioningConfig(): ProvisioningConfig {
       trimmedOrNull(process.env.CODEX_GATEWAY_USER_CONTAINER_PREFIX) ?? "codex-user-",
     memory: trimmedOrNull(process.env.CODEX_GATEWAY_USER_CONTAINER_MEMORY),
     cpus: trimmedOrNull(process.env.CODEX_GATEWAY_USER_CONTAINER_CPUS),
+    pidsLimit: parsePidsLimit(trimmedOrNull(process.env.CODEX_GATEWAY_USER_CONTAINER_PIDS)),
+    cgroupParent: trimmedOrNull(process.env.CODEX_GATEWAY_USER_CONTAINER_CGROUP_PARENT),
     sandboxMode: trimmedOrNull(process.env.CODEX_GATEWAY_SANDBOX_MODE) ?? "danger-full-access",
     userContainerLogMaxSize:
       trimmedOrNull(process.env.CODEX_GATEWAY_USER_CONTAINER_LOG_MAX_SIZE) ?? "10m",
