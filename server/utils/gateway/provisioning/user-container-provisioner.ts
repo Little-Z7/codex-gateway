@@ -348,8 +348,13 @@ async function provisionContainer(userId: number) {
       "Provisioning requires CODEX_GATEWAY_DOCKER_NETWORK when CODEX_GATEWAY_USER_NETWORK_ISOLATION=shared",
     );
   }
-  if (config.sharedAuthDir === null) {
-    throw new Error("Provisioning requires CODEX_GATEWAY_SHARED_AUTH_DIR");
+  // Shared ChatGPT login (mode "openai") needs the shared auth dir mounted; a shared API-key
+  // provider (mode "custom") never reads /srv/codex-auth, so it must not require the directory.
+  const useSharedLogin = config.modelProvider.mode === "openai";
+  if (useSharedLogin && config.sharedAuthDir === null) {
+    throw new Error(
+      "Provisioning requires CODEX_GATEWAY_SHARED_AUTH_DIR when using the shared ChatGPT login (CODEX_GATEWAY_MODEL_PROVIDER=openai)",
+    );
   }
   if (config.modelProvider.error !== null) {
     throw new Error(config.modelProvider.error);
@@ -406,8 +411,13 @@ async function provisionContainer(userId: number) {
       if (config.outboundNoProxy !== null)
         env.push(`CODEX_GATEWAY_OUTBOUND_NO_PROXY=${config.outboundNoProxy}`);
     }
-    const binds = [`${volumeName}:/home/dev`, `${config.sharedAuthDir}:/srv/codex-auth:rw`];
-    if (config.sharedDataDir !== null) binds.push(`${config.sharedDataDir}:/data/shared:rw`);
+    const binds = [`${volumeName}:/home/dev`];
+    // Custom API-key providers never read /srv/codex-auth; only mount it for the shared ChatGPT
+    // login path (see the validation above).
+    if (useSharedLogin) binds.push(`${config.sharedAuthDir}:/srv/codex-auth:rw`);
+    if (config.sharedDataDir !== null) {
+      binds.push(`${config.sharedDataDir}:/data/shared:${config.sharedDataWritable ? "rw" : "ro"}`);
+    }
 
     // "shared" (default, unchanged): every user container joins the one shared dockerNetwork.
     // "per-user": each user gets a dedicated Internal:true bridge network that only the Gateway's

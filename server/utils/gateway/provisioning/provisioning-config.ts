@@ -76,6 +76,8 @@ export interface ProvisioningConfig {
   sharedAuthDir: string | null;
   sharedAuthMount: string;
   sharedDataDir: string | null;
+  /** /data/shared is mounted read-only by default; true mounts it rw (opt-in). */
+  sharedDataWritable: boolean;
   containerPrefix: string;
   memory: string | null;
   cpus: string | null;
@@ -129,6 +131,7 @@ export function provisioningConfig(): ProvisioningConfig {
     sharedAuthMount:
       trimmedOrNull(process.env.CODEX_GATEWAY_SHARED_AUTH_MOUNT) ?? "/srv/codex-auth",
     sharedDataDir: trimmedOrNull(process.env.CODEX_GATEWAY_SHARED_DATA_DIR),
+    sharedDataWritable: process.env.CODEX_GATEWAY_SHARED_DATA_WRITABLE === "true",
     containerPrefix:
       trimmedOrNull(process.env.CODEX_GATEWAY_USER_CONTAINER_PREFIX) ?? "codex-user-",
     memory: trimmedOrNull(process.env.CODEX_GATEWAY_USER_CONTAINER_MEMORY),
