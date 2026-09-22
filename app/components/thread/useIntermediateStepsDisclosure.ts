@@ -1,4 +1,4 @@
-import { reactive, watch, type ComputedRef } from "vue";
+import { ref, watch, type ComputedRef } from "vue";
 import { itemStatusSignature, statusValue } from "./thread-turn-sections";
 import type { ThreadTimelineItem } from "~~/shared/types";
 
@@ -14,14 +14,17 @@ export function useIntermediateStepsDisclosure(input: {
   threadIsRunning: ComputedRef<boolean>;
   autoCollapseIntermediate: ComputedRef<boolean>;
 }) {
-  // Disclosure state belongs to the timeline, not to virtual row components. Rows are destroyed
-  // offscreen, so keeping this small per-turn map here preserves explicit user choices without
-  // coupling expansion to virtualizer measurements or a global store.
-  const openByTurnId = reactive(new Map<string, boolean>());
-  const touchedByUser = new Set<string>();
-  // Turns observed while running are the only ones that may re-expand when a detached reader is
-  // parked mid-scroll; freshly loaded historical turns stay collapsed.
+  // A timeline is an accordion, not a set of independent disclosures. Keeping one id prevents
+  // concurrent/continued Turns from mounting every intermediate stream at once, while locating the
+  // state above virtual rows preserves it when offscreen rows are destroyed and recreated.
+  const openTurnId = ref<string | null>(null);
+  const userSelectedTurnId = ref<string | null>(null);
+  // Turns observed while running are the only ones that may re-expand automatically once they
+  // finish; freshly loaded historical turns never auto-expand.
   const seenActive = new Set<string>();
+  // Once the user has explicitly opened or closed a turn's disclosure, its state is theirs: the
+  // automatic detached-reader reopen below must never override that choice again.
+  const touchedByUser = new Set<string>();
 
   watch(
     () => [
@@ -34,59 +37,63 @@ export function useIntermediateStepsDisclosure(input: {
       ]),
     ],
     () => {
-      const liveTurnIds = new Set(input.turns.value.map((turn) => turn.id));
-      for (const turnId of openByTurnId.keys()) {
-        if (!liveTurnIds.has(turnId)) {
-          openByTurnId.delete(turnId);
-          touchedByUser.delete(turnId);
-          seenActive.delete(turnId);
+      const turns = input.turns.value;
+      const liveTurnIds = new Set(turns.map((turn) => turn.id));
+      if (userSelectedTurnId.value !== null && !liveTurnIds.has(userSelectedTurnId.value)) {
+        userSelectedTurnId.value = null;
+      }
+      if (openTurnId.value !== null && !liveTurnIds.has(openTurnId.value)) {
+        openTurnId.value = null;
+      }
+      for (const turnId of seenActive) {
+        if (!liveTurnIds.has(turnId)) seenActive.delete(turnId);
+      }
+      for (const turnId of touchedByUser) {
+        if (!liveTurnIds.has(turnId)) touchedByUser.delete(turnId);
+      }
+
+      if (userSelectedTurnId.value !== null) {
+        openTurnId.value = userSelectedTurnId.value;
+        return;
+      }
+
+      for (const turn of turns) {
+        if (input.threadIsRunning.value && turn.turnIsActive) {
+          seenActive.add(turn.id);
         }
       }
 
-      for (const turn of input.turns.value) {
-        // Live work stays collapsed by default; the header surfaces the newest step's summary
-        // instead of a streaming wall. The user can still open it explicitly.
-        if (input.threadIsRunning.value && turn.turnIsActive) {
-          touchedByUser.delete(turn.id);
-          seenActive.add(turn.id);
-          if (!openByTurnId.has(turn.id)) openByTurnId.set(turn.id, false);
-          continue;
-        }
-        if (input.autoCollapseIntermediate.value && !touchedByUser.has(turn.id)) {
-          openByTurnId.set(turn.id, false);
-        } else if (
-          !touchedByUser.has(turn.id) &&
-          seenActive.has(turn.id) &&
-          openByTurnId.get(turn.id) === false
-        ) {
-          // A detached reader was mid-scroll when the turn finished: expand the completed work so
-          // their anchor stays visible instead of collapsing the row out from under them.
-          openByTurnId.set(turn.id, true);
-        } else if (!openByTurnId.has(turn.id)) {
-          openByTurnId.set(turn.id, false);
-        }
+      // Live work stays collapsed by default; the header surfaces the newest step's summary
+      // instead of a streaming wall. A reader who has scrolled away mid-stream is the exception:
+      // collapsing a turn the instant it finishes would yank content out from under them, so the
+      // most recently finished, untouched turn they were watching stays expanded until they act.
+      if (input.autoCollapseIntermediate.value) {
+        openTurnId.value = null;
+        return;
       }
+      const reopenCandidate = turns.findLast(
+        (turn) =>
+          !(input.threadIsRunning.value && turn.turnIsActive) &&
+          seenActive.has(turn.id) &&
+          !touchedByUser.has(turn.id),
+      );
+      openTurnId.value = reopenCandidate?.id ?? null;
     },
     { immediate: true },
   );
 
   function isIntermediateOpen(turnId: string) {
-    return openByTurnId.get(turnId) ?? false;
+    return openTurnId.value === turnId;
   }
 
   function setIntermediateOpen(turnId: string, open: boolean) {
-    const turn = input.turns.value.find((candidate) => candidate.id === turnId);
-    // Opening live work is temporary inspection, not a request to keep historical work expanded.
-    // Previously a click after the final stream delta but before turn/completed raced the watcher:
-    // no later running-state update remained to clear touchedByUser, so completion stayed open.
-    // Completed-turn clicks are the only durable disclosure choice; they remain open until the user
-    // closes them, while every active turn still follows the normal completion auto-collapse policy.
-    if (input.threadIsRunning.value && turn?.turnIsActive === true) {
-      touchedByUser.delete(turnId);
-    } else {
-      touchedByUser.add(turnId);
-    }
-    openByTurnId.set(turnId, open);
+    // A click is the user's explicit accordion selection, regardless of whether the Turn is still
+    // streaming. It remains the sole open Turn until the user closes it or it leaves the retained
+    // timeline; another active Turn must never reopen alongside the one the user chose, and the
+    // automatic detached-reader reopen never overrides an explicit choice again.
+    touchedByUser.add(turnId);
+    userSelectedTurnId.value = open ? turnId : null;
+    openTurnId.value = open ? turnId : null;
   }
 
   return {

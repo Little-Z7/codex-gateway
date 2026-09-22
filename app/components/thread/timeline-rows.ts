@@ -1,6 +1,6 @@
 import type { ThreadResponseUsage, ThreadTimelineItem, ThreadTimelineTurn } from "~~/shared/types";
 import type { DisplayedTurnTiming } from "@/utils/turn-timing";
-import { itemKey, userMessageVariant, type ThreadTurnSections } from "./thread-turn-sections";
+import { itemKey, type ThreadTurnSections } from "./thread-turn-sections";
 import { collapsibleIntermediateItem, intermediateItemSummary } from "@/utils/intermediate-summary";
 
 export type { ThreadTimelineTurn } from "~~/shared/types";
@@ -36,7 +36,6 @@ export type ThreadTimelineRow =
       turnId: string;
       section: ThreadTimelineItemSection;
       item: ThreadTimelineItem;
-      userMessageVariant: "normal" | "steer";
       turnTiming: DisplayedTurnTiming | null;
       responseUsage: ThreadResponseUsage[] | undefined;
       agentActionsAvailable: boolean;
@@ -79,97 +78,17 @@ export function buildThreadTimelineRows(input: {
     const rows: ThreadTimelineRow[] = [];
     const timing = displayedTurnTiming(turn);
     const timingTarget = sections.finalItems.findLast((item) => item.type === "agentMessage");
-    appendItemRows(rows, input.threadId, turn.id, "user", sections.userItems, sections);
-
-    // Only process artifacts collapse into "intermediate steps"; actionable items (approvals,
-    // requests, notifications) stay visible even while the group is closed.
-    const collapsedItems = sections.intermediateItems.filter(collapsibleIntermediateItem);
-    const inlineItems = sections.intermediateItems.filter(
-      (item) => !collapsibleIntermediateItem(item),
-    );
-
-    // Completed-turn summary ("done · N files · M commands · Xs") rides on the intermediate
-    // header row when one exists, matching the single-line ChatGPT "thought" row. Turns without
-    // a collapsible group keep the standalone summary row below.
-    const fileItems: { itemId: string | null; path: string }[] = [];
-    let commandCount = 0;
-    for (const item of turn.items ?? []) {
-      if (item?.type === "commandExecution") commandCount += 1;
-      if (item?.type === "fileChange") {
-        const changes = Array.isArray(item.changes) ? item.changes : [];
-        for (const change of changes) {
-          const record =
-            typeof change === "object" && change !== null
-              ? (change as Record<string, unknown>)
-              : {};
-          const path = record.path ?? record.filePath ?? record.pathAfter ?? record.pathBefore;
-          if (typeof path === "string" && path !== "") {
-            fileItems.push({ itemId: item.id == null ? null : String(item.id), path });
-          }
-        }
-      }
-    }
-    const uniqueFiles = [...new Map(fileItems.map((f) => [f.path, f])).values()];
-    const summary =
-      turn.status === "completed" &&
-      (uniqueFiles.length > 0 || commandCount > 0 || timing.durationMs !== null)
-        ? { fileItems: uniqueFiles, commandCount, durationMs: timing.durationMs }
-        : null;
-
-    const hasIntermediateHeader = collapsedItems.length > 0 || turn.itemsView !== "full";
-    if (hasIntermediateHeader) {
-      // The latest-step preview only matters while the group is collapsed; when open it would
-      // also duplicate the item's own title in the header's accessible name.
-      const activeItem =
-        sections.turnIsActive && !intermediateOpen ? collapsedItems.at(-1) : undefined;
-      rows.push({
-        key: `${input.threadId}:turn-${turn.id}:intermediate-header`,
-        type: "intermediateHeader",
-        turnId: turn.id,
-        count: collapsedItems.length,
-        open: intermediateOpen,
-        loading: intermediateLoading,
-        activeLabel: activeItem === undefined ? null : intermediateItemSummary(activeItem),
-        summary,
-      });
-      if (intermediateOpen) {
-        appendItemRows(
-          rows,
-          input.threadId,
-          turn.id,
-          "intermediate",
-          sections.intermediateItems,
-          sections,
-        );
-      } else {
-        appendItemRows(rows, input.threadId, turn.id, "intermediate", inlineItems, sections);
-      }
-    } else {
-      appendItemRows(rows, input.threadId, turn.id, "intermediate", inlineItems, sections);
-    }
-
-    appendItemRows(
+    appendTurnItemsInOrder({
       rows,
-      input.threadId,
-      turn.id,
-      "final",
-      sections.finalItems,
+      threadId: input.threadId,
+      turn,
       sections,
+      intermediateOpen,
+      intermediateLoading,
       timingTarget,
       timing,
-      input.agentActionsAvailable,
-      turn.responseUsage,
-    );
-    if (!hasIntermediateHeader && summary !== null) {
-      rows.push({
-        key: `${input.threadId}:turn-${turn.id}:summary`,
-        type: "turnSummary",
-        turnId: turn.id,
-        fileItems: summary.fileItems,
-        commandCount: summary.commandCount,
-        durationMs: summary.durationMs,
-      });
-    }
+      agentActionsAvailable: input.agentActionsAvailable,
+    });
     // Completed turns normally render timing beside the final answer's copy action. Keep a
     // standalone row only for interrupted/error turns that never produced an Agent answer.
     if (
@@ -187,6 +106,123 @@ export function buildThreadTimelineRows(input: {
     }
     return rows;
   });
+}
+
+function appendTurnItemsInOrder(input: {
+  rows: ThreadTimelineRow[];
+  threadId: string | null;
+  turn: ThreadTimelineTurn;
+  sections: ThreadTurnSections;
+  intermediateOpen: boolean;
+  intermediateLoading: boolean;
+  timingTarget: ThreadTimelineItem | undefined;
+  timing: DisplayedTurnTiming;
+  agentActionsAvailable: boolean;
+}) {
+  const { rows, threadId, turn, sections } = input;
+  const intermediateItems = new Set(sections.intermediateItems);
+  const finalItems = new Set(sections.finalItems);
+  // Only process artifacts collapse into "intermediate steps"; actionable items (approvals,
+  // requests, notifications) stay visible even while the group is closed.
+  const collapsedItems = sections.intermediateItems.filter(collapsibleIntermediateItem);
+  const collapsedItemSet = new Set(collapsedItems);
+  const summary = buildTurnSummary(turn, input.timing);
+  // The latest-step preview only matters while the group is collapsed; when open it would also
+  // duplicate the item's own title in the header's accessible name.
+  const activeItem =
+    sections.turnIsActive && !input.intermediateOpen ? collapsedItems.at(-1) : undefined;
+  const activeLabel = activeItem === undefined ? null : intermediateItemSummary(activeItem);
+  let intermediateHeaderAdded = false;
+
+  function pushIntermediateHeader() {
+    rows.push({
+      key: `${threadId}:turn-${turn.id}:intermediate-header`,
+      type: "intermediateHeader",
+      turnId: turn.id,
+      count: collapsedItems.length,
+      open: input.intermediateOpen,
+      loading: input.intermediateLoading,
+      activeLabel,
+      summary,
+    });
+    intermediateHeaderAdded = true;
+  }
+
+  // The shared history reducer owns protocol race normalization. Rendering must preserve that
+  // canonical order verbatim; a second presentation sort would make live events, cached history,
+  // and other consumers disagree about the same Turn.
+  sections.items.forEach((item) => {
+    const isFinal = finalItems.has(item);
+    const isIntermediate = intermediateItems.has(item) && !isFinal;
+    const isCollapsible = isIntermediate && collapsedItemSet.has(item);
+    const needsUnloadedIntermediateHeader = isFinal && turn.itemsView !== "full";
+    if (!intermediateHeaderAdded && (isCollapsible || needsUnloadedIntermediateHeader)) {
+      pushIntermediateHeader();
+    }
+    if (isCollapsible && !input.intermediateOpen) return;
+
+    const section = isIntermediate ? "intermediate" : isFinal ? "final" : "user";
+    appendItemRows(
+      rows,
+      threadId,
+      turn.id,
+      section,
+      [item],
+      sections,
+      item === input.timingTarget ? item : undefined,
+      item === input.timingTarget ? input.timing : null,
+      item === input.timingTarget && input.agentActionsAvailable,
+      item === input.timingTarget ? turn.responseUsage : undefined,
+    );
+  });
+
+  // An active summary can temporarily contain only its lead message. In that case the lazy-load
+  // control still belongs at this turn's tail; once a final answer arrives, the branch above moves
+  // it before that answer without changing the canonical app-server item order.
+  if (!intermediateHeaderAdded && turn.itemsView !== "full") {
+    pushIntermediateHeader();
+  }
+
+  // Completed-turn summary ("done · N files · M commands · Xs") rides on the intermediate header
+  // row when one exists, matching the single-line ChatGPT "thought" row. Turns without a
+  // collapsible group get a standalone summary row instead.
+  if (!intermediateHeaderAdded && summary !== null) {
+    rows.push({
+      key: `${threadId}:turn-${turn.id}:summary`,
+      type: "turnSummary",
+      turnId: turn.id,
+      fileItems: summary.fileItems,
+      commandCount: summary.commandCount,
+      durationMs: summary.durationMs,
+    });
+  }
+}
+
+function buildTurnSummary(turn: ThreadTimelineTurn, timing: DisplayedTurnTiming) {
+  const fileItems: { itemId: string | null; path: string }[] = [];
+  let commandCount = 0;
+  for (const item of turn.items ?? []) {
+    if (item?.type === "commandExecution") commandCount += 1;
+    if (item?.type === "fileChange") {
+      const changes = Array.isArray(item.changes) ? item.changes : [];
+      for (const change of changes) {
+        const record =
+          typeof change === "object" && change !== null ? (change as Record<string, unknown>) : {};
+        const path = record.path ?? record.filePath ?? record.pathAfter ?? record.pathBefore;
+        if (typeof path === "string" && path !== "") {
+          fileItems.push({ itemId: item.id == null ? null : String(item.id), path });
+        }
+      }
+    }
+  }
+  const uniqueFiles = [...new Map(fileItems.map((f) => [f.path, f])).values()];
+  if (
+    turn.status !== "completed" ||
+    (uniqueFiles.length === 0 && commandCount === 0 && timing.durationMs === null)
+  ) {
+    return null;
+  }
+  return { fileItems: uniqueFiles, commandCount, durationMs: timing.durationMs };
 }
 
 export function reuseUnchangedTimelineRows(
@@ -228,7 +264,6 @@ function appendItemRows(
       turnId,
       section,
       item,
-      userMessageVariant: userMessageVariant(item, sections),
       turnTiming: item === timingTarget ? timing : null,
       responseUsage: item === timingTarget ? responseUsage : undefined,
       agentActionsAvailable: item === timingTarget && agentActionsAvailable,
@@ -270,7 +305,6 @@ function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
       left.item === right.item &&
       left.turnId === right.turnId &&
       left.section === right.section &&
-      left.userMessageVariant === right.userMessageVariant &&
       left.agentActionsAvailable === right.agentActionsAvailable &&
       sameResponseUsage(left.responseUsage, right.responseUsage) &&
       sameTurnTiming(left.turnTiming, right.turnTiming)

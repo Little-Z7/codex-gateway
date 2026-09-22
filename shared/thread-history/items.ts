@@ -68,11 +68,26 @@ export function mergeItemIntoLatestTurn(
       turn.items[index] = mergeThreadItem(existingItem, item);
     }
   } else {
-    turn.items.push(item);
+    insertCanonicalTurnItem(turn.items, item);
   }
   turns[turnIndex] = turn;
   nextHistory.thread.turns = [...turns];
   return nextHistory;
+}
+
+function insertCanonicalTurnItem(items: ThreadHistoryItem[], item: ThreadHistoryItem) {
+  if (item.type !== "userMessage" || items.some((candidate) => candidate.type === "userMessage")) {
+    items.push(item);
+    return;
+  }
+
+  // App-server lifecycle notifications can reach another browser before the Turn's lead
+  // userMessage. Normalize that one transport race at the shared history boundary so snapshots,
+  // cached views, and every renderer observe the same canonical order. Later userMessage items are
+  // steer input and remain at their received position; moving every user message to the front would
+  // destroy the protocol's within-Turn chronology.
+  const firstNonGoalIndex = items.findIndex((candidate) => candidate.type !== "threadGoal");
+  items.splice(firstNonGoalIndex < 0 ? items.length : firstNonGoalIndex, 0, item);
 }
 
 function statusForNewTurn(item: ThreadHistoryItem) {
