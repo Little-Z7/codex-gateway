@@ -1,6 +1,7 @@
 import type { ThreadResponseUsage, ThreadTimelineItem, ThreadTimelineTurn } from "~~/shared/types";
 import type { DisplayedTurnTiming } from "@/utils/turn-timing";
 import { itemKey, type ThreadTurnSections } from "./thread-turn-sections";
+import { collapsibleIntermediateItem, intermediateItemSummary } from "@/utils/intermediate-summary";
 
 export type { ThreadTimelineTurn } from "~~/shared/types";
 
@@ -22,6 +23,12 @@ export type ThreadTimelineRow =
       count: number;
       open: boolean;
       loading: boolean;
+      activeLabel: string | null;
+      summary: {
+        fileItems: { itemId: string | null; path: string }[];
+        commandCount: number;
+        durationMs: number | null;
+      } | null;
     }
   | {
       key: string;
@@ -42,6 +49,14 @@ export type ThreadTimelineRow =
       durationMs: number | null;
       active: boolean;
       responseUsage: ThreadResponseUsage[] | undefined;
+    }
+  | {
+      key: string;
+      type: "turnSummary";
+      turnId: string;
+      fileItems: { itemId: string | null; path: string }[];
+      commandCount: number;
+      durationMs: number | null;
     };
 
 export interface ThreadTimelineTurnState {
@@ -107,7 +122,31 @@ function appendTurnItemsInOrder(input: {
   const { rows, threadId, turn, sections } = input;
   const intermediateItems = new Set(sections.intermediateItems);
   const finalItems = new Set(sections.finalItems);
+  // Only process artifacts collapse into "intermediate steps"; actionable items (approvals,
+  // requests, notifications) stay visible even while the group is closed.
+  const collapsedItems = sections.intermediateItems.filter(collapsibleIntermediateItem);
+  const collapsedItemSet = new Set(collapsedItems);
+  const summary = buildTurnSummary(turn, input.timing);
+  // The latest-step preview only matters while the group is collapsed; when open it would also
+  // duplicate the item's own title in the header's accessible name.
+  const activeItem =
+    sections.turnIsActive && !input.intermediateOpen ? collapsedItems.at(-1) : undefined;
+  const activeLabel = activeItem === undefined ? null : intermediateItemSummary(activeItem);
   let intermediateHeaderAdded = false;
+
+  function pushIntermediateHeader() {
+    rows.push({
+      key: `${threadId}:turn-${turn.id}:intermediate-header`,
+      type: "intermediateHeader",
+      turnId: turn.id,
+      count: collapsedItems.length,
+      open: input.intermediateOpen,
+      loading: input.intermediateLoading,
+      activeLabel,
+      summary,
+    });
+    intermediateHeaderAdded = true;
+  }
 
   // The shared history reducer owns protocol race normalization. Rendering must preserve that
   // canonical order verbatim; a second presentation sort would make live events, cached history,
@@ -115,19 +154,12 @@ function appendTurnItemsInOrder(input: {
   sections.items.forEach((item) => {
     const isFinal = finalItems.has(item);
     const isIntermediate = intermediateItems.has(item) && !isFinal;
+    const isCollapsible = isIntermediate && collapsedItemSet.has(item);
     const needsUnloadedIntermediateHeader = isFinal && turn.itemsView !== "full";
-    if (!intermediateHeaderAdded && (isIntermediate || needsUnloadedIntermediateHeader)) {
-      rows.push({
-        key: `${threadId}:turn-${turn.id}:intermediate-header`,
-        type: "intermediateHeader",
-        turnId: turn.id,
-        count: sections.intermediateItems.length,
-        open: input.intermediateOpen,
-        loading: input.intermediateLoading,
-      });
-      intermediateHeaderAdded = true;
+    if (!intermediateHeaderAdded && (isCollapsible || needsUnloadedIntermediateHeader)) {
+      pushIntermediateHeader();
     }
-    if (isIntermediate && !input.intermediateOpen) return;
+    if (isCollapsible && !input.intermediateOpen) return;
 
     const section = isIntermediate ? "intermediate" : isFinal ? "final" : "user";
     appendItemRows(
@@ -148,15 +180,49 @@ function appendTurnItemsInOrder(input: {
   // control still belongs at this turn's tail; once a final answer arrives, the branch above moves
   // it before that answer without changing the canonical app-server item order.
   if (!intermediateHeaderAdded && turn.itemsView !== "full") {
+    pushIntermediateHeader();
+  }
+
+  // Completed-turn summary ("done · N files · M commands · Xs") rides on the intermediate header
+  // row when one exists, matching the single-line ChatGPT "thought" row. Turns without a
+  // collapsible group get a standalone summary row instead.
+  if (!intermediateHeaderAdded && summary !== null) {
     rows.push({
-      key: `${threadId}:turn-${turn.id}:intermediate-header`,
-      type: "intermediateHeader",
+      key: `${threadId}:turn-${turn.id}:summary`,
+      type: "turnSummary",
       turnId: turn.id,
-      count: sections.intermediateItems.length,
-      open: input.intermediateOpen,
-      loading: input.intermediateLoading,
+      fileItems: summary.fileItems,
+      commandCount: summary.commandCount,
+      durationMs: summary.durationMs,
     });
   }
+}
+
+function buildTurnSummary(turn: ThreadTimelineTurn, timing: DisplayedTurnTiming) {
+  const fileItems: { itemId: string | null; path: string }[] = [];
+  let commandCount = 0;
+  for (const item of turn.items ?? []) {
+    if (item?.type === "commandExecution") commandCount += 1;
+    if (item?.type === "fileChange") {
+      const changes = Array.isArray(item.changes) ? item.changes : [];
+      for (const change of changes) {
+        const record =
+          typeof change === "object" && change !== null ? (change as Record<string, unknown>) : {};
+        const path = record.path ?? record.filePath ?? record.pathAfter ?? record.pathBefore;
+        if (typeof path === "string" && path !== "") {
+          fileItems.push({ itemId: item.id == null ? null : String(item.id), path });
+        }
+      }
+    }
+  }
+  const uniqueFiles = [...new Map(fileItems.map((f) => [f.path, f])).values()];
+  if (
+    turn.status !== "completed" ||
+    (uniqueFiles.length === 0 && commandCount === 0 && timing.durationMs === null)
+  ) {
+    return null;
+  }
+  return { fileItems: uniqueFiles, commandCount, durationMs: timing.durationMs };
 }
 
 export function reuseUnchangedTimelineRows(
@@ -175,6 +241,7 @@ export function estimateThreadTimelineRow(row: ThreadTimelineRow | undefined) {
   if (row === undefined) return 96;
   if (row.type === "intermediateHeader") return 48;
   if (row.type === "turnDuration") return 28;
+  if (row.type === "turnSummary") return 32;
   return estimatedItemHeights[row.item.type] ?? 96;
 }
 
@@ -224,7 +291,9 @@ function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
       left.count === right.count &&
       left.open === right.open &&
       left.loading === right.loading &&
-      left.turnId === right.turnId
+      left.turnId === right.turnId &&
+      left.activeLabel === right.activeLabel &&
+      sameIntermediateSummary(left.summary, right.summary)
     );
   }
   if (left.type === "item" && right.type === "item") {
@@ -251,7 +320,45 @@ function sameTimelineRow(left: ThreadTimelineRow, right: ThreadTimelineRow) {
       sameResponseUsage(left.responseUsage, right.responseUsage)
     );
   }
+  if (left.type === "turnSummary" && right.type === "turnSummary") {
+    return (
+      left.turnId === right.turnId &&
+      left.commandCount === right.commandCount &&
+      left.durationMs === right.durationMs &&
+      left.fileItems.length === right.fileItems.length &&
+      left.fileItems.every(
+        (file, index) =>
+          file.path === right.fileItems[index]?.path &&
+          file.itemId === right.fileItems[index]?.itemId,
+      )
+    );
+  }
   return false;
+}
+
+function sameIntermediateSummary(
+  left: {
+    fileItems: { itemId: string | null; path: string }[];
+    commandCount: number;
+    durationMs: number | null;
+  } | null,
+  right: {
+    fileItems: { itemId: string | null; path: string }[];
+    commandCount: number;
+    durationMs: number | null;
+  } | null,
+) {
+  if (left === null || right === null) return left === right;
+  return (
+    left.commandCount === right.commandCount &&
+    left.durationMs === right.durationMs &&
+    left.fileItems.length === right.fileItems.length &&
+    left.fileItems.every(
+      (file, index) =>
+        file.path === right.fileItems[index]?.path &&
+        file.itemId === right.fileItems[index]?.itemId,
+    )
+  );
 }
 
 function sameResponseUsage(

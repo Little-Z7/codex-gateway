@@ -62,8 +62,15 @@ test("new threads display and inherit the remote Codex defaults", async ({
   await page.getByTestId("model-selector-close").click();
 
   const offset = await realtimeClientMessageCount(page);
-  await page.getByPlaceholder("输入后续修改要求").fill("/");
+  await page
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
+    .fill("/");
   await page.getByTestId("slash-command-new").click();
+  // The /new command only opens a front-end draft — thread.start rides on the first turn.
+  await page
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
+    .fill("用一句话回复：ok");
+  await page.getByTestId("send-turn-button").click();
   const threadStart = z
     .object({
       hostId: z.number(),
@@ -112,7 +119,9 @@ test("references real project files as structured turn context", async ({
     `mkdir -p -- ${shellQuote(`${project.remotePath}/${directory}`)} && printf '%s\\n' ${shellQuote(marker)} > ${shellQuote(`${project.remotePath}/${path}`)} && printf '%s\\n' root > ${shellQuote(`${project.remotePath}/${rootFileName}`)}`,
   );
 
-  const composer = page.getByPlaceholder("输入后续修改要求");
+  const composer = page.getByPlaceholder(
+    /询问任何问题|继续对话|Ask anything|Continue the conversation/,
+  );
   await composer.fill(`@reference-${suffix}`);
   const menu = page.getByTestId("file-mention-menu");
   await expect(menu).toBeVisible();
@@ -232,7 +241,9 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
   await installRealtimeSocketProbe(page);
 
   await openApp(page);
-  await expect(page.getByPlaceholder("输入后续修改要求")).toBeHidden();
+  await expect(
+    page.getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/),
+  ).toBeHidden();
   await expect.poll(() => activeRealtimeSocketCount(page), { timeout: 10_000 }).toBe(1);
 
   const hostName = `docker-codex-${Date.now()}`;
@@ -285,9 +296,7 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
   const project = await remoteWorkspace.addProject(host.id);
 
   await expect(page.getByTestId("project-thread-list")).toBeVisible();
-  await expect(
-    page.getByTestId("project-thread-list").getByRole("heading", { name: project.name }),
-  ).toBeVisible();
+  await expect(page.getByTestId("project-thread-list")).toContainText(project.name);
   await page.getByTestId("open-terminal-button").click();
   await expect(page.getByTestId("terminal-panel")).toBeVisible({ timeout: 30_000 });
   await runTerminalCommand(page, "pwd");
@@ -309,16 +318,31 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
     .click();
   await expect(page.getByRole("tab", { name: project.name })).toBeHidden();
 
-  await page.getByPlaceholder("输入后续修改要求").fill("/");
+  await page
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
+    .fill("/");
   await expect(page.getByTestId("slash-command-menu")).toBeVisible();
   await expect(page.getByTestId("slash-command-new")).toBeVisible();
   await expect(page.getByTestId("slash-command-plan")).toBeHidden();
   await page.getByTestId("slash-command-new").click();
+  // /new opens a front-end draft; the app-server thread only exists after the first send.
+  await page
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
+    .fill("用一句话回复：ok");
+  await page.getByTestId("send-turn-button").click();
   const slashNewThreadId = await waitForSelectedThreadId(page);
   await expect(page.getByTestId(`thread-button-${slashNewThreadId}`)).toBeVisible({
     timeout: 30_000,
   });
-  await page.getByPlaceholder("输入后续修改要求").fill("/");
+  // Wait for the first turn to finish so the plan-mode send is a fresh turn.start.
+  await expect(page.getByTestId("send-turn-button")).toHaveAttribute(
+    "aria-label",
+    /已完成|Done|失败|Failed|已中断|Interrupted/,
+    { timeout: 180_000 },
+  );
+  await page
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
+    .fill("/");
   await expect(page.getByTestId("slash-command-menu")).toBeVisible();
   await expect(page.getByTestId("slash-command-plan")).toBeVisible();
   const planSettingsResponsePromise = page.waitForResponse(
@@ -346,7 +370,9 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
   });
   await expect(page.getByTestId("composer-mode-strip").getByText("计划模式").first()).toBeVisible();
   const planTurnOffset = await realtimeClientMessageCount(page);
-  await page.getByPlaceholder("输入后续修改要求").fill("请为当前项目制定一个简短计划，不要执行。");
+  await page
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
+    .fill("请为当前项目制定一个简短计划，不要执行。");
   await page.getByTestId("send-turn-button").click();
   const planTurnStart = z
     .object({
@@ -367,18 +393,27 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
   const firstDraft = `E2E 草稿一 ${Date.now()}`;
   const secondDraft = `E2E 草稿二 ${Date.now()}`;
   await selectSidebarThread(page, threadId);
-  await page.getByPlaceholder("输入后续修改要求").fill(firstDraft);
+  await page
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
+    .fill(firstDraft);
   await selectSidebarThread(page, secondThreadId);
-  await expect(page.getByPlaceholder("输入后续修改要求")).toHaveAttribute("data-value", "");
-  await page.getByPlaceholder("输入后续修改要求").fill(secondDraft);
+  await expect(
+    page.getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/),
+  ).toHaveAttribute("data-value", "");
+  await page
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
+    .fill(secondDraft);
   await selectSidebarThread(page, threadId);
-  await expect(page.getByPlaceholder("输入后续修改要求")).toHaveAttribute("data-value", firstDraft);
+  await expect(
+    page.getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/),
+  ).toHaveAttribute("data-value", firstDraft);
   await selectSidebarThread(page, secondThreadId);
-  await expect(page.getByPlaceholder("输入后续修改要求")).toHaveAttribute(
-    "data-value",
-    secondDraft,
-  );
-  await page.getByPlaceholder("输入后续修改要求").fill("");
+  await expect(
+    page.getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/),
+  ).toHaveAttribute("data-value", secondDraft);
+  await page
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
+    .fill("");
 
   await selectSidebarThread(page, threadId);
   await selectSidebarThread(page, secondThreadId);
@@ -387,7 +422,7 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
 
   const marker = `E2E 置顶恢复 ${Date.now()}`;
   await sendTextTurn(page, marker);
-  const recentThread = page.getByTestId(`recent-thread-button-${threadId}`);
+  const recentThread = page.getByTestId(`thread-button-${threadId}`);
   await expect(recentThread).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("chat-scroll-area").getByText(marker)).toBeVisible({
     timeout: AGENT_OUTPUT_TIMEOUT_MS,
@@ -417,14 +452,18 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
   );
 
   await reloadApp(page);
-  await expect(page.getByTestId(`recent-thread-button-${threadId}`)).toBeHidden();
+  // The conversation list is backed by the server thread index, so the thread remains
+  // discoverable (and still selected) after a reload — unlike the old page-session activity list.
+  await expect(page.getByTestId(`thread-button-${threadId}`)).toBeVisible();
   await expect(page.getByTestId(`thread-button-${threadId}`)).toHaveAttribute(
     "data-selected",
     "true",
   );
   await expect(page.getByTestId("send-turn-button")).toHaveAttribute("aria-label", "已完成");
   const afterReloadMarker = `E2E 刷新后新轮 ${Date.now()}`;
-  await page.getByPlaceholder("输入后续修改要求").fill(`用一句话回复：${afterReloadMarker}`);
+  await page
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
+    .fill(`用一句话回复：${afterReloadMarker}`);
   await page.getByTestId("send-turn-button").click();
   await expect.poll(() => chatViewportBottomDistance(page)).toBeLessThanOrEqual(2);
   await expect(page.getByTestId("chat-scroll-area").getByText(afterReloadMarker)).toBeVisible({
@@ -439,7 +478,10 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
   await expect(page.getByTestId(`pinned-thread-button-${threadId}`)).toBeVisible();
 
   await page.getByTestId(`pinned-thread-button-${threadId}`).click();
-  await expect(page.getByTestId(`project-button-${project.id}`)).toBeHidden();
+  await expect(page.getByTestId(`pinned-thread-button-${threadId}`)).toHaveAttribute(
+    "data-selected",
+    "true",
+  );
   await expect
     .poll(async () =>
       page.getByTestId("chat-scroll-area").evaluate((root) => {
@@ -456,7 +498,6 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
     "data-selected",
     "true",
   );
-  await expect(page.getByTestId(`project-button-${project.id}`)).toBeHidden();
   await expect
     .poll(async () =>
       page.getByTestId("chat-scroll-area").evaluate((root) => {
@@ -467,7 +508,6 @@ test("connects to a real SSH Codex host and lists a project thread created by ap
     )
     .toBe(true);
 
-  await page.getByTestId(`host-button-${host.id}`).click();
   await expect(page.getByTestId(`project-button-${project.id}`)).toBeVisible();
   const updatedProjectPath = `/home/${remote.username}/nested-workdir-${Date.now()}`;
   await execRemoteSsh(remote, `mkdir -p '${updatedProjectPath}'`);
@@ -546,7 +586,7 @@ test("groups projects whose remote directories were deleted", async ({ page, rem
     .filter({ has: page.getByRole("menuitem", { name: /编辑项目/ }) });
   await expect(menu.getByRole("menuitem", { name: /编辑项目/ })).toBeVisible();
   await expect(menu.getByRole("menuitem", { name: /删除项目/ })).toBeVisible();
-  await expect(menu.getByRole("menuitem", { name: /新建/ })).toBeHidden();
+  await expect(menu.getByRole("menuitem", { name: /新建|新对话|New/ })).toBeHidden();
   await menu.getByRole("menuitem", { name: /编辑项目/ }).click();
 
   const updateResponse = page.waitForResponse(
@@ -572,8 +612,7 @@ async function verifyRemoteDirectoryBrowser(
   const directoryName = `gateway-directory-${Date.now()}`;
   await execRemoteSsh(remote, `mkdir -p "$HOME/media/${directoryName}"`);
 
-  await page.getByTestId(`host-button-${hostId}`).click({ button: "right" });
-  await page.getByRole("menuitem", { name: /添加项目|Add project/ }).click();
+  await page.getByTestId(`sidebar-new-project-${hostId}`).click();
   await page.getByTestId("project-browse-path-input").fill("media/");
   await page.getByRole("button", { name: /浏览|Browse/ }).click();
   await expect(page.getByTestId("project-browse-path-input")).toHaveValue(

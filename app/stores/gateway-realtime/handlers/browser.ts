@@ -11,6 +11,12 @@ export function createBrowserRealtimeHandlers(ctx: RealtimeServerMessageHandlerC
       gatewayDomainEvents.emit("realtime-browser-closed", { sessionId: message.sessionId });
       ctx.resolveRequest(message);
     },
+    "browser.sessionClosed": (message) => {
+      gatewayDomainEvents.emit("realtime-browser-session-closed", {
+        sessionId: message.sessionId,
+        reason: message.reason,
+      });
+    },
     "browser.error": (message) => {
       if (message.requestId !== undefined && message.requestId !== "") {
         ctx.rejectRequest(message.requestId, new Error(message.message));

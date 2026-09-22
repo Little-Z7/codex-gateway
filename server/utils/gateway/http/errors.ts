@@ -1,4 +1,10 @@
-import { defineEventHandler, getRequestURL, setResponseStatus, type H3Event } from "h3";
+import {
+  createError,
+  defineEventHandler,
+  getRequestURL,
+  setResponseStatus,
+  type H3Event,
+} from "h3";
 import type { GatewayConfig, HostRecord } from "~~/shared/types";
 import { normalizeNotificationSettings } from "~~/shared/config";
 import {
@@ -16,6 +22,19 @@ import {
 } from "../state/memory";
 import { recordFromUnknown } from "~~/shared/utils/records";
 import { firstNonEmptyString } from "~~/shared/utils/strings";
+
+/** createError with a stable machine code; the handler forwards it to clients as `code`. */
+export function gatewayApiError(
+  code: string,
+  statusCode: number,
+  message: string,
+  data?: Record<string, unknown>,
+) {
+  const error = createError({ statusCode, message, data: { code, ...data } });
+  // h3 keeps `data` nested; mirror `code` at top level for publicErrorCode.
+  Object.assign(error, { code });
+  return error;
+}
 
 export class CodexRpcError extends Error {
   constructor(
@@ -66,10 +85,13 @@ export function defineGatewayEventHandler<T>(handler: (event: H3Event) => Promis
       );
       const statusCode = statusCodeFromError(error);
       setResponseStatus(event, statusCode);
+      const data = recordFromUnknown(recordFromUnknown(error)?.data);
       return {
         error: true,
         statusCode,
         code: publicErrorCode(error),
+        retryAfterSeconds:
+          typeof data?.retryAfterSeconds === "number" ? data.retryAfterSeconds : undefined,
         message: publicErrorMessage(error),
         details: publicErrorDetails(event, context?.scope ?? "request", context?.details ?? {}),
       };
@@ -103,6 +125,7 @@ export function runtimeConfigFromMemory(): GatewayConfig {
     hosts: state.hosts.map((host) => ({
       ...host,
       hasPassword: Boolean(host.password),
+      hasPrivateKey: Boolean(host.privateKey),
     })),
     projects: projectStore.listConfigured(),
     pinnedThreads: state.pinnedThreads,
@@ -180,7 +203,8 @@ function statusCodeFromError(error: unknown) {
 }
 
 function publicErrorCode(error: unknown) {
-  const code = recordFromUnknown(error)?.code;
+  const code =
+    recordFromUnknown(error)?.code ?? recordFromUnknown(recordFromUnknown(error)?.data)?.code;
   if (typeof code === "string") {
     return code;
   }

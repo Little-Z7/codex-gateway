@@ -64,7 +64,9 @@ export function createRealtimeConnection(options: RealtimeConnectionOptions) {
     const generation = state.generation + 1;
     state.generation = generation;
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const socket = new WebSocket(`${protocol}//${window.location.host}/api/realtime`);
+    const socket = new WebSocket(
+      `${protocol}//${window.location.host}${gatewayPath("api/realtime")}`,
+    );
     socket.binaryType = "arraybuffer";
     state.socket = socket;
 

@@ -286,6 +286,20 @@ export function createThreadOpenActions() {
       return true;
     },
 
+    // ChatGPT-style draft: point selection at a project and clear the view, but do not call
+    // thread/start. The composer sends thread/start together with the first turn instead.
+    startDraftThread(context: { hostId: number; projectId: number | null }) {
+      const navigation = useGatewayNavigationStore();
+      cacheSelectedThreadView();
+      beginViewTransition();
+      navigation.selectedHostId = context.hostId;
+      navigation.selectedProjectId = context.projectId;
+      navigation.selectedThreadId = null;
+      navigation.newThreadDraft = true;
+      clearCurrentThreadView();
+      syncSelectedRoute();
+    },
+
     async startThread(
       options: ComposerTurnOptions = {},
       context?: { hostId?: number; projectId?: number | null },

@@ -74,8 +74,12 @@ function hostStatusClass(hostId: number) {
                   {{ host.sshHost }}
                 </span>
               </span>
+              <Badge v-if="host.managed" variant="secondary" class="shrink-0">
+                {{ t("app.managedHost") }}
+              </Badge>
             </Button>
             <Button
+              v-if="!host.managed"
               variant="ghost"
               size="sm"
               class="size-8 p-0 text-destructive hover:text-destructive/80"

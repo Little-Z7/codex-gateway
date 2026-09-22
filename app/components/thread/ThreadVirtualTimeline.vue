@@ -124,6 +124,16 @@ async function handleIntermediateToggle(turnId: string, open: boolean) {
   setIntermediateOpen(turnId, true);
 }
 
+async function handleJumpToItem(turnId: string, itemId: string) {
+  // The diff row lives inside the collapsed group; open it first so the target exists in the DOM.
+  await handleIntermediateToggle(turnId, true);
+  await nextTick();
+  const viewport = document.querySelector('[data-testid="chat-scroll-area"]');
+  viewport
+    ?.querySelector(`[data-row-key$=":intermediate:${CSS.escape(itemId)}"]`)
+    ?.scrollIntoView({ block: "center" });
+}
+
 function estimateRowSize(row: unknown) {
   return estimateThreadTimelineRow(row as ThreadTimelineRow | undefined);
 }
@@ -154,6 +164,7 @@ watch(
     :rows="rows"
     :estimate-size="estimateRowSize"
     :scroll-to-latest-token="scrollToLatestToken"
+    :older-turns-cursor="olderTurnsCursor"
     @reach-start="handleReachStart"
     @user-detached-change="handleUserDetachedChange"
   >
@@ -177,6 +188,7 @@ watch(
         :host-id="hostId"
         :thread-id="threadId"
         @intermediate-toggle="handleIntermediateToggle"
+        @jump-to-item="handleJumpToItem"
       />
     </template>
   </VirtualTimelineViewport>

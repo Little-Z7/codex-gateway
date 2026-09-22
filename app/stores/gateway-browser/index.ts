@@ -13,6 +13,7 @@ export interface BrowserPanelState extends BrowserPreviewTarget {
 export const useGatewayBrowserStore = defineStore("gateway-browser", () => {
   const panels = useAccountLocalStorage<Record<string, BrowserPanelState>>("browser-panels", {});
   const sessions = ref<Record<string, BrowserPreviewSessionSnapshot>>({});
+  const replacedSessions = ref<Record<string, true>>({});
   const frameWarnings = ref<Record<string, string>>({});
   const resourceFailures = ref<Record<string, BrowserPreviewResourceFailure[]>>({});
 
@@ -36,7 +37,10 @@ export const useGatewayBrowserStore = defineStore("gateway-browser", () => {
       (candidate) => candidate.panelId === session.panelId,
     );
     const next = { ...sessions.value };
-    if (previous !== undefined) delete next[previous.sessionId];
+    if (previous !== undefined) {
+      delete next[previous.sessionId];
+      clearSessionReplaced(previous.sessionId);
+    }
     next[session.sessionId] = session;
     sessions.value = next;
   }
@@ -47,6 +51,20 @@ export const useGatewayBrowserStore = defineStore("gateway-browser", () => {
     const { [sessionId]: _warning, ...warnings } = frameWarnings.value;
     frameWarnings.value = warnings;
     clearResourceFailures(sessionId);
+    clearSessionReplaced(sessionId);
+  }
+
+  // A replaced session stays in `sessions` so the panel can offer re-activation; only its live
+  // proxy binding moved to whichever panel exchanged a ticket most recently.
+  function markSessionReplaced(sessionId: string) {
+    if (sessions.value[sessionId] === undefined) return;
+    replacedSessions.value = { ...replacedSessions.value, [sessionId]: true };
+  }
+
+  function clearSessionReplaced(sessionId: string) {
+    if (replacedSessions.value[sessionId] === undefined) return;
+    const { [sessionId]: _replaced, ...remaining } = replacedSessions.value;
+    replacedSessions.value = remaining;
   }
 
   function setFrameWarning(sessionId: string, value: string) {
@@ -82,6 +100,7 @@ export const useGatewayBrowserStore = defineStore("gateway-browser", () => {
 
   function resetRuntime() {
     sessions.value = {};
+    replacedSessions.value = {};
     frameWarnings.value = {};
     resourceFailures.value = {};
   }
@@ -89,12 +108,15 @@ export const useGatewayBrowserStore = defineStore("gateway-browser", () => {
   return {
     panels: skipHydrate(panels),
     sessions,
+    replacedSessions,
     frameWarnings,
     resourceFailures,
     addPanel,
     removePanel,
     upsertSession,
     removeSession,
+    markSessionReplaced,
+    clearSessionReplaced,
     setFrameWarning,
     addResourceFailure,
     clearResourceFailures,

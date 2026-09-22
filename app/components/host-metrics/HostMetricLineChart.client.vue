@@ -12,8 +12,8 @@ const props = withDefaults(
   { valueSuffix: "", secondarySuffix: "", maximum: undefined },
 );
 const root = ref<HTMLElement | null>(null);
-const primary = useCssVar("--primary", root);
-const secondary = useCssVar("--primary-active", root);
+const primary = useCssVar("--chart-1", root);
+const secondary = useCssVar("--chart-4", root);
 const danger = useCssVar("--destructive", root);
 const inkMuted = useCssVar("--ink-muted", root);
 const hairline = useCssVar("--hairline", root);

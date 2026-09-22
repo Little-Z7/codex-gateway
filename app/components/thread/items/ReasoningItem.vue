@@ -18,9 +18,17 @@ const text = computed(() => threadItemText(props.item));
 const inProgress = computed(() => isItemInProgress(props.item));
 const startedAt = computed(() => itemStartedAtMs(props.item));
 const completedAt = computed(() => itemCompletedAtMs(props.item));
+// The duration is only honest when both lifecycle timestamps exist: reasoning items buffered by
+// the provider can arrive with startedAt ≈ completedAt, so sub-second results are hidden rather
+// than shown as a misleading "0.01s". While in progress the live elapsed time is real.
 const elapsedMs = computed(() => {
   if (startedAt.value === null) return null;
-  return (inProgress.value ? now.value : (completedAt.value ?? now.value)) - startedAt.value;
+  if (inProgress.value) {
+    return now.value - startedAt.value;
+  }
+  if (completedAt.value === null) return null;
+  const delta = completedAt.value - startedAt.value;
+  return delta >= 500 ? delta : null;
 });
 const timeLabel = computed(() =>
   elapsedMs.value === null ? null : formatDurationMs(elapsedMs.value),
@@ -33,7 +41,7 @@ watch(inProgress, (active) => (active ? resume() : pause()), { immediate: true }
   <Collapsible
     :default-open="true"
     v-slot="{ open }"
-    class="max-w-4xl text-[0.9375rem] leading-7 text-ink-muted"
+    class="max-w-4xl text-[0.875rem] leading-6 text-ink-muted"
   >
     <CollapsibleTrigger
       class="flex w-full items-center gap-2 rounded-md py-1 text-left text-xs hover:bg-canvas-soft"
@@ -44,7 +52,7 @@ watch(inProgress, (active) => (active ? resume() : pause()), { immediate: true }
         :aria-label="t('app.running')"
       />
       <BrainIcon v-else class="size-4 shrink-0" />
-      <span class="flex-1">{{ t("app.thinking") }}</span>
+      <span class="flex-1">{{ inProgress ? t("app.thinking") : t("app.thought") }}</span>
       <span
         v-if="timeLabel !== null"
         class="rounded-full bg-surface/80 px-2 py-0.5 font-mono text-[0.6875rem] text-ink-secondary"

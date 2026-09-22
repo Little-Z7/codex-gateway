@@ -1,6 +1,8 @@
 x-ssh-target: &ssh-target
   environment:
     CODEX_HOME: /home/codex/.codex
+    # Only set when the caller enables the custom model provider; never committed.
+    CODEX_GATEWAY_MODEL_PROVIDER_API_KEY: ${E2E_MODEL_PROVIDER_API_KEY:-}
   volumes:
     - ../..:/workspace/codex-gateway
 
@@ -49,23 +51,33 @@ services:
       target: mfa-runtime
       args:
         CURRENT_CODEX_CLI_VERSION: ${E2E_SUPPORTED_CODEX_VERSION}
+        # This stage's own `curl` (tests/e2e/docker/Dockerfile, current-codex-runtime) bakes a
+        # Codex release straight into the image at build time, so it needs the same outbound
+        # proxy as everything else when the sandbox has no direct internet route. `docker build`
+        # does not read the invoking shell's http_proxy/https_proxy -- compose has to pass it
+        # explicitly as a build arg, which is what this does.
+        http_proxy: ${E2E_OUTBOUND_PROXY:-}
+        https_proxy: ${E2E_OUTBOUND_PROXY:-}
+        no_proxy: localhost,127.0.0.1
         E2E_UID: ${E2E_UID:-12345}
         E2E_GID: ${E2E_GID:-12345}
     <<: *ssh-target
 
   build-runner:
     image: codex-gateway-e2e-runner
-    mem_limit: 2g
+    mem_limit: 4g
     build:
       context: ../..
       dockerfile: tests/e2e/runner.Dockerfile
     environment:
       # Keep enough cgroup headroom for Rolldown/Nitro native allocations while allowing the
-      # JavaScript heap to finish the production bundle. The container remains capped at 2 GiB.
-      NODE_OPTIONS: --max-old-space-size=1536
+      # JavaScript heap to finish the production bundle. The container is capped at 4 GiB.
+      NODE_OPTIONS: --max-old-space-size=3072
       CODEX_GATEWAY_DB_PATH: /workspace/codex-gateway/.data-e2e/codex-gateway.db
       E2E_GATEWAY_USERNAME: ${E2E_GATEWAY_USERNAME:-e2e}
       E2E_GATEWAY_PASSWORD: ${E2E_GATEWAY_PASSWORD:-codex-gateway-e2e-password}
+      E2E_GATEWAY_MEMBER_USERNAME: ${E2E_GATEWAY_MEMBER_USERNAME:-e2e-member}
+      E2E_GATEWAY_MEMBER_PASSWORD: ${E2E_GATEWAY_MEMBER_PASSWORD:-codex-gateway-e2e-member-password}
     volumes:
       - build-output:/e2e-output
       - e2e-data:/workspace/codex-gateway/.data-e2e
@@ -85,14 +97,38 @@ services:
       CODEX_GATEWAY_CONFIG_SECRET: e2e-config-secret
       CODEX_GATEWAY_DB_PATH: /workspace/codex-gateway/.data-e2e/codex-gateway.db
       NUXT_IGNORE_LOCK: "1"
-      # Preview origins enter through the nginx sidecar below. This mirrors production so remote
-      # /_nuxt/* assets cannot be intercepted as Gateway public assets before reaching the proxy.
-      BROWSER_PREVIEW_PUBLIC_PORT: "3200"
-      BROWSER_PREVIEW_DOMAIN: 127.0.0.1.nip.io
+      # Previews share the Gateway origin and are routed by cookie; BROWSER_PREVIEW_SCHEME only
+      # keeps the HttpOnly cookie non-Secure over plain HTTP.
       BROWSER_PREVIEW_SCHEME: http
+      CODEX_GATEWAY_PROVISIONING: docker
+      CODEX_GATEWAY_USER_IMAGE: codex-gateway-e2e-user:latest
+      CODEX_GATEWAY_DOCKER_NETWORK: ${E2E_COMPOSE_PROJECT_NAME:-codex-gateway-e2e}_default
+      CODEX_GATEWAY_DOCKER_SOCKET: /var/run/docker.sock
+      CODEX_GATEWAY_SHARED_AUTH_DIR: ${E2E_SHARED_AUTH_DIR:?E2E_SHARED_AUTH_DIR is required}
+      CODEX_GATEWAY_SHARED_AUTH_MOUNT: /srv/codex-auth
+      CODEX_GATEWAY_SHARED_DATA_DIR: ${E2E_SHARED_DATA_DIR:?E2E_SHARED_DATA_DIR is required}
+      CODEX_GATEWAY_USER_CONTAINER_PREFIX: codex-e2e-user-
+      CODEX_GATEWAY_SANDBOX_MODE: danger-full-access
+      # Outbound proxy for sandboxes with no direct internet route, using the real product config
+      # item (see deploy/gateway-entrypoint.sh and CLAUDE.md's "出站代理" section) instead of a
+      # test-only workaround. Empty by default -- behavior is unchanged. The extra no-proxy hosts
+      # are the E2E fixture containers themselves, reached over the compose network rather than
+      # through the sandbox's outbound proxy.
+      CODEX_GATEWAY_OUTBOUND_PROXY: ${E2E_OUTBOUND_PROXY:-}
+      CODEX_GATEWAY_OUTBOUND_NO_PROXY: ${E2E_OUTBOUND_PROXY:+ssh-target,ssh-target-legacy-node,ssh-target-npm-codex,ssh-target-mfa,bark-target}
+      # Custom model provider path (E2E_MODEL_PROVIDER_API_KEY set by run-in-containers.sh).
+      CODEX_GATEWAY_MODEL_PROVIDER: ${E2E_MODEL_PROVIDER:-openai}
+      CODEX_GATEWAY_MODEL_PROVIDER_ID: ${E2E_MODEL_PROVIDER_ID:-ollama-cloud}
+      CODEX_GATEWAY_MODEL_PROVIDER_BASE_URL: ${E2E_MODEL_PROVIDER_BASE_URL:-}
+      CODEX_GATEWAY_MODEL_PROVIDER_API_KEY: ${E2E_MODEL_PROVIDER_API_KEY:-}
+      CODEX_GATEWAY_MODEL: ${E2E_MODEL_PROVIDER_MODEL:-}
+      CODEX_GATEWAY_WEB_SEARCH: ${E2E_MODEL_PROVIDER_WEB_SEARCH:-}
     volumes:
       - build-output:/e2e-output:ro
       - e2e-data:/workspace/codex-gateway/.data-e2e
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${E2E_SHARED_AUTH_DIR:?E2E_SHARED_AUTH_DIR is required}:/srv/codex-auth:ro
+      - ../../deploy/user-container:/app/deploy/user-container:ro
     # Exercise the same V8 memory policy as production; the wider 2 GiB cgroup remains available
     # to Playwright's shared test topology and native browser/runtime allocations.
     command: ["node", "--expose-gc", "--max-old-space-size=512", "/e2e-output/server/index.mjs"]
@@ -108,28 +144,41 @@ services:
       timeout: 3s
       retries: 60
 
-  browser-preview-ingress:
-    image: nginx:1.29-alpine
-    network_mode: service:gateway-under-test
-    depends_on:
-      gateway-under-test:
-        condition: service_healthy
+  # Fresh-instance gateway with its own empty data volume — used by setup.spec.ts for first-run
+  # initialization coverage. No provider env needed; the test only exercises setup/login.
+  gateway-fresh:
+    image: codex-gateway-e2e-runner
+    mem_limit: 1g
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3101"
+      CODEX_GATEWAY_CONFIG_SECRET: e2e-config-secret
+      CODEX_GATEWAY_DB_PATH: /data-fresh/codex-gateway.db
+      BROWSER_PREVIEW_SCHEME: http
     volumes:
-      - ./docker/browser-preview-nginx.conf:/etc/nginx/nginx.conf:ro
+      - build-output:/e2e-output:ro
+      - e2e-data-fresh:/data-fresh
+    command: ["node", "/e2e-output/server/index.mjs"]
     healthcheck:
-      # An unauthenticated preview request correctly returns 401, so readiness probes the listener
-      # rather than treating an application status code as an ingress failure.
-      test: ["CMD", "nc", "-z", "127.0.0.1", "3200"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "const s=require('node:net').connect(3101,'127.0.0.1',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1))",
+        ]
       interval: 1s
       timeout: 3s
-      retries: 30
+      retries: 60
 
   test-runner:
     image: codex-gateway-e2e-runner
     mem_limit: 2g
     network_mode: service:gateway-under-test
     depends_on:
-      browser-preview-ingress:
+      gateway-under-test:
+        condition: service_healthy
+      gateway-fresh:
         condition: service_healthy
     environment:
       CI: ${CI:-}
@@ -149,10 +198,17 @@ services:
       E2E_CODEX_MODEL: ${E2E_CODEX_MODEL:-gpt-5.6-luna}
       E2E_BARK_SERVER_URL: http://bark-target:8080
       E2E_BARK_REQUEST_LOG: /bark-requests/requests.jsonl
-      PLAYWRIGHT_BASE_URL: http://codex.127.0.0.1.nip.io:3100
+      E2E_GATEWAY_MEMBER_USERNAME: ${E2E_GATEWAY_MEMBER_USERNAME:-e2e-member}
+      E2E_GATEWAY_MEMBER_PASSWORD: ${E2E_GATEWAY_MEMBER_PASSWORD:-codex-gateway-e2e-member-password}
+      E2E_SHARED_AUTH_PRESENT: ${E2E_SHARED_AUTH_PRESENT:-0}
+      E2E_MODEL_PROVIDER_API_KEY: ${E2E_MODEL_PROVIDER_API_KEY:-}
+      E2E_MODEL_PROVIDER_ID: ${E2E_MODEL_PROVIDER_ID:-}
+      E2E_MODEL_PROVIDER_BASE_URL: ${E2E_MODEL_PROVIDER_BASE_URL:-}
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:3100
       HOME: /home/pwuser
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
       - ${E2E_CODEX_HOME:-${HOME}/.codex}:/codex-auth:ro
       - ../../test-results:/workspace/codex-gateway/test-results
       - e2e-data:/workspace/codex-gateway/.data-e2e
@@ -164,4 +220,5 @@ volumes:
   bark-requests:
   build-output:
   e2e-data:
+  e2e-data-fresh:
   runner-home:

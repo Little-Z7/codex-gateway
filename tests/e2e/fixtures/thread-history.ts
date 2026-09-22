@@ -13,7 +13,9 @@ export function defaultGatewayHost(hostId = 1): HostRecord {
     privateKey: null,
     password: null,
     proxyUrl: null,
+    managed: false,
     hasPassword: false,
+    hasPrivateKey: false,
     createdAt: now,
     updatedAt: now,
   };

@@ -1,6 +1,7 @@
 import {
   configRange,
   count,
+  itemSummary,
   list,
   numeric,
   simpleNotification,
@@ -34,6 +35,10 @@ export const visibleNotificationMethods = [
   "hook/completed",
   "item/autoApprovalReview/started",
   "item/autoApprovalReview/completed",
+  // Internal-only app-server notification intended for Codex Cloud, not user-visible UI by
+  // default. Kept visible-but-gated so the protocol debug toggle can still surface it; see the
+  // "rawResponseItem/completed" check in gateway/event-handlers/notification-events.ts.
+  "rawResponseItem/completed",
   "item/commandExecution/terminalInteraction",
   "item/mcpToolCall/progress",
   "mcpServer/oauthLogin/completed",
@@ -96,6 +101,10 @@ const formatters: Record<VisibleNotificationMethod, NotificationFormatter> = {
     guardianReviewNotification(ctx, params, "started"),
   "item/autoApprovalReview/completed": (ctx, params) =>
     guardianReviewNotification(ctx, params, "completed"),
+  "rawResponseItem/completed": (ctx, params) =>
+    simpleNotification(ctx, "rawResponseItemCompleted", "info", {
+      item: itemSummary(params.item),
+    }),
   "item/commandExecution/terminalInteraction": terminalInteractionNotification,
   "item/mcpToolCall/progress": (ctx, params) =>
     simpleNotification(ctx, "mcpToolCallProgress", "info", { message: text(params.message) }),

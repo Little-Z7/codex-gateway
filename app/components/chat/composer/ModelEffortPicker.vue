@@ -23,6 +23,8 @@ import { Button } from "@codex-gateway/ui/button";
 defineProps<{
   models: ModelRecord[];
   loadingModels: boolean;
+  /** No host/project selected — the picker is inert and explains why instead of loading. */
+  modelsUnavailable?: boolean;
   activeModel: string;
   activeModelLabel: string;
   hostDefaultModelLabel: string;
@@ -80,22 +82,26 @@ function preventInitialFocus(event: Event) {
         size="lg"
         class="min-w-0 max-w-full gap-1.5 px-1.5 text-sm font-normal text-ink-secondary hover:bg-canvas-soft sm:gap-2 sm:px-2 md:text-base"
         data-testid="model-select"
-        :disabled="loadingModels || !models.length"
+        :disabled="modelsUnavailable || loadingModels || !models.length"
       >
         <span class="flex min-w-0 items-center gap-1.5 sm:hidden">
           <span class="truncate text-ink">{{
-            loadingModels
-              ? t("app.loadingModels")
-              : triggerModelLabel(activeModelLabel, hostDefaultModelLabel)
+            modelsUnavailable
+              ? t("app.selectProjectForModels")
+              : loadingModels
+                ? t("app.loadingModels")
+                : triggerModelLabel(activeModelLabel, hostDefaultModelLabel)
           }}</span>
           <span v-if="activeEffortCompactLabel" class="shrink-0 text-ink-muted">
             {{ activeEffortCompactLabel }}
           </span>
         </span>
         <span class="hidden truncate text-ink sm:inline">{{
-          loadingModels
-            ? t("app.loadingModels")
-            : triggerModelLabel(activeModelLabel, hostDefaultModelLabel)
+          modelsUnavailable
+            ? t("app.selectProjectForModels")
+            : loadingModels
+              ? t("app.loadingModels")
+              : triggerModelLabel(activeModelLabel, hostDefaultModelLabel)
         }}</span>
         <span v-if="activeEffortCompactLabel" class="hidden shrink-0 text-ink-muted sm:inline">
           {{ activeEffortCompactLabel }}

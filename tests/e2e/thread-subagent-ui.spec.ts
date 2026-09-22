@@ -188,6 +188,10 @@ test("sub-agent activity opens workspace tabs with sub-agent timelines", async (
   await expect(activeAgents).toContainText("Nova [reviewer]");
   await expect(activeAgents).not.toContainText(subThreadId);
   await expect(activeAgents).not.toContainText(secondSubThreadId);
+  // The collabAgentToolCall prompt sits inside the collapsed intermediate-steps group.
+  const intermediateToggle = page.getByTestId("intermediate-steps").first();
+  await expect(intermediateToggle).toBeVisible();
+  await intermediateToggle.click();
   await expect(page.getByText("Inspect the focused-store migration boundary.")).toBeVisible();
   await activeAgents.getByTestId("open-active-subagent").first().click();
   const panel = page.locator('[data-testid="workspace-subagent-panel"]:visible');
@@ -237,6 +241,10 @@ test("sub-agent activity opens workspace tabs with sub-agent timelines", async (
     passThroughNonInterrupt: true,
   });
   await subAgentTab(page, "Atlas [explorer]").click();
+  // Reasoning items collapse into the intermediate-steps group in the sub-agent panel too.
+  const subToggle = panel.getByTestId("intermediate-steps").first();
+  await expect(subToggle).toBeVisible();
+  await subToggle.click();
   await expect(panel.getByText("Sub-agent is still running")).toBeVisible();
   await page.getByRole("button", { name: "停止子代理" }).click();
   await expect

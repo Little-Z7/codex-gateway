@@ -148,6 +148,16 @@ Core rules:
 - **Mobile layout**: responsive sidebar, composer, long-press context actions, and sub-agent panels.
 - **Real E2E coverage**: Playwright tests run against a real Nuxt server, real SSH Docker target, and real Codex app-server.
 
+This fork adds multi-user and operations capabilities on top:
+
+- **Per-user container workspaces**: admins provision an isolated Docker container per member (dedicated home volume, SSH access, per-user memory/CPU quotas); members only see their own managed workspace.
+- **Admin console `/gw/admin`**: user/session/container management with bulk actions, user detail pages, image rebuild and rolling recreate, usage statistics (daily turn/token aggregation), per-user daily/monthly token and turn budgets (global defaults, overrides, and turn intercept), audit log (filters + CSV export + retention), system settings, and one-click backups.
+- **Same-origin browser previews**: previews share the Gateway port and origin, routed by an HttpOnly cookie — no wildcard DNS or extra ports.
+- **Shared model provider**: members share a ChatGPT login or a shared API-key provider; the provider is editable in the console (DB overrides env).
+- **First-run setup**: opening the app on an empty database offers admin creation directly.
+
+Deployment and operations guide: [`deploy/README.zh-CN.md`](deploy/README.zh-CN.md).
+
 ## Project Structure
 
 ```text
@@ -174,18 +184,10 @@ Prerequisites: Docker with Compose, Git, and network access from Gateway to the 
 ```bash
 git clone --recurse-submodules https://github.com/yunhaoli24/codex-gateway.git
 cd codex-gateway
-
-cp .env.example .env
-# Replace CODEX_GATEWAY_CONFIG_SECRET in .env with: openssl rand -hex 32
-
-docker network create web-common 2>/dev/null || true
-docker compose build
-docker compose run --rm codex-gateway \
-  node scripts/create-user.mjs admin '<a-password-with-at-least-8-characters>'
-docker compose up -d
+./deploy/scripts/bootstrap.sh <admin-username> '<a-password-with-at-least-8-characters>'
 ```
 
-Open the service through your reverse proxy, sign in with the manually created account, and add the first SSH host from Settings. The bundled Compose file intentionally exposes port `3000` only to the external `web-common` Docker network.
+bootstrap generates `.env` (filling `CODEX_GATEWAY_CONFIG_SECRET` and `CODEX_CLI_VERSION`), builds the Gateway and user-workspace images, creates the admin account, and starts the service on port `3000`. See `deploy/README.zh-CN.md` for the full deployment guide (shared Codex login, provisioning, operations).
 
 ## Local Development
 
@@ -193,6 +195,8 @@ Open the service through your reverse proxy, sign in with the manually created a
 pnpm install
 pnpm dev
 ```
+
+`pnpm dev` uses the Nitro dev preset, which does not include preview interception outside `/gw/`; same-origin browser previews only work in the production build (including E2E).
 
 Common commands:
 
@@ -210,18 +214,21 @@ Environment variables:
 | `CODEX_GATEWAY_DB_PATH` | No | SQLite database path. Defaults to the app data path; Docker uses `/data/codex-gateway.db`. |
 | `HOST` | No | Nuxt listen host. Docker uses `0.0.0.0`. |
 | `PORT` | No | Nuxt listen port. Docker uses `3000`. |
-| `BROWSER_PREVIEW_DOMAIN` | Browser preview | Parent domain for isolated preview origins; configure wildcard DNS for `p-*.your-domain`. |
-| `BROWSER_PREVIEW_SECRET` | No | HMAC secret for stable per-user/Host/target preview origins. Defaults to `CODEX_GATEWAY_CONFIG_SECRET`. |
-| `BROWSER_PREVIEW_SCHEME` | No | Public preview scheme, `https` by default. Use `http` only for local E2E/development. |
-| `BROWSER_PREVIEW_PUBLIC_PORT` | No | Optional public port included in preview origins for local development. |
+| `BROWSER_PREVIEW_SCHEME` | No | Public scheme of the Gateway origin, `https` by default. Use `http` only for local E2E/development. |
+| `CODEX_GATEWAY_PROVISIONING` | No | `docker` enables per-user container workspaces, `off` (default) disables it. |
+| `CODEX_GATEWAY_DOCKER_NETWORK` | Required for provisioning | Docker network shared by the Gateway and user containers. |
+| `CODEX_GATEWAY_SHARED_AUTH_DIR` | Required for provisioning | Host directory holding the shared Codex login, mounted at `/srv/codex-auth` in user containers. |
+| `CODEX_GATEWAY_USER_IMAGE` | No | User workspace image name, default `codex-gateway-user:latest`. |
 
 Create an admin user:
 
 ```bash
 CODEX_GATEWAY_CONFIG_SECRET="replace-with-a-long-random-secret" \
 CODEX_GATEWAY_DB_PATH="./data/codex-gateway.db" \
-pnpm user:create <username> <password>
+pnpm user:create -- --admin <username> <password>
 ```
+
+Regular users are created by an administrator in the admin console Users tab (optional generated initial password and first-login password change), where they can also be assigned a managed host and a usage budget.
 
 `CODEX_GATEWAY_CONFIG_SECRET` encrypts stored connection config. Use a stable, sufficiently long secret in production. Changing it makes existing encrypted config unreadable.
 
@@ -242,7 +249,7 @@ docker compose up -d --build
 
 The compose service exposes container port `3000` only to Docker networks. Put it behind nginx, Caddy, Cloudflare Tunnel, or another trusted reverse proxy. SQLite data is stored at `/data/codex-gateway.db` and persisted through `./data:/data`.
 
-Remote Browser panels use isolated origins such as `p-<hmac>.example.com`. Configure wildcard DNS for `p-*.example.com` and route those hosts to the same Codex Gateway Nitro port (`3000`). The reverse proxy must preserve the Host header and WebSocket upgrades. No second listener or published container port is required. Upstream `Content-Security-Policy` and `X-Frame-Options` are preserved, so applications that prohibit embedding remain blocked by the browser.
+Remote Browser panels are served from the same origin as the Gateway UI. Requests outside the `/gw/` prefix are proxied to the remote application based on an HttpOnly preview cookie, so no wildcard DNS, extra listener, or published container port is required. The reverse proxy only needs to preserve WebSocket upgrades. One browser keeps a single active preview at a time: opening a preview in another panel or tab replaces the previous binding, and the replaced panel offers a re-activate action. Upstream `Content-Security-Policy` and `X-Frame-Options` are preserved, so applications that prohibit embedding remain blocked by the browser.
 
 ## Testing
 

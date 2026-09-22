@@ -1,14 +1,16 @@
 import type { GatewayEvent } from "~~/shared/types";
 import type { AgentEvent } from "~~/shared/agent/events";
+import type { ThreadOpenSnapshot } from "./types";
 import type { ProviderAdapter, ProviderNotification } from "../agent/provider-adapter";
 import { gatewayEventStore } from "../state/gateway-events";
 import { currentGatewayUserId } from "../state/memory";
 import { subAgentThreadStore } from "../state/sub-agent-threads";
 import { threadSnapshotStore } from "../state/thread-snapshots";
+import { usageStore } from "../usage/usage-store";
 import { dispatchThreadRuntimeNotification } from "../notifications/thread-notification-dispatcher";
 import { applyEventToOpenSnapshot } from "./open-snapshot-events";
 import { runtimeStatusFromEvent } from "~~/shared/thread-runtime-status";
-import { idFromUnknown, recordFromUnknown } from "~~/shared/utils/records";
+import { idFromUnknown, recordFromUnknown, stringFromUnknown } from "~~/shared/utils/records";
 import { threadRuntimeStatusHub } from "./thread-runtime-status-hub";
 import { runtimeLog } from "./runtime-log";
 
@@ -66,9 +68,10 @@ class ThreadRuntimeEventBus {
         : new Date().toISOString();
     const gatewayEvent = gatewayEventStore.add(hostId, threadId, event, createdAt);
     subAgentThreadStore.recordRuntimeEvent(hostId, threadId, event);
-    threadSnapshotStore.update(hostId, threadId, (snapshot) =>
-      applyEventToOpenSnapshot(snapshot, event),
+    const snapshot = threadSnapshotStore.update(hostId, threadId, (current) =>
+      applyEventToOpenSnapshot(current, event),
     );
+    this.recordUsage(event, snapshot);
     this.publish(gatewayEvent);
     this.publishRuntimeStatus(gatewayEvent);
     dispatchThreadRuntimeNotification(gatewayEvent, options);
@@ -89,6 +92,31 @@ class ThreadRuntimeEventBus {
         this.subscribers.delete(key);
       }
     };
+  }
+
+  /**
+   * usage_daily is the persisted per-user aggregate; input/output tokens come from the snapshot's
+   * `tokenUsage.last` breakdown maintained by `thread/tokenUsage/updated` (app-server 0.153.x),
+   * and the model from the snapshot's threadSettings / thread record.
+   */
+  private recordUsage(event: AgentEvent, snapshot: ThreadOpenSnapshot | null) {
+    const userId = currentGatewayUserId();
+    if (userId === null) return;
+    if (event.type === "thread.started") {
+      const thread = recordFromUnknown(event.thread);
+      usageStore.recordThreadStarted(userId, thread ? stringFromUnknown(thread.model) : null);
+      return;
+    }
+    if (event.type === "turn.completed") {
+      const last = snapshot?.tokenUsage?.last ?? null;
+      usageStore.recordTurnCompleted(
+        userId,
+        snapshot?.threadSettings?.model ?? null,
+        last === null
+          ? null
+          : { inputTokens: last.inputTokens ?? 0, outputTokens: last.outputTokens ?? 0 },
+      );
+    }
   }
 
   private publish(event: GatewayEvent) {

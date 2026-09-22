@@ -12,6 +12,7 @@ import type {
 import type { ApprovalPolicy, ReasoningEffort } from "./thread";
 import type { TerminalOpenTarget, TerminalSessionSnapshot } from "./terminal";
 import type {
+  BrowserPreviewCloseReason,
   BrowserPreviewResourceFailure,
   BrowserPreviewSessionSnapshot,
   BrowserPreviewTarget,
@@ -634,6 +635,11 @@ export type RealtimeServerMessage =
       snapshot: RemoteGitWorkspaceSnapshot;
     }
   | { type: "browser.closed"; requestId: string; sessionId: string }
+  | {
+      type: "browser.sessionClosed";
+      sessionId: string;
+      reason: BrowserPreviewCloseReason;
+    }
   | { type: "browser.error"; requestId?: string; sessionId?: string; message: string }
   | {
       type: "browser.framePolicyWarning";

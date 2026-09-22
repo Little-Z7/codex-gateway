@@ -1,7 +1,7 @@
 import type { DockviewApi, DockviewReadyEvent, SerializedDockview } from "dockview-vue";
 
 import type { ComputedRef, Ref } from "vue";
-import { nextTick, onBeforeUnmount, shallowRef, watch } from "vue";
+import { nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { useGatewayFileWorkspaceStore } from "@/stores/file-workspace";
 import { useGatewayWorkspaceLayoutStore } from "@/stores/gateway-workspace-layout";
 import {
@@ -24,6 +24,9 @@ export function useWorkspaceDockLifecycle(options: {
   const workspaceLayout = useGatewayWorkspaceLayoutStore();
   const fileWorkspace = useGatewayFileWorkspaceStore();
   const api = shallowRef<DockviewApi | null>(null);
+  // Drives the single-panel presentation: with only the Agent panel docked, the group tab strip
+  // (and its maximize/popout actions) is hidden so the workspace reads as one conversation.
+  const dockedPanelCount = ref(0);
   // ChatWorkspace keys this composable's owner by scope. Capture the key once so unmount always
   // persists the layout being left, even after navigation refs already point at the next thread.
   const activeScopeKey = options.scopeKey.value;
@@ -43,6 +46,9 @@ export function useWorkspaceDockLifecycle(options: {
     api.value = event.api;
     disposables = [
       event.api.onDidLayoutChange(persistence.scheduleLayoutSave),
+      event.api.onDidLayoutChange(() => {
+        dockedPanelCount.value = event.api.panels.length;
+      }),
       event.api.onWillMutateLayout((mutation) => {
         // Popouts are runtime windows. Capture the docked layout before Dockview removes the group.
         if (mutation.kind === "popout") persistence.captureBeforePopout();
@@ -95,6 +101,7 @@ export function useWorkspaceDockLifecycle(options: {
     if (api.value !== event.api || !host) return;
     event.api.layout(host.clientWidth, host.clientHeight, true);
     initializeScope(activeScopeKey);
+    dockedPanelCount.value = event.api.panels.length;
   }
 
   function initializeScope(scopeKey: string) {
@@ -192,9 +199,10 @@ export function useWorkspaceDockLifecycle(options: {
     disposables.forEach((disposable) => disposable.dispose());
     disposables = [];
     api.value = null;
+    dockedPanelCount.value = 0;
   });
 
-  return { ready };
+  return { ready, dockedPanelCount };
 }
 
 function dockedLayout(layout: SerializedDockview): SerializedDockview {

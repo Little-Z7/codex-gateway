@@ -12,6 +12,20 @@ import {
 } from "@/stores/gateway/route-state";
 import { useGatewayBootstrapStore } from ".";
 
+// Restoring the last-open thread reads a browser-local hint that never validates its threadId
+// against the server. An unreachable or deleted thread can leave the underlying request
+// unsettled, which must not hang the whole bootstrap. Give it its own deadline, well under the
+// realtime broker's 31-minute long-operation timeout (see gateway-realtime/request-broker.ts).
+const RESTORE_LAST_OPEN_THREAD_TIMEOUT_MS = 20_000;
+
+// hydrateNavigationData chains three sequential realtime requests (connectAllHosts -> listModels
+// -> listThreads, each possibly repeated once a project is auto-selected). Any one of them can hang
+// up to the realtime broker's 31-minute long-operation timeout (see gateway-realtime/request-broker.ts).
+// Without its own deadline, a stuck host connection or thread listing leaves `initializing` stuck at
+// true forever, since it is only cleared in this module's outer `finally`. Bound the whole chain so
+// bootstrap always reaches that `finally`.
+const HYDRATE_NAVIGATION_TIMEOUT_MS = 30_000;
+
 /** Orchestrates independent stores without making the bootstrap state store import them. */
 export async function refreshGatewayClient() {
   const auth = useAuthStore();
@@ -47,6 +61,8 @@ export async function refreshGatewayClient() {
     }
     navigation.selectedProjectId = routeHostExists ? routeSelection.projectId : null;
     navigation.selectedThreadId = routeHostExists ? routeSelection.threadId : null;
+    navigation.newThreadDraft =
+      routeHostExists && routeSelection.threadId === null ? routeSelection.draft : false;
     views.resetCurrentView();
 
     const viewUnchanged = () => sessionIsCurrent() && views.viewEpoch === refreshViewEpoch;
@@ -65,12 +81,13 @@ export async function refreshGatewayClient() {
       });
       hydrateNavigationDataInBackground(sessionEpoch);
     } else {
-      await hydrateNavigationData(sessionEpoch);
-      if (
-        !hasGatewayRouteSelection(routeSelection) &&
-        viewUnchanged() &&
-        (await views.restoreLastOpenThread())
-      ) {
+      await hydrateNavigationDataSafely(sessionEpoch, bootstrap, navigation);
+      if (!sessionIsCurrent()) return;
+      const restoredLastOpenThread =
+        !hasGatewayRouteSelection(routeSelection) && viewUnchanged()
+          ? await restoreLastOpenThreadSafely(navigation, bootstrap, views, viewUnchanged)
+          : false;
+      if (restoredLastOpenThread) {
         // Browser-local route selection was restored by the view owner.
       } else if (viewUnchanged()) {
         writeGatewayRouteSelection(
@@ -115,6 +132,9 @@ async function hydrateNavigationData(sessionEpoch: number) {
   await navigation.listThreads();
   if (!canContinue()) return;
   if (navigation.selectedProjectId === null) catalog.ensureSelectedProject();
+  // listModels is skipped while no project is selected; once one is ensured here, the project
+  // page's composer still needs the picker populated.
+  if (canContinue() && navigation.selectedProjectId !== null) await catalog.listModels();
   if (canContinue() && navigation.selectedProjectId !== null) await navigation.listThreads();
 }
 
@@ -130,6 +150,84 @@ function hydrateNavigationDataInBackground(sessionEpoch: number) {
         hostId: navigation.selectedHostId,
         projectId: navigation.selectedProjectId,
         threadId: navigation.selectedThreadId,
+      },
+    );
+  });
+}
+
+async function hydrateNavigationDataSafely(
+  sessionEpoch: number,
+  bootstrap: ReturnType<typeof useGatewayBootstrapStore>,
+  navigation: ReturnType<typeof useGatewayNavigationStore>,
+) {
+  const auth = useAuthStore();
+  try {
+    await withTimeout(
+      hydrateNavigationData(sessionEpoch),
+      HYDRATE_NAVIGATION_TIMEOUT_MS,
+      () => new Error(bootstrap.t("app.hydrateNavigationFailed")),
+    );
+  } catch (error: unknown) {
+    if (!auth.isCurrentSession(sessionEpoch)) return;
+    // Surface the failure but do not rethrow: the caller still needs to reach its own `finally`
+    // (and, for this call site, still attempt last-open-thread restore / route write below) so
+    // `initializing` never gets stuck at true.
+    bootstrap.setError(
+      messageFromError(error, bootstrap.t("app.hydrateNavigationFailed"), bootstrap.errorLabels),
+      {
+        hostId: navigation.selectedHostId,
+        projectId: navigation.selectedProjectId,
+        threadId: navigation.selectedThreadId,
+      },
+    );
+  }
+}
+
+async function restoreLastOpenThreadSafely(
+  navigation: ReturnType<typeof useGatewayNavigationStore>,
+  bootstrap: ReturnType<typeof useGatewayBootstrapStore>,
+  views: ReturnType<typeof useGatewayThreadViewStore>,
+  viewUnchanged: () => boolean,
+) {
+  try {
+    return await withTimeout(
+      views.restoreLastOpenThread(),
+      RESTORE_LAST_OPEN_THREAD_TIMEOUT_MS,
+      () => new Error(bootstrap.t("app.restoreLastOpenThreadFailed")),
+    );
+  } catch (error: unknown) {
+    if (!viewUnchanged()) return false;
+    // The abandoned restore attempt may already have pointed navigation at an unresolved thread
+    // before timing out or failing. Drop that leftover selection so the caller's normal-state
+    // fallback (route threadId=null) stays consistent with the store.
+    navigation.selectedThreadId = null;
+    bootstrap.setError(
+      messageFromError(
+        error,
+        bootstrap.t("app.restoreLastOpenThreadFailed"),
+        bootstrap.errorLabels,
+      ),
+      { hostId: navigation.selectedHostId, projectId: navigation.selectedProjectId },
+    );
+    return false;
+  }
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  onTimeout: () => Error,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(onTimeout()), timeoutMs);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        window.clearTimeout(timer);
+        reject(error instanceof Error ? error : new Error(String(error)));
       },
     );
   });

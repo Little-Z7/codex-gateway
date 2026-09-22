@@ -42,7 +42,7 @@ export type GatewayRealtimeSetup = ToRefs<RealtimeConnectionState> &
   };
 
 export const useGatewayRealtimeStore = defineStore("gateway-realtime", (): GatewayRealtimeSetup => {
-  const t = useGatewayTranslator();
+  const { t } = useGatewayTranslator();
   let rejectPendingRequests = (_error: Error) => {};
   let dispatchServerMessage = (_message: RealtimeServerMessage) => {};
 

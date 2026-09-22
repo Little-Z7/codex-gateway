@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { FolderIcon, Loader2Icon } from "@lucide/vue";
+import { AlertTriangleIcon, FolderIcon, Loader2Icon } from "@lucide/vue";
+import { Button } from "@codex-gateway/ui/button";
 import { computed } from "vue";
 import ChatComposer from "@/components/chat/ChatComposer.vue";
 import ChatPanelScrollArea from "@/components/chat/ChatPanelScrollArea.vue";
@@ -7,8 +8,14 @@ import ProjectThreadList from "@/components/chat/ProjectThreadList.vue";
 import ThreadVirtualTimeline from "@/components/thread/ThreadVirtualTimeline.vue";
 import ActiveSubAgentsBar from "@/components/thread/subagent/ActiveSubAgentsBar.vue";
 import MisalignmentRecoveryCard from "@/components/thread/MisalignmentRecoveryCard.vue";
+import NewThreadHero from "@/components/chat/NewThreadHero.vue";
 import McpRuntimeStatusBar from "@/components/thread/McpRuntimeStatusBar.vue";
 import { useGatewayThreadTurnsStore } from "@/stores/gateway-thread-turns";
+import { useAuthStore } from "@/stores/auth";
+import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
+import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
+import { refreshGatewayClient } from "@/stores/gateway-bootstrap/refresh";
+import { gatewayPath } from "@/utils/gateway-url";
 import { useChatWorkspaceState } from "./chat-workspace-state";
 
 const {
@@ -28,13 +35,38 @@ const {
   selectedThreadViewReady,
 } = useChatWorkspaceState();
 const threadTurns = useGatewayThreadTurnsStore();
+const auth = useAuthStore();
+const catalog = useGatewayCatalogStore();
+const navigation = useGatewayNavigationStore();
+const hasNoHosts = computed(() => catalog.hosts.length === 0);
 
 const { t } = useI18n();
+// A visible error always wins over the loading spinner: a stuck bootstrap or thread restore must
+// surface its error instead of spinning forever (see showBootstrapError below for where it goes).
 const showThreadLoading = computed(
   () =>
-    initializing.value ||
-    openingThread.value ||
-    (Boolean(selectedThreadId.value) && !selectedThreadViewReady.value && !visibleError.value),
+    !visibleError.value &&
+    (initializing.value ||
+      openingThread.value ||
+      (Boolean(selectedThreadId.value) && !selectedThreadViewReady.value)),
+);
+const heroComposerVisible = computed(
+  () =>
+    (navigation.newThreadDraft ||
+      (Boolean(selectedThreadId.value) &&
+        historyTurns.value.length === 0 &&
+        !visibleError.value)) &&
+    selectedProjectId.value !== null,
+);
+// Only takes over when nothing else in the chain has content to show (no hero, no open thread, no
+// project list): a thread- or turn-scoped error must keep the timeline visible and rely on the
+// existing Sonner toast, not blank out an already-loaded conversation.
+const showBootstrapError = computed(
+  () =>
+    visibleError.value !== null &&
+    !heroComposerVisible.value &&
+    selectedThreadId.value === null &&
+    selectedProjectId.value === null,
 );
 </script>
 
@@ -62,6 +94,12 @@ const showThreadLoading = computed(
         </div>
       </ChatPanelScrollArea>
 
+      <ChatPanelScrollArea v-else-if="heroComposerVisible" class="flex flex-col">
+        <NewThreadHero class="pt-[clamp(3.5rem,14vh,7rem)] pb-10">
+          <ChatComposer />
+        </NewThreadHero>
+      </ChatPanelScrollArea>
+
       <ThreadVirtualTimeline
         v-else-if="selectedThreadId"
         :thread-id="selectedThreadId"
@@ -77,24 +115,56 @@ const showThreadLoading = computed(
         @load-older="threadTurns.loadOlderTurns"
       />
 
-      <ChatPanelScrollArea v-else-if="selectedProjectId">
-        <ProjectThreadList />
+      <ChatPanelScrollArea v-else-if="selectedProjectId" class="flex flex-col">
+        <div class="pt-[clamp(3.5rem,14vh,7rem)] pb-10">
+          <ProjectThreadList />
+        </div>
       </ChatPanelScrollArea>
 
-      <ChatPanelScrollArea v-else class="flex items-start">
+      <ChatPanelScrollArea v-else-if="showBootstrapError" class="flex items-center justify-center">
         <div
-          class="max-w-3xl rounded-2xl bg-canvas-soft px-4 py-3 text-[0.9375rem] leading-7 text-ink md:ml-auto md:px-5 md:py-4"
+          data-testid="bootstrap-error"
+          class="mx-auto flex max-w-md flex-col items-center gap-3 px-4 text-center"
         >
-          <div class="mb-2 flex items-center gap-2 text-ink-muted">
-            <FolderIcon class="size-4" />
-            {{ selectedProjectId ? t("app.selectThreadFirst") : t("app.selectProjectFirst") }}
-          </div>
-          {{ selectedProjectId ? t("app.noThread") : t("app.chooseProject") }}
+          <AlertTriangleIcon class="size-5 text-destructive" />
+          <p class="whitespace-pre-wrap text-[0.9375rem] leading-7 text-destructive">
+            {{ visibleError }}
+          </p>
+          <Button variant="outline" size="sm" @click="refreshGatewayClient()">
+            {{ t("app.retry") }}
+          </Button>
+        </div>
+      </ChatPanelScrollArea>
+
+      <ChatPanelScrollArea v-else class="flex items-center justify-center">
+        <div
+          v-if="hasNoHosts"
+          data-testid="no-hosts-empty"
+          class="mx-auto flex max-w-md flex-col items-center gap-3 px-4 text-center"
+        >
+          <FolderIcon class="size-5 text-ink-muted" />
+          <p class="text-[0.9375rem] leading-7 text-ink">
+            {{ auth.isAdmin ? t("app.noWorkspaceAdminHint") : t("app.noWorkspaceMemberHint") }}
+          </p>
+          <Button
+            v-if="auth.isAdmin"
+            as="a"
+            :href="gatewayPath('admin?tab=users')"
+            data-testid="empty-goto-admin"
+          >
+            {{ t("app.gotoAdminConsole") }}
+          </Button>
+        </div>
+        <div v-else class="mx-auto flex max-w-md flex-col items-center gap-3 px-4 text-center">
+          <FolderIcon class="size-5 text-ink-muted" />
+          <p class="text-[0.9375rem] leading-7 text-ink">
+            {{ selectedProjectId ? t("app.noThread") : t("app.chooseProject") }}
+          </p>
         </div>
       </ChatPanelScrollArea>
 
       <MisalignmentRecoveryCard v-if="selectedThreadId" />
-      <ChatComposer v-if="selectedThreadId || selectedProjectId" />
+      <ChatComposer v-if="selectedThreadId && !heroComposerVisible" />
     </div>
   </div>
 </template>

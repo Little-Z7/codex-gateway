@@ -22,8 +22,8 @@ const props = defineProps<{
 }>();
 
 const catalog = useGatewayCatalogStore();
-const { t } = useI18n();
-const errorLabels = computed(() => errorMessageLabels(t));
+const { t, te } = useI18n();
+const errorLabels = computed(() => errorMessageLabels(t, te));
 const projectForm = ref({ name: "", remotePath: "" });
 const directoryPath = ref("~");
 const directories = ref<RemoteDirectoryEntry[]>([]);

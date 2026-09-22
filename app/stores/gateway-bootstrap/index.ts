@@ -6,10 +6,10 @@ import type { GatewayErrorState } from "@/stores/gateway/types";
 import { errorMessageLabels } from "@/stores/gateway/thread-utils/identity";
 
 export const useGatewayBootstrapStore = defineStore("gateway-bootstrap", () => {
-  const t = useGatewayTranslator();
+  const { t, te } = useGatewayTranslator();
   const initializing = ref(true);
   const error = ref<GatewayErrorState | null>(null);
-  const errorLabels = computed(() => errorMessageLabels(t));
+  const errorLabels = computed(() => errorMessageLabels(t, te));
 
   function clearError() {
     error.value = null;

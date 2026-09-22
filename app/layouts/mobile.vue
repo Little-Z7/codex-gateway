@@ -12,25 +12,11 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@codex-gateway/ui/sheet";
-import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
-import { projectById } from "@/stores/gateway-catalog/selectors";
 import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
-import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
-import { titleForThread } from "@/stores/gateway/thread-utils/identity";
 
-const catalog = useGatewayCatalogStore();
 const navigation = useGatewayNavigationStore();
-const { projects } = storeToRefs(catalog);
-const { selectedThreadId, selectedHostId, selectedProjectId } = storeToRefs(navigation);
-const { currentThread } = storeToRefs(useGatewayThreadViewStore());
-const selectedProject = computed(() => projectById(projects.value, selectedProjectId.value));
+const { selectedHostId, selectedProjectId, selectedThreadId } = storeToRefs(navigation);
 const sidebarOpen = ref(false);
-const mobileTitle = computed(() => {
-  if (selectedThreadId.value && currentThread.value) {
-    return titleForThread(currentThread.value);
-  }
-  return selectedProject.value?.name || "Codex Gateway";
-});
 
 watch([selectedHostId, selectedProjectId, selectedThreadId], () => {
   sidebarOpen.value = false;
@@ -61,13 +47,9 @@ watch([selectedHostId, selectedProjectId, selectedThreadId], () => {
               <SheetTitle>{{ $t("app.sidebar") }}</SheetTitle>
               <SheetDescription>{{ $t("app.sidebarDescription") }}</SheetDescription>
             </SheetHeader>
-            <GatewaySidebar class="h-full" :workspace-toolbar="false" />
+            <GatewaySidebar class="h-full" :collapsible="false" />
           </SheetContent>
         </Sheet>
-        <div class="min-w-0 flex-1">
-          <p class="truncate text-[0.9375rem] font-semibold">{{ mobileTitle }}</p>
-          <p class="truncate text-xs text-ink-muted">Codex Gateway</p>
-        </div>
       </template>
     </ChatWorkspace>
   </main>

@@ -23,12 +23,14 @@ const props = withDefaults(
 );
 
 const markdown = createMarkdownRenderer();
+const { t } = useI18n();
+const copyLabel = computed(() => t("app.copyCode"));
 
 const root = ref<HTMLElement | null>(null);
 const filePreviewContext = useFilePreviewContext();
 const fileWorkspace = useGatewayFileWorkspaceStore();
 const markdownScheduler = useStreamRenderScheduler({
-  source: () => [props.content || "", props.diffLanguage] as const,
+  source: () => [props.content || "", props.diffLanguage, copyLabel.value] as const,
   renderImmediately: ([content]) => renderMarkdownImmediately(content),
   shouldEnhance: ([content]) => markdown.hasCodeFences(content),
   renderEnhanced: ([content, diffLanguage]) => renderMarkdownEnhanced(content, diffLanguage),
@@ -38,17 +40,40 @@ const markdownScheduler = useStreamRenderScheduler({
 const rendered = computed(() => markdownScheduler.output.value || "");
 
 function renderMarkdownImmediately(content: string) {
-  return markdown.render(content);
+  return withCodeBlockChrome(markdown.render(content));
 }
 
 async function renderMarkdownEnhanced(content: string, diffLanguage: string) {
-  return await markdown.renderEnhanced(content, async (fence) => {
-    const normalizedLanguage = normalizeLanguage(fence.language);
-    if (normalizedLanguage === "diff") {
-      return `<pre class="syntax-highlight language-diff"><code>${await renderDiff(fence.content, diffLanguage)}</code></pre>`;
-    }
-    return `<pre class="shiki-block syntax-highlight language-${normalizeLanguage(normalizedLanguage || "text")}"><code>${await highlightCode(fence.content, normalizedLanguage)}</code></pre>`;
-  });
+  return withCodeBlockChrome(
+    await markdown.renderEnhanced(content, async (fence) => {
+      const normalizedLanguage = normalizeLanguage(fence.language);
+      if (normalizedLanguage === "diff") {
+        return `<pre class="syntax-highlight language-diff"><code>${await renderDiff(fence.content, diffLanguage)}</code></pre>`;
+      }
+      const languageClass = normalizeLanguage(normalizedLanguage || "text");
+      return `<pre class="shiki-block syntax-highlight language-${languageClass}"><code>${await highlightCode(fence.content, normalizedLanguage)}</code></pre>`;
+    }),
+  );
+}
+
+function fenceLanguageLabel(info: string) {
+  const token = info.trim().split(/\s+/)[0] ?? "";
+  return token === "" ? "text" : token;
+}
+
+function withCodeBlockChrome(html: string) {
+  return html.replace(
+    /<pre\b([^>]*)>([\s\S]*?)<\/pre>/gi,
+    (match, attrs: string, inner: string) => {
+      if (/\blanguage-diff\b/.test(`${attrs} ${inner}`) || /\bdata-code-chrome\b/.test(attrs)) {
+        return match;
+      }
+      const languageMatch =
+        /language-([A-Za-z0-9_+-]+)/.exec(attrs) ?? /language-([A-Za-z0-9_+-]+)/.exec(inner);
+      const language = fenceLanguageLabel(languageMatch?.[1] ?? "text");
+      return `<div class="code-block"><div class="code-block-header"><span class="code-block-lang">${escapeHtml(language)}</span><button type="button" class="code-block-copy" data-copy-code>${escapeHtml(copyLabel.value)}</button></div><pre${attrs} data-code-chrome="1">${inner}</pre></div>`;
+    },
+  );
 }
 
 async function renderDiff(value: string, language: string) {
@@ -111,6 +136,26 @@ function diffLineClass(line: string) {
 }
 
 function handleClick(event: MouseEvent) {
+  const copyButton = (event.target as Element | null)?.closest?.(
+    "[data-copy-code]",
+  ) as HTMLButtonElement | null;
+  if (copyButton) {
+    event.preventDefault();
+    const block = copyButton.closest(".code-block");
+    const code = block?.querySelector("pre")?.innerText ?? "";
+    void navigator.clipboard.writeText(code).then(
+      () => {
+        copyButton.dataset.copied = "true";
+        copyButton.textContent = t("app.codeCopied");
+        window.setTimeout(() => {
+          copyButton.dataset.copied = "false";
+          copyButton.textContent = t("app.copyCode");
+        }, 1200);
+      },
+      () => undefined,
+    );
+    return;
+  }
   const anchor = (event.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
   if (!anchor || !filePreviewContext) {
     return;

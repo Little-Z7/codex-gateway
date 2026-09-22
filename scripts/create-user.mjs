@@ -3,13 +3,24 @@ import { argon2Sync, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { migrateGatewaySchema } from "../server/utils/gateway/storage/schema.ts";
 
-const [, , usernameArg, passwordArg] = process.argv;
+const positionalArgs = [];
+let isAdmin = false;
+for (const arg of process.argv.slice(2)) {
+  if (arg === "--admin") {
+    isAdmin = true;
+  } else {
+    positionalArgs.push(arg);
+  }
+}
+const [usernameArg, passwordArg] = positionalArgs;
 const username = (usernameArg || "").trim().toLowerCase();
 const password = passwordArg || "";
+const role = isAdmin ? "admin" : "user";
 
 if (!username || !password) {
-  console.error("Usage: node scripts/create-user.mjs <username> <password>");
+  console.error("Usage: node scripts/create-user.mjs [--admin] <username> <password>");
   process.exit(1);
 }
 
@@ -33,30 +44,23 @@ const db = new DatabaseSync(dbPath);
 db.exec(`
   PRAGMA journal_mode = WAL;
   PRAGMA foreign_keys = ON;
-
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    is_active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
 `);
+migrateGatewaySchema(db);
 
 const now = new Date().toISOString();
 db.prepare(
   `
-    INSERT INTO users (username, password_hash, is_active, created_at, updated_at)
-    VALUES (?, ?, 1, ?, ?)
+    INSERT INTO users (username, password_hash, is_active, role, created_at, updated_at)
+    VALUES (?, ?, 1, ?, ?, ?)
     ON CONFLICT(username) DO UPDATE SET
       password_hash = excluded.password_hash,
       is_active = 1,
+      role = excluded.role,
       updated_at = excluded.updated_at
   `,
-).run(username, hashPassword(password), now, now);
+).run(username, hashPassword(password), role, now, now);
 
-console.log(`User ${username} is ready in ${dbPath}`);
+console.log(`User ${username} (${role}) is ready in ${dbPath}`);
 
 function hashPassword(value) {
   const salt = randomBytes(16);

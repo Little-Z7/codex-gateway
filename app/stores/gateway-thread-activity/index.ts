@@ -99,6 +99,14 @@ export const useGatewayThreadActivityStore = defineStore("gateway-thread-activit
       [key]: {
         ...existing,
         ...summary,
+        // A preview/typed fallback already shown in lists is better than reverting to the raw id
+        // when a later upsert carries no name/preview yet.
+        title:
+          summary.title === summary.threadId &&
+          existing !== undefined &&
+          existing.title !== existing.threadId
+            ? existing.title
+            : summary.title,
         projectId: summary.projectId ?? existing?.projectId ?? null,
         cwd: summary.cwd ?? existing?.cwd ?? null,
         projectName: summary.projectName ?? existing?.projectName ?? null,

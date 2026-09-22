@@ -11,14 +11,14 @@ import {
 import { activeRemoteTurnId } from "@/stores/gateway/thread-turns/active-turn";
 import { requestTurnInterrupt } from "./transport";
 import { historyForThread } from "./history";
-import type { Translate } from "./types";
+import type { Translate, TranslateExists } from "./types";
 
-export async function interruptActiveTurn(t: Translate) {
+export async function interruptActiveTurn(t: Translate, te: TranslateExists) {
   const navigation = useGatewayNavigationStore();
   if (navigation.selectedHostId === null || navigation.selectedThreadId === null) {
     return;
   }
-  await interruptThreadTurn(t, {
+  await interruptThreadTurn(t, te, {
     hostId: navigation.selectedHostId,
     projectId: navigation.selectedProjectId,
     threadId: navigation.selectedThreadId,
@@ -27,6 +27,7 @@ export async function interruptActiveTurn(t: Translate) {
 
 export async function interruptThreadTurn(
   t: Translate,
+  te: TranslateExists,
   input: { hostId: number; threadId: string; projectId?: number | null },
 ) {
   const gateway = useGatewayBootstrapStore();
@@ -49,11 +50,14 @@ export async function interruptThreadTurn(
   try {
     await requestTurnInterrupt(input.hostId, input.threadId, turnId);
   } catch (error: unknown) {
-    gateway.setError(messageFromError(error, t("app.interruptTurnFailed"), errorMessageLabels(t)), {
-      hostId: input.hostId,
-      projectId,
-      threadId: input.threadId,
-    });
+    gateway.setError(
+      messageFromError(error, t("app.interruptTurnFailed"), errorMessageLabels(t, te)),
+      {
+        hostId: input.hostId,
+        projectId,
+        threadId: input.threadId,
+      },
+    );
   } finally {
     views.loading = false;
   }

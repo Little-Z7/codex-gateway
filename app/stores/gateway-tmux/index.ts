@@ -37,7 +37,7 @@ interface OpenTmuxPanelTarget {
 }
 
 export const useGatewayTmuxStore = defineStore("gateway-tmux", () => {
-  const t = useGatewayTranslator();
+  const { t } = useGatewayTranslator();
   const panelOpen = useAccountLocalStorage("tmux-panel-open", false);
   const active = ref<TmuxMonitor[]>([]);
   const history = ref<TmuxMonitor[]>([]);
@@ -225,7 +225,12 @@ export const useGatewayTmuxStore = defineStore("gateway-tmux", () => {
   function resetState() {
     sessionGeneration += 1;
     pendingSummary = null;
-    panelOpen.value = false;
+    // panelOpen is intentionally left untouched: it is an account-scoped preference persisted via
+    // useAccountLocalStorage (already namespaced per account, like gateway-host-metrics-panels'
+    // openScopes), not a runtime projection tied to the previous session's Host/Thread ids. This
+    // function also runs on every reload (app.vue's token watch fires with `immediate: true`), so
+    // clearing it here silently closed the tmux Dockview panel on every refresh even though the
+    // active-monitor badge and Dockview layout/active-panel state (also account-scoped) survived.
     active.value = [];
     history.value = [];
     loading.value = false;

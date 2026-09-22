@@ -3,50 +3,94 @@ import { useLocalStorage } from "@vueuse/core";
 
 export const AUTH_STORAGE_KEY = "codex-gateway-auth-token";
 
+export type GatewayUserRole = "admin" | "user";
+
 export const useAuthStore = defineStore("auth", () => {
   const token = ref("");
   const username = ref("");
+  const role = ref<GatewayUserRole>("user");
   const initialized = ref(false);
   const sessionEpoch = ref(0);
   const storedToken = useLocalStorage<string | null>(AUTH_STORAGE_KEY, null);
   const storedUsername = useLocalStorage<string | null>(`${AUTH_STORAGE_KEY}:username`, null);
+  const storedRole = useLocalStorage<GatewayUserRole | null>(`${AUTH_STORAGE_KEY}:role`, null);
 
   const isAuthenticated = computed(() => token.value !== "");
+  const isAdmin = computed(() => role.value === "admin");
+  const selfPasswordChangeAllowed = ref(true);
+  const displayName = ref("");
+  const mustChangePassword = ref(false);
 
-  watch([storedToken, storedUsername], ([nextToken, nextUsername]) => {
+  watch([storedToken, storedUsername, storedRole], ([nextToken, nextUsername, nextRole]) => {
     if (!initialized.value) return;
     // VueUse synchronizes useLocalStorage across same-origin tabs. Mirror that durable state into
     // the live session so logout/account switches advance sessionEpoch and cancel stale HTTP/RAF
     // work in every open Gateway tab without waiting for a refresh.
-    replaceSession(nextToken ?? "", nextUsername ?? "");
+    replaceSession(nextToken ?? "", nextUsername ?? "", normalizeRole(nextRole));
   });
 
   function hydrate() {
     if (!import.meta.client || initialized.value) {
       return;
     }
-    replaceSession(storedToken.value ?? "", storedUsername.value ?? "");
+    replaceSession(
+      storedToken.value ?? "",
+      storedUsername.value ?? "",
+      normalizeRole(storedRole.value),
+    );
     initialized.value = true;
+    // Tokens written before roles existed carry no stored role; fetch it once so isAdmin settles.
+    // refreshProfile also refreshes feature flags (e.g. self-service password change).
+    if (token.value !== "") {
+      void refreshProfile();
+    }
+  }
+
+  async function refreshProfile() {
+    if (token.value === "") return;
+    try {
+      const response = await $fetch<{
+        user: { role?: string; displayName?: string | null; mustChangePassword?: boolean };
+        features?: { selfPasswordChange?: boolean };
+      }>("/api/auth/me", {
+        headers: { authorization: `Bearer ${token.value}` },
+      });
+      role.value = normalizeRole(response.user.role);
+      storedRole.value = role.value;
+      displayName.value = (response.user.displayName ?? "").trim();
+      mustChangePassword.value = response.user.mustChangePassword === true;
+      selfPasswordChangeAllowed.value = response.features?.selfPasswordChange ?? true;
+    } catch {}
   }
 
   async function login(input: { username: string; password: string }) {
     const session = await $fetch<{
       token: string;
       expiresAt: string;
-      user: { id: number; username: string };
+      user: {
+        id: number;
+        username: string;
+        role?: GatewayUserRole;
+        displayName?: string | null;
+        mustChangePassword?: boolean;
+      };
     }>("/api/auth/login", {
       method: "POST",
       body: input,
     });
-    setSession(session.token, session.user.username);
+    setSession(session.token, session.user.username, normalizeRole(session.user.role));
+    displayName.value = (session.user.displayName ?? "").trim();
+    mustChangePassword.value = session.user.mustChangePassword === true;
+    if (mustChangePassword.value) selfPasswordChangeAllowed.value = true;
     return session;
   }
 
-  function setSession(nextToken: string, nextUsername: string) {
-    replaceSession(nextToken, nextUsername);
+  function setSession(nextToken: string, nextUsername: string, nextRole: GatewayUserRole = "user") {
+    replaceSession(nextToken, nextUsername, nextRole);
     initialized.value = true;
     storedToken.value = nextToken;
     storedUsername.value = nextUsername;
+    storedRole.value = nextRole;
   }
 
   async function logout() {
@@ -66,16 +110,22 @@ export const useAuthStore = defineStore("auth", () => {
   }
 
   function clearSession() {
-    replaceSession("", "");
+    replaceSession("", "", "user");
     initialized.value = true;
     storedToken.value = null;
     storedUsername.value = null;
+    storedRole.value = null;
   }
 
-  function replaceSession(nextToken: string, nextUsername: string) {
+  function replaceSession(nextToken: string, nextUsername: string, nextRole: GatewayUserRole) {
     if (token.value !== nextToken) sessionEpoch.value += 1;
     token.value = nextToken;
     username.value = nextUsername;
+    role.value = nextToken === "" ? "user" : nextRole;
+    if (nextToken === "") {
+      displayName.value = "";
+      mustChangePassword.value = false;
+    }
   }
 
   function isCurrentSession(epoch: number) {
@@ -85,13 +135,23 @@ export const useAuthStore = defineStore("auth", () => {
   return {
     token,
     username,
+    displayName,
+    mustChangePassword,
+    role,
+    isAdmin,
+    selfPasswordChangeAllowed,
     initialized,
     sessionEpoch,
     isAuthenticated,
     hydrate,
+    refreshProfile,
     login,
     logout,
     clearSession,
     isCurrentSession,
   };
 });
+
+function normalizeRole(value: unknown): GatewayUserRole {
+  return value === "admin" ? "admin" : "user";
+}

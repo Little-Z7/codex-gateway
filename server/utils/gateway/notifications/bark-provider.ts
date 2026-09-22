@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import type { BarkNotificationSettings } from "~~/shared/types";
 import type { ServerNotification } from "~~/shared/types";
 import { firstNonEmptyString } from "~~/shared/utils/strings";
+import { DEFAULT_BARK_SERVER_URL } from "~~/shared/config";
+import { globalBarkServerUrl } from "../settings/model-provider";
 
 const BARK_REQUEST_TIMEOUT_MS = 10_000;
 const MAX_BARK_ERROR_BODY_LENGTH = 500;
@@ -41,7 +43,13 @@ async function sendBarkRequest(url: URL) {
 }
 
 function buildBarkUrl(settings: BarkNotificationSettings, notification: ServerNotification) {
-  const base = settings.serverUrl.replace(/\/+$/, "");
+  // A user-level serverUrl equal to the built-in default counts as "unset": the admin-level
+  // notification setting then supplies the effective Bark server.
+  const effectiveServerUrl =
+    settings.serverUrl === DEFAULT_BARK_SERVER_URL
+      ? (globalBarkServerUrl() ?? DEFAULT_BARK_SERVER_URL)
+      : settings.serverUrl;
+  const base = effectiveServerUrl.replace(/\/+$/, "");
   const url = new URL(
     `${base}/${encodeURIComponent(settings.deviceKey)}/${encodeURIComponent(notification.title)}/${encodeURIComponent(notification.body)}`,
   );

@@ -28,6 +28,7 @@ export function rememberOpenThread(threadId: string) {
     hostId: navigation.selectedHostId,
     projectId: navigation.selectedProjectId,
     threadId,
+    draft: false,
   });
 }
 
@@ -42,6 +43,7 @@ export function syncSelectedRoute(options: { replace?: boolean } = {}) {
       hostId: navigation.selectedHostId,
       projectId: navigation.selectedProjectId,
       threadId: navigation.selectedThreadId,
+      draft: navigation.newThreadDraft,
     },
     options,
   );
@@ -51,6 +53,7 @@ export function activateThreadView(hostId: number, projectId: number | null) {
   const navigation = useGatewayNavigationStore();
   navigation.selectedHostId = hostId;
   navigation.selectedProjectId = projectId;
+  navigation.newThreadDraft = false;
   clearCurrentThreadView();
 }
 

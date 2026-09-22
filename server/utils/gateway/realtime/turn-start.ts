@@ -8,11 +8,13 @@ import {
   fileReferencesAdditionalContext,
   validateProjectFileReferences,
 } from "../project-files/project-file-references";
+import { assertBudgetAllowsNewTurn } from "../usage/budget-store";
 
 export type RealtimeTurnStartMessage = Extract<RealtimeClientMessage, { type: "turn.start" }>;
 
 export async function startTurnFromRealtime(message: RealtimeTurnStartMessage) {
   const input = turnStartSchema.parse(message);
+  assertBudgetAllowsNewTurn();
   const host = requireRecord(hostStore.getWithSecret(input.hostId), "Host not found");
   const project = requireRecord(projectStore.get(input.projectId), "Project not found");
   const references = await validateProjectFileReferences(host, project, input.references);

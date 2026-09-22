@@ -24,7 +24,7 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      testIgnore: /.*\.mobile\.spec\.ts/,
+      testIgnore: /.*\.mobile\.spec\.ts|zz-.*\.spec\.ts/,
       use: { ...devices["Desktop Chrome"] },
     },
     {
@@ -37,6 +37,13 @@ export default defineConfig({
       testMatch: /.*\.mobile\.spec\.ts/,
       grep: /virtualizes a large running turn in one agent timeline|mobile touch scrolling stays anchored while Agent output streams|mobile momentum scrolling stays anchored after touchend while output streams/,
       use: { ...devices["iPhone 13"] },
+    },
+    {
+      // Restarting gateway-under-test orphans the runner's shared network namespace, so the
+      // restart spec must run after every suite that still needs HTTP access to the gateway.
+      name: "post-restart",
+      testMatch: /zz-.*\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"] },
     },
   ],
 });

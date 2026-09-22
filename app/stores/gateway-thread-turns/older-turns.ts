@@ -9,10 +9,14 @@ import { setSelectedThreadHistory } from "@/stores/gateway/thread-open/thread-vi
 import { errorMessageLabels, messageFromError } from "@/stores/gateway/thread-utils/identity";
 import { isStaleThreadCursorError } from "./stale-cursor";
 import { requestThreadTurnsPage } from "./transport";
-import type { Translate } from "./types";
+import type { Translate, TranslateExists } from "./types";
 import { captureSessionEpoch } from "@/utils/session-epoch";
 
-export async function loadOlderTurns(t: Translate, options: { limit?: number } = {}) {
+export async function loadOlderTurns(
+  t: Translate,
+  te: TranslateExists,
+  options: { limit?: number } = {},
+) {
   const sessionIsCurrent = captureSessionEpoch();
   const gateway = useGatewayBootstrapStore();
   const navigation = useGatewayNavigationStore();
@@ -72,7 +76,7 @@ export async function loadOlderTurns(t: Translate, options: { limit?: number } =
       return;
     }
     gateway.setError(
-      messageFromError(error, t("app.loadOlderTurnsFailed"), errorMessageLabels(t)),
+      messageFromError(error, t("app.loadOlderTurnsFailed"), errorMessageLabels(t, te)),
       { hostId, projectId, threadId },
     );
   } finally {

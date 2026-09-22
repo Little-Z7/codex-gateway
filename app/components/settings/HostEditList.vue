@@ -3,6 +3,7 @@ import { CheckIcon, ChevronDownIcon, ChevronRightIcon, ServerIcon } from "@lucid
 import { computed, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import type { HostRecord } from "~~/shared/types";
+import { Badge } from "@codex-gateway/ui/badge";
 import { Button } from "@codex-gateway/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@codex-gateway/ui/collapsible";
 import HostConnectionFields from "./host-connection/HostConnectionFields.vue";
@@ -16,8 +17,8 @@ import { errorMessageLabels, messageFromError } from "@/stores/gateway/thread-ut
 
 const catalog = useGatewayCatalogStore();
 const { hosts } = storeToRefs(catalog);
-const { t } = useI18n();
-const errorLabels = computed(() => errorMessageLabels(t));
+const { t, te } = useI18n();
+const errorLabels = computed(() => errorMessageLabels(t, te));
 const expandedHostId = ref<number | null>(hosts.value[0]?.id ?? null);
 const forms = ref<Record<number, HostConnectionFormValue>>({});
 const savingHostId = ref<number | null>(null);
@@ -97,24 +98,45 @@ async function saveHost(host: HostRecord) {
             <span class="block truncate text-sm">{{ entry.host.name }}</span>
             <span class="block truncate text-xs text-ink-muted">{{ entry.host.sshHost }}</span>
           </span>
+          <Badge
+            v-if="entry.host.managed"
+            variant="secondary"
+            class="shrink-0"
+            :data-testid="`managed-badge-${entry.host.id}`"
+          >
+            {{ t("app.managedHost") }}
+          </Badge>
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent class="space-y-3 border-t border-hairline p-3">
-        <HostConnectionFields v-model="entry.form" />
-        <div
-          v-if="saveErrors[entry.host.id]"
-          class="whitespace-pre-line rounded-md bg-destructive/10 p-2 text-xs text-destructive"
-        >
-          {{ saveErrors[entry.host.id] }}
-        </div>
-        <Button
-          class="w-full"
-          :disabled="savingHostId === entry.host.id || !entry.form.name || !entry.form.sshHost"
-          @click="saveHost(entry.host)"
-        >
-          <CheckIcon class="size-4" />
-          {{ t("app.saveHost") }}
-        </Button>
+        <template v-if="entry.host.managed">
+          <p class="text-xs text-ink-secondary">{{ t("app.managedHostReadonly") }}</p>
+          <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+            <dt class="text-ink-muted">{{ t("app.sshHost") }}</dt>
+            <dd class="truncate">{{ entry.host.sshHost }}</dd>
+            <dt v-if="entry.host.username" class="text-ink-muted">{{ t("app.user") }}</dt>
+            <dd v-if="entry.host.username" class="truncate">{{ entry.host.username }}</dd>
+            <dt v-if="entry.host.port" class="text-ink-muted">{{ t("app.port") }}</dt>
+            <dd v-if="entry.host.port">{{ entry.host.port }}</dd>
+          </dl>
+        </template>
+        <template v-else>
+          <HostConnectionFields v-model="entry.form" />
+          <div
+            v-if="saveErrors[entry.host.id]"
+            class="whitespace-pre-line rounded-md bg-destructive/10 p-2 text-xs text-destructive"
+          >
+            {{ saveErrors[entry.host.id] }}
+          </div>
+          <Button
+            class="w-full"
+            :disabled="savingHostId === entry.host.id || !entry.form.name || !entry.form.sshHost"
+            @click="saveHost(entry.host)"
+          >
+            <CheckIcon class="size-4" />
+            {{ t("app.saveHost") }}
+          </Button>
+        </template>
       </CollapsibleContent>
     </Collapsible>
   </section>

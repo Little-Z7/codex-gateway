@@ -9,22 +9,50 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        CODEX_GATEWAY_VERSION: ${CODEX_GATEWAY_VERSION:-dev}
     container_name: codex-gateway
     restart: unless-stopped
     logging: *default-logging
     mem_limit: 1g
     memswap_limit: 1g
-    expose:
-      - "3000"
+    ports:
+      - "${CODEX_GATEWAY_PORT:-3000}:3000"
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 3000
-      BROWSER_PREVIEW_DOMAIN: ${BROWSER_PREVIEW_DOMAIN:-cloudawn.top}
       CODEX_GATEWAY_DB_PATH: /data/codex-gateway.db
       CODEX_GATEWAY_CONFIG_SECRET: ${CODEX_GATEWAY_CONFIG_SECRET:?CODEX_GATEWAY_CONFIG_SECRET is required}
+      CODEX_GATEWAY_PROVISIONING: ${CODEX_GATEWAY_PROVISIONING:-docker}
+      CODEX_GATEWAY_USER_IMAGE: ${CODEX_GATEWAY_USER_IMAGE:-codex-gateway-user:latest}
+      CODEX_GATEWAY_DOCKER_NETWORK: ${CODEX_GATEWAY_DOCKER_NETWORK:-codex-gateway}
+      CODEX_GATEWAY_DOCKER_SOCKET: ${CODEX_GATEWAY_DOCKER_SOCKET:-/var/run/docker.sock}
+      CODEX_GATEWAY_SHARED_AUTH_DIR: ${CODEX_GATEWAY_SHARED_AUTH_DIR:?CODEX_GATEWAY_SHARED_AUTH_DIR is required}
+      CODEX_GATEWAY_SHARED_AUTH_MOUNT: /srv/codex-auth
+      CODEX_GATEWAY_SHARED_DATA_DIR: ${CODEX_GATEWAY_SHARED_DATA_DIR:-}
+      CODEX_GATEWAY_USER_CONTAINER_PREFIX: ${CODEX_GATEWAY_USER_CONTAINER_PREFIX:-codex-user-}
+      CODEX_GATEWAY_USER_CONTAINER_MEMORY: ${CODEX_GATEWAY_USER_CONTAINER_MEMORY:-}
+      CODEX_GATEWAY_USER_CONTAINER_CPUS: ${CODEX_GATEWAY_USER_CONTAINER_CPUS:-}
+      CODEX_GATEWAY_SANDBOX_MODE: ${CODEX_GATEWAY_SANDBOX_MODE:-danger-full-access}
+      CODEX_GATEWAY_MODEL_PROVIDER: ${CODEX_GATEWAY_MODEL_PROVIDER:-openai}
+      CODEX_GATEWAY_MODEL_PROVIDER_ID: ${CODEX_GATEWAY_MODEL_PROVIDER_ID:-ollama-cloud}
+      CODEX_GATEWAY_MODEL_PROVIDER_NAME: ${CODEX_GATEWAY_MODEL_PROVIDER_NAME:-}
+      CODEX_GATEWAY_MODEL_PROVIDER_BASE_URL: ${CODEX_GATEWAY_MODEL_PROVIDER_BASE_URL:-}
+      CODEX_GATEWAY_MODEL_PROVIDER_API_KEY: ${CODEX_GATEWAY_MODEL_PROVIDER_API_KEY:-}
+      CODEX_GATEWAY_MODEL_PROVIDER_WIRE_API: ${CODEX_GATEWAY_MODEL_PROVIDER_WIRE_API:-responses}
+      CODEX_GATEWAY_MODEL: ${CODEX_GATEWAY_MODEL:-}
+      CODEX_GATEWAY_WEB_SEARCH: ${CODEX_GATEWAY_WEB_SEARCH:-}
+      # Optional outbound HTTP(S) proxy for the Gateway's own network calls (Codex release
+      # downloads, npm version checks, Bark push) and for Codex inside user containers (model API
+      # calls). Unset by default; see deploy/gateway-entrypoint.sh and .env.example.
+      CODEX_GATEWAY_OUTBOUND_PROXY: ${CODEX_GATEWAY_OUTBOUND_PROXY:-}
+      CODEX_GATEWAY_OUTBOUND_NO_PROXY: ${CODEX_GATEWAY_OUTBOUND_NO_PROXY:-}
     volumes:
       - ./data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${CODEX_GATEWAY_SHARED_AUTH_DIR:?CODEX_GATEWAY_SHARED_AUTH_DIR is required}:/srv/codex-auth:ro
+      - ./deploy/user-container:/app/deploy/user-container:ro
     # Keep liveness probes side-effect free. Nitro owns periodic GC so probe retries or Docker
     # daemon pauses cannot change application memory lifecycle.
     healthcheck:
@@ -40,8 +68,21 @@ services:
       retries: 3
       start_period: 20s
     networks:
-      - web-common
+      - codex-gateway
+
+  # Build-only service: produces the user workspace image. User containers themselves are
+  # created by the Gateway provisioner at runtime, never by compose up.
+  codex-gateway-user:
+    image: ${CODEX_GATEWAY_USER_IMAGE:-codex-gateway-user:latest}
+    build:
+      context: ./deploy/user-container
+      args:
+        CODEX_CLI_VERSION: ${CODEX_CLI_VERSION:?CODEX_CLI_VERSION is required}
+        USER_UID: ${USER_UID:-1000}
+        USER_GID: ${USER_GID:-1000}
+    profiles:
+      - build-only
 
 networks:
-  web-common:
-    external: true
+  codex-gateway:
+    name: codex-gateway

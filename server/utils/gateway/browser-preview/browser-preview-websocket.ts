@@ -1,27 +1,51 @@
-import type { Message, Peer } from "crossws";
-import { browserPreviewManager } from "./browser-preview-manager";
+import type { IncomingMessage } from "node:http";
+import type { Duplex } from "node:stream";
+import WebSocket, { WebSocketServer, type RawData } from "ws";
+import { browserPreviewManager, type BrowserPreviewSession } from "./browser-preview-manager";
 import { readPreviewCookie } from "./browser-preview-proxy";
 import { browserPreviewUpstreamConnector } from "./browser-preview-upstream-connector";
-import { BrowserPreviewWebSocketBridge } from "./browser-preview-websocket-bridge";
+import {
+  binaryFrame,
+  BrowserPreviewWebSocketBridge,
+  textFrame,
+  type BrowserPreviewDownstream,
+  type BrowserPreviewFrame,
+} from "./browser-preview-websocket-bridge";
 
-interface BrowserPreviewPeerContext {
-  bridge?: BrowserPreviewWebSocketBridge;
-}
+/**
+ * Browser upgrades outside the Gateway UI prefix are preview traffic routed by cookie. `ws` owns
+ * the HTTP upgrade handshake directly; the negotiated socket is then adapted to the small
+ * downstream interface the bridge needs so the same backpressure logic works without crossws.
+ */
+const previewSockets = new WebSocketServer({
+  noServer: true,
+  handleProtocols: (protocols) => protocols.values().next().value ?? false,
+});
 
-const previewPeerContexts = new WeakMap<Peer, BrowserPreviewPeerContext>();
-
-export async function openBrowserPreviewWebSocket(peer: Peer) {
-  const request = peer.request;
-  const requestUrl = browserPreviewWebSocketUrl(request);
-  const hostname = requestUrl.hostname.toLowerCase();
-  const session = browserPreviewManager.resolveWebSocket(
-    hostname,
-    readPreviewCookie(request.headers.get("cookie") ?? undefined),
-  );
+export function handleBrowserPreviewUpgrade(
+  request: IncomingMessage,
+  socket: Duplex,
+  head: Buffer,
+) {
+  const session = browserPreviewManager.resolve(readPreviewCookie(request.headers.cookie));
   if (session === null) {
-    peer.close(1008, "Browser preview session expired");
+    rejectUpgrade(socket);
     return;
   }
+  previewSockets.handleUpgrade(request, socket, head, (ws) => {
+    openBrowserPreviewSocket(session, request, ws);
+  });
+}
+
+function openBrowserPreviewSocket(
+  session: BrowserPreviewSession,
+  request: IncomingMessage,
+  ws: WebSocket,
+) {
+  const requestUrl = new URL(
+    request.url ?? "/",
+    `http://${request.headers.host ?? "preview.invalid"}`,
+  );
 
   console.info("[browser-preview] websocket opening", {
     sessionId: session.sessionId,
@@ -29,21 +53,19 @@ export async function openBrowserPreviewWebSocket(peer: Peer) {
     path: requestUrl.pathname,
   });
 
-  const protocols = request.headers
-    .get("sec-websocket-protocol")
-    ?.split(",")
+  const protocols = (request.headers["sec-websocket-protocol"] ?? "")
+    .split(",")
     .map((value) => value.trim())
     .filter((value) => value !== "");
-  const context = previewPeerContext(peer);
-  context.bridge?.closeFromPeer();
-  context.bridge = new BrowserPreviewWebSocketBridge({
-    peer,
+  const downstream = new WsDownstream(ws);
+  const bridge = new BrowserPreviewWebSocketBridge({
+    downstream,
     connectUpstream: async () => {
       const upstream = await browserPreviewUpstreamConnector.openWebSocket(
         session,
         `${requestUrl.pathname}${requestUrl.search}`,
-        protocols,
-        websocketHeaders(session.target.origin, request.headers),
+        protocols.length > 0 ? protocols : undefined,
+        websocketHeaders(session.target.origin, request),
       );
       upstream.once("open", () => {
         console.info("[browser-preview] websocket upstream connected", {
@@ -59,49 +81,81 @@ export async function openBrowserPreviewWebSocket(peer: Peer) {
       });
     },
   });
-  context.bridge.open();
+  ws.on("message", (data: RawData, isBinary) => {
+    const frame: BrowserPreviewFrame = isBinary ? binaryFrame(data) : textFrame(data);
+    bridge.sendFromPeer(frame);
+  });
+  ws.on("close", () => bridge.closeFromPeer());
+  ws.on("error", () => bridge.closeFromPeer());
+  bridge.open();
 }
 
-export function browserPreviewWebSocketUrl(request: { url: string; headers: Headers }) {
-  const headerHost = request.headers.get("host") ?? "preview.invalid";
-  const requestUrl = new URL(request.url, `http://${headerHost}`);
-  const forwardedPath =
-    request.headers.get("x-browser-preview-path") ?? requestUrl.searchParams.get("path");
-  return forwardedPath === null || forwardedPath === ""
-    ? requestUrl
-    : new URL(forwardedPath, `http://${headerHost}`);
+function rejectUpgrade(socket: Duplex) {
+  socket.write(
+    "HTTP/1.1 401 Unauthorized\r\nconnection: close\r\ncontent-type: text/plain\r\n\r\nBrowser preview session expired. Reopen the Browser panel.",
+  );
+  socket.destroy();
 }
 
-export function forwardBrowserPreviewWebSocketMessage(peer: Peer, message: Message) {
-  previewPeerContext(peer).bridge?.sendFromPeer(message);
-}
+class WsDownstream implements BrowserPreviewDownstream {
+  constructor(private readonly ws: WebSocket) {}
 
-export function closeBrowserPreviewWebSocket(peer: Peer) {
-  const context = previewPeerContext(peer);
-  context.bridge?.closeFromPeer();
-  context.bridge = undefined;
-}
-
-function previewPeerContext(peer: Peer) {
-  let context = previewPeerContexts.get(peer);
-  if (context === undefined) {
-    context = {};
-    previewPeerContexts.set(peer, context);
+  get bufferedAmount() {
+    return this.ws.bufferedAmount;
   }
-  return context;
+
+  send(frame: BrowserPreviewFrame) {
+    this.ws.send(frame);
+  }
+
+  close(code?: number, reason?: string) {
+    this.ws.close(code, reason === undefined || reason === "" ? undefined : reason);
+  }
+
+  waitForDrain({ threshold, signal }: { threshold: number; signal: AbortSignal }) {
+    // ws does not expose a public drain signal on the negotiated socket, so congestion waits poll
+    // bufferedAmount; the bridge only calls this while the queue is already backing up.
+    return new Promise<void>((resolve, reject) => {
+      const check = () => {
+        if (signal.aborted || this.ws.readyState >= WebSocket.CLOSING) {
+          cleanup();
+          reject(new Error("Browser WebSocket drain aborted"));
+          return;
+        }
+        if (this.ws.bufferedAmount <= threshold) {
+          cleanup();
+          resolve();
+        }
+      };
+      const onAbort = () => {
+        cleanup();
+        reject(new Error("Browser WebSocket drain aborted"));
+      };
+      const interval = setInterval(check, 20);
+      const cleanup = () => {
+        clearInterval(interval);
+        this.ws.off("close", check);
+        this.ws.off("error", check);
+        signal.removeEventListener("abort", onAbort);
+      };
+      this.ws.on("close", check);
+      this.ws.on("error", check);
+      signal.addEventListener("abort", onAbort);
+      check();
+    });
+  }
 }
 
-function websocketHeaders(targetOrigin: string, incoming: Headers) {
+function websocketHeaders(targetOrigin: string, incoming: IncomingMessage) {
   const headers: Record<string, string> = {};
-  const cookie = incoming
-    .get("cookie")
+  const cookie = incoming.headers.cookie
     ?.split(";")
     .map((value) => value.trim())
     .filter((value) => !/^(__Host-)?gateway-preview=/.test(value))
     .join("; ");
   if (cookie !== undefined && cookie !== "") headers.cookie = cookie;
   headers.origin = targetOrigin;
-  const userAgent = incoming.get("user-agent");
-  if (userAgent !== null && userAgent !== "") headers["user-agent"] = userAgent;
+  const userAgent = incoming.headers["user-agent"];
+  if (typeof userAgent === "string" && userAgent !== "") headers["user-agent"] = userAgent;
   return headers;
 }

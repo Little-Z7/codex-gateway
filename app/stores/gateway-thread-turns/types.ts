@@ -1,6 +1,7 @@
 import type { ThreadHistoryTurn } from "~~/shared/thread-history/types";
 
 export type Translate = (key: string, values?: Record<string, unknown>) => string;
+export type TranslateExists = (key: string) => boolean;
 
 export const MAX_SERVER_OVERLOADED_RETRIES = 5;
 

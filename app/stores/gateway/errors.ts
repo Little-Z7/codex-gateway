@@ -99,13 +99,21 @@ export function misalignmentDetailsFromNotification(
   };
 }
 
+export interface LocalizedErrorResolver {
+  (code: string): string | null;
+}
+
 export function unknownGatewayErrorFromError(
   error: unknown,
   fallback: string,
   labels: ErrorMessageLabels,
 ) {
   const payload = gatewayErrorPayload(error);
-  const message = gatewayErrorMessage(error, fallback);
+  const localized =
+    payload.code !== undefined && labels.errorForCode !== undefined
+      ? labels.errorForCode(payload.code)
+      : null;
+  const message = localized ?? gatewayErrorMessage(error, fallback);
   const details = payload?.details;
   if (details === null || typeof details !== "object") {
     return new UnknownGatewayDisplayError(message);

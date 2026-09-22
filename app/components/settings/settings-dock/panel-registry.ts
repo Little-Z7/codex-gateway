@@ -6,6 +6,10 @@ interface SettingsPanelPolicy {
 }
 
 export const settingsPanelRegistry = {
+  account: {
+    component: "SettingsDockAccountPanel",
+    titleKey: "app.accountSettings",
+  },
   appearance: {
     component: "SettingsDockAppearancePanel",
     titleKey: "app.appearanceSettings",
@@ -22,11 +26,17 @@ export const settingsPanelRegistry = {
     component: "SettingsDockNotificationPanel",
     titleKey: "app.notificationSettings",
   },
+  users: {
+    component: "SettingsDockUsersPanel",
+    titleKey: "app.adminUsersTitle",
+  },
 } satisfies Record<SettingsPanelKind, SettingsPanelPolicy>;
 
 export const settingsPanelKinds = [
+  "account",
   "appearance",
   "config",
   "hosts",
   "notifications",
+  "users",
 ] as const satisfies readonly SettingsPanelKind[];

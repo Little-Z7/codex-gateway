@@ -45,15 +45,16 @@ test("uses the mobile layout with hidden sidebar and usable composer shell", asy
 
   await expect(page.getByTestId("mobile-layout")).toBeVisible();
   await expect(page.getByTestId("desktop-layout")).toBeHidden();
-  await expect(page.getByTestId("settings-toggle")).toBeHidden();
+  await expect(page.getByTestId("sidebar-user-menu")).toBeHidden();
 
   await page.getByTestId("mobile-sidebar-toggle").click();
-  await expect(page.getByTestId("settings-toggle")).toBeVisible();
+  await expect(page.getByTestId("sidebar-user-menu")).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByTestId("settings-toggle")).toBeHidden();
+  await expect(page.getByTestId("sidebar-user-menu")).toBeHidden();
 
   await expect(page.getByTestId("chat-scroll-area")).toBeVisible();
-  await expect(page.getByText("先选择一个项目")).toBeVisible();
+  // The e2e admin has no workspace hosts yet, so the pane shows the no-hosts empty state.
+  await expect(page.getByTestId("no-hosts-empty")).toBeVisible();
 });
 
 test("shows effort and compact context usage without mobile approval controls", async ({
@@ -158,7 +159,9 @@ test("gives the Goal objective most of the mobile details dialog", async ({ page
   await installSelectedThreadGoalSubmitMock(page, { hostId: 1, threadId });
 
   const longObjective = "移动端目标正文需要保留足够的阅读空间。".repeat(40);
-  const composer = page.getByPlaceholder("输入后续修改要求");
+  const composer = page.getByPlaceholder(
+    /询问任何问题|继续对话|Ask anything|Continue the conversation/,
+  );
   await composer.fill(`/goal ${longObjective}`);
   await page.keyboard.press("Enter");
   await page.getByTestId("composer-goal-summary").click();
@@ -265,6 +268,12 @@ test("virtualizes a large running turn in one agent timeline", async ({ page }, 
   const mountedRows = timeline.locator("[data-row-key]");
   await expect(page.getByTestId("virtual-intermediate-items")).toHaveCount(0);
   await expect.poll(() => mountedRows.count()).toBeLessThan(30);
+
+  // Intermediate work renders inside a collapsed group; expand it so the command and
+  // file-change rows mount.
+  const intermediateToggle = page.getByTestId("intermediate-steps").first();
+  await expect(intermediateToggle).toHaveAttribute("data-state", "closed");
+  await intermediateToggle.click();
 
   // Use the final row as a stable lifecycle probe. Deep estimated rows can move while WebKit
   // replaces preceding estimates, which is expected virtualizer behavior rather than a leak.
@@ -583,7 +592,7 @@ test("opens sidebar context actions with long press on mobile", async ({
 
   if (
     !(await page
-      .getByTestId("settings-toggle")
+      .getByTestId("sidebar-user-menu")
       .isVisible()
       .catch(() => false))
   ) {
@@ -591,27 +600,34 @@ test("opens sidebar context actions with long press on mobile", async ({
   }
   await expect(page.getByTestId(`project-button-${project.id}`)).toBeVisible();
   await longPress(page, page.getByTestId(`project-button-${project.id}`));
-  await page.getByRole("menuitem", { name: /新建/ }).click();
+  await page.getByRole("menuitem", { name: /新建|新对话|New/ }).click();
+  // 新对话 opens a front-end draft; the app-server thread only exists after the first send.
+  // The sidebar drawer may still overlay the composer on mobile, so dispatch the send click
+  // directly instead of hitting the overlay at the button's coordinates.
+  await page
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
+    .fill("用一句话回复：ok");
+  await page.getByTestId("send-turn-button").dispatchEvent("click");
   const threadId = await waitForSelectedThreadId(page);
 
   await page.getByTestId("mobile-sidebar-toggle").click();
   await page.getByTestId(`project-button-${project.id}`).click();
   await expect(page.getByTestId("project-thread-list")).toBeVisible();
-  await expect(page.getByTestId("open-tmux-mobile-button")).toBeVisible();
-  await expect(page.getByTestId("open-host-monitor-mobile-button")).toBeVisible();
-  await page.getByTestId("open-host-monitor-mobile-button").click();
+  await expect(page.getByTestId("open-tmux-button")).toBeVisible();
+  await expect(page.getByTestId("open-host-monitor-button")).toBeVisible();
+  await page.getByTestId("open-host-monitor-button").click();
   await expect(page.getByTestId("host-metrics-panel")).toBeVisible();
   await page.getByRole("tab", { name: /Agent/ }).click();
-  await page.getByTestId("open-terminal-mobile-button").click();
+  await page.getByTestId("open-terminal-button").click();
   await expect(page.getByTestId("terminal-panel")).toBeVisible({ timeout: 30_000 });
   await page.getByRole("tab", { name: /Agent/ }).click();
   await expect(page.getByTestId("project-thread-list")).toBeVisible();
-  const threadButton = page.getByTestId(`project-thread-row-${threadId}`);
+  await page.getByTestId("mobile-sidebar-toggle").click();
+  const threadButton = page.getByTestId(`thread-button-${threadId}`);
   await expect(threadButton).toBeVisible({ timeout: 30_000 });
 
   await longPress(page, threadButton);
   await page.getByRole("menuitem", { name: /置顶/ }).click();
-  await page.getByTestId("mobile-sidebar-toggle").click();
   const pinnedThread = page.getByTestId(`pinned-thread-button-${threadId}`);
   await expect(pinnedThread).toBeVisible();
 
@@ -694,7 +710,8 @@ test("opens and closes the subagent side panel on mobile", async ({ page }) => {
     },
   });
 
-  await openIntermediateSteps(page);
+  // The seeded turn only contains a subAgentActivity item, which stays inline — there is no
+  // intermediate-steps group to open here.
   await page.getByTestId("open-subagent-panel").click();
   const panel = page.getByTestId("workspace-subagent-panel");
   await expect(panel).toBeVisible();
@@ -814,15 +831,6 @@ printf '%s\n' '# Mobile File Workspace' 'Rendered from the remote tree.' > ${she
   await page.getByRole("tab", { name: /变更/ }).click();
   await expect(page.getByText("当前工作区不在 Git 仓库中", { exact: true })).toBeVisible();
 });
-
-async function openIntermediateSteps(page: Page) {
-  const toggle = page.getByRole("button", { name: /中间过程/ }).first();
-  await expect(toggle).toBeVisible();
-  if ((await toggle.getAttribute("data-state")) !== "open") {
-    await toggle.click();
-  }
-  await expect(toggle).toHaveAttribute("data-state", "open");
-}
 
 async function createConfiguredHostAndProject(
   page: Page,

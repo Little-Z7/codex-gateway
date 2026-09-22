@@ -56,9 +56,11 @@ export function createProjectActions() {
   return {
     async selectProject(projectId: number) {
       const navigation = useGatewayNavigationStore();
+      const catalog = useGatewayCatalogStore();
       clearThreadSelection();
       navigation.selectedProjectId = projectId;
       writeGatewayRouteSelection({ hostId: navigation.selectedHostId, projectId, threadId: null });
+      void catalog.ensureSelectedHostModels();
       await navigation.listThreads();
     },
 
@@ -72,17 +74,26 @@ export function createProjectActions() {
 
     async listModels() {
       const catalog = useGatewayCatalogStore();
-      const hostId = useGatewayNavigationStore().selectedHostId;
-      if (hostId === null) {
+      const navigation = useGatewayNavigationStore();
+      const hostId = navigation.selectedHostId;
+      // The top-bar picker is disabled until a project is selected, so nothing can use a model
+      // list fetched without one — skip the app-server call entirely in that state.
+      if (hostId === null || navigation.selectedProjectId === null) {
         catalog.models = [];
         catalog.modelsHostId = null;
+        catalog.loadingModels = false;
         return;
       }
       if (pendingModelRequest?.hostId === hostId && pendingModelRequest.sessionIsCurrent())
         return pendingModelRequest.promise;
       const sessionIsCurrent = captureSessionEpoch();
       const promise = loadModels(hostId).finally(() => {
-        if (pendingModelRequest?.promise === promise) pendingModelRequest = null;
+        if (pendingModelRequest?.promise === promise) {
+          pendingModelRequest = null;
+          // The inner finally only clears the flag when the same host is still selected;
+          // a host switch/deselect mid-load would otherwise leave the spinner stuck.
+          if (sessionIsCurrent()) catalog.loadingModels = false;
+        }
       });
       pendingModelRequest = { hostId, promise, sessionIsCurrent };
       return promise;

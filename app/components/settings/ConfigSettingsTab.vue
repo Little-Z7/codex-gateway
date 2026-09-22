@@ -3,13 +3,15 @@ import { ClipboardPasteIcon, RefreshCwIcon } from "@lucide/vue";
 import { computed, onMounted, ref } from "vue";
 import { Button } from "@codex-gateway/ui/button";
 import ConfigJsonEditor from "@/components/settings/ConfigJsonEditor.vue";
+import { useAuthStore } from "@/stores/auth";
 import { useGatewayConfigStore } from "@/stores/gateway-config";
 import { errorMessageLabels, messageFromError } from "@/stores/gateway/thread-utils/identity";
 
 const emit = defineEmits<{ close: [] }>();
+const auth = useAuthStore();
 const store = useGatewayConfigStore();
-const { t } = useI18n();
-const errorLabels = computed(() => errorMessageLabels(t));
+const { t, te } = useI18n();
+const errorLabels = computed(() => errorMessageLabels(t, te));
 const configText = ref(store.exportConfigText());
 const configError = ref("");
 
@@ -46,7 +48,7 @@ async function importConfig() {
         <RefreshCwIcon class="size-4" />
         {{ t("app.refreshConfig") }}
       </Button>
-      <Button :disabled="!configText.trim()" @click="importConfig">
+      <Button v-if="auth.isAdmin" :disabled="!configText.trim()" @click="importConfig">
         <ClipboardPasteIcon class="size-4" />
         {{ t("app.importConfig") }}
       </Button>

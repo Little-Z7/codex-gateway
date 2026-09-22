@@ -33,6 +33,8 @@ COPY app ./app
 RUN pnpm exec nuxt build --logLevel silent
 
 FROM node:${NODE_VERSION} AS runner
+ARG CODEX_GATEWAY_VERSION=dev
+ENV CODEX_GATEWAY_VERSION=$CODEX_GATEWAY_VERSION
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3000
@@ -42,8 +44,15 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=build /app/.output ./.output
 COPY --from=build /app/scripts ./scripts
+# create-user.mjs loads the shared schema through Node's built-in type stripping; the compiled
+# .output does not ship .ts sources, so copy the single file it needs.
+COPY --from=build /app/server/utils/gateway/storage/schema.ts ./server/utils/gateway/storage/schema.ts
+COPY deploy/gateway-entrypoint.sh ./deploy/gateway-entrypoint.sh
+RUN chmod +x ./deploy/gateway-entrypoint.sh
 EXPOSE 3000
-ENTRYPOINT ["/usr/bin/tini", "--"]
+# gateway-entrypoint.sh only translates CODEX_GATEWAY_OUTBOUND_PROXY into the env Node needs for
+# outbound fetch() calls (see that file); it is a no-op passthrough when unset.
+ENTRYPOINT ["/usr/bin/tini", "--", "/app/deploy/gateway-entrypoint.sh"]
 # The 1 GiB container also hosts SSH/TLS/native buffers. Keep V8 old-space bounded to leave room
 # for those allocations, and expose GC only for Nitro's five-minute housekeeping service.
 CMD ["node", "--expose-gc", "--max-old-space-size=512", ".output/server/index.mjs"]

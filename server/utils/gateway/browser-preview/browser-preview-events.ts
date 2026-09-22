@@ -21,7 +21,18 @@ export interface BrowserResourceFailureEvent {
   };
 }
 
-export type BrowserPreviewEvent = BrowserFramePolicyEvent | BrowserResourceFailureEvent;
+export interface BrowserSessionClosedEvent {
+  type: "session-closed";
+  userId: number;
+  sessionId: string;
+  ownerId: string;
+  reason: "replaced";
+}
+
+export type BrowserPreviewEvent =
+  | BrowserFramePolicyEvent
+  | BrowserResourceFailureEvent
+  | BrowserSessionClosedEvent;
 
 const events = new EventEmitter();
 

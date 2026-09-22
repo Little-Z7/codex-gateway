@@ -146,6 +146,16 @@ Browser
 - **移动端布局**：响应式侧边栏、输入框、长按菜单和子代理面板。
 - **真实 E2E 覆盖**：Playwright 测试使用真实 Nuxt server、真实 SSH Docker target 和真实 Codex app-server。
 
+本 fork 在上游基础上增加多用户与运维能力：
+
+- **多用户容器工作区**：管理员为成员一键 provision 独立 Docker 容器（独立 home 卷、SSH 接入、每用户内存/CPU 配额）；成员只能看到自己的托管工作区。
+- **管理员后台 `/gw/admin`**：用户/会话/容器管理与批量操作、用户详情页、镜像重建与滚动重建、用量统计（按天聚合 turn/token）、按用户的日/月 token 与 turn 额度（全局默认 + 覆盖 + 超额拦截）、审计日志（筛选 + CSV 导出 + 保留天数）、系统设置与一键备份。
+- **同源浏览器预览**：预览与 Gateway 同端口同域，由 HttpOnly cookie 路由，无需通配 DNS 或额外端口。
+- **共享模型 provider**：成员共享 ChatGPT 登录或共享 API-key provider；provider 在后台可编辑（DB 优先于 env）。
+- **首次运行引导**：空数据库首次打开页面即可创建首个管理员账号。
+
+部署与运维手册见 [`deploy/README.zh-CN.md`](deploy/README.zh-CN.md)。
+
 ## 项目结构
 
 ```text
@@ -171,18 +181,10 @@ Browser
 ```bash
 git clone --recurse-submodules https://github.com/yunhaoli24/codex-gateway.git
 cd codex-gateway
-
-cp .env.example .env
-# 使用 openssl rand -hex 32 替换 .env 中的 CODEX_GATEWAY_CONFIG_SECRET
-
-docker network create web-common 2>/dev/null || true
-docker compose build
-docker compose run --rm codex-gateway \
-  node scripts/create-user.mjs admin '<至少-8-位-密码>'
-docker compose up -d
+./deploy/scripts/bootstrap.sh <管理员用户名> '<至少-8-位-密码>'
 ```
 
-通过反向代理打开服务，使用手动创建的账号登录，然后在设置中添加第一台 SSH 主机。项目自带的 Compose 文件只把 `3000` 端口暴露到外部 `web-common` Docker 网络，不会直接发布宿主机端口。
+bootstrap 会生成 `.env`（自动填入 `CODEX_GATEWAY_CONFIG_SECRET` 与 `CODEX_CLI_VERSION`）、构建 Gateway 与用户工作区镜像、创建管理员账号并启动服务，默认监听 `3000` 端口。完整部署步骤、共享登录与运维说明见 `deploy/README.zh-CN.md`。
 
 ## 本地开发
 
@@ -190,6 +192,8 @@ docker compose up -d
 pnpm install
 pnpm dev
 ```
+
+`pnpm dev` 使用 Nitro dev 预设，不包含 `/gw/` 之外的预览拦截；同源浏览器预览只在生产构建（含 E2E）中可用。
 
 常用命令：
 
@@ -207,18 +211,21 @@ pnpm test:e2e
 | `CODEX_GATEWAY_DB_PATH` | 否 | SQLite 数据库路径。Docker 默认使用 `/data/codex-gateway.db`。 |
 | `HOST` | 否 | Nuxt 监听地址。Docker 使用 `0.0.0.0`。 |
 | `PORT` | 否 | Nuxt 监听端口。Docker 使用 `3000`。 |
-| `BROWSER_PREVIEW_DOMAIN` | 使用浏览器预览时 | 隔离预览 origin 使用的父域名；需要为 `p-*.your-domain` 配置 wildcard DNS。 |
-| `BROWSER_PREVIEW_SECRET` | 否 | 为 user/Host/target 生成稳定预览 origin 的 HMAC secret。默认复用 `CODEX_GATEWAY_CONFIG_SECRET`。 |
-| `BROWSER_PREVIEW_SCHEME` | 否 | 公开预览协议，默认 `https`。仅本地 E2E/开发使用 `http`。 |
-| `BROWSER_PREVIEW_PUBLIC_PORT` | 否 | 本地开发时写入预览 origin 的可选公开端口。 |
+| `BROWSER_PREVIEW_SCHEME` | 否 | Gateway 对外使用的公开协议，默认 `https`。仅本地 E2E/开发使用 `http`。 |
+| `CODEX_GATEWAY_PROVISIONING` | 否 | `docker` 启用用户容器托管，`off` 关闭（默认）。 |
+| `CODEX_GATEWAY_DOCKER_NETWORK` | provisioning 必需 | Gateway 与用户容器共享的 Docker 网络名。 |
+| `CODEX_GATEWAY_SHARED_AUTH_DIR` | provisioning 必需 | 宿主机上共享 Codex 登录目录，挂到用户容器 `/srv/codex-auth`。 |
+| `CODEX_GATEWAY_USER_IMAGE` | 否 | 用户工作区镜像名，默认 `codex-gateway-user:latest`。 |
 
 创建管理员用户：
 
 ```bash
 CODEX_GATEWAY_CONFIG_SECRET="replace-with-a-long-random-secret" \
 CODEX_GATEWAY_DB_PATH="./data/codex-gateway.db" \
-pnpm user:create <username> <password>
+pnpm user:create -- --admin <username> <password>
 ```
+
+普通用户由管理员在后台「用户」页创建（可生成初始密码、要求首次登录改密），并可在那里分配托管 host 与用量额度。
 
 `CODEX_GATEWAY_CONFIG_SECRET` 用于加密保存连接配置。生产环境必须设置稳定且足够长的 secret；更换 secret 会导致已有加密配置无法解密。
 
@@ -239,7 +246,7 @@ docker compose up -d --build
 
 默认容器只把 `3000` 暴露到 Docker 网络，适合放在 nginx、Caddy、Cloudflare Tunnel 或其他可信反向代理后面。SQLite 数据保存在 `/data/codex-gateway.db`，并通过 `./data:/data` 持久化。
 
-远程浏览器面板使用 `p-<hmac>.example.com` 形式的隔离 origin。需要为 `p-*.example.com` 配置 wildcard DNS，并把这些 host 转发到 Codex Gateway 同一个 Nitro 端口 `3000`。反向代理必须保留 Host header 和 WebSocket Upgrade；不需要增加第二个监听端口或发布新的容器端口。Gateway 会保留上游的 `Content-Security-Policy` 与 `X-Frame-Options`，因此明确禁止 iframe 嵌入的应用仍会被浏览器阻止。
+远程浏览器面板与 Gateway UI 同源：`/gw/` 以外的请求会按 HttpOnly 预览 cookie 代理到远端应用，因此不需要 wildcard DNS、额外监听端口或新的容器端口。反向代理只需保留 WebSocket Upgrade。同一浏览器同一时间只保持一个活跃预览：在其他面板或 tab 打开预览会替换之前的绑定，被替换的面板会显示“重新激活”操作。Gateway 会保留上游的 `Content-Security-Policy` 与 `X-Frame-Options`，因此明确禁止 iframe 嵌入的应用仍会被浏览器阻止。
 
 ## 测试
 

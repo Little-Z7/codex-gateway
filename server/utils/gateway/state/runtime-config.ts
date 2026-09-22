@@ -39,10 +39,10 @@ export const runtimeConfigStore = {
   export(): GatewayConfig {
     return {
       version: 1,
-      hosts: hostStore.listWithSecret().map((host) => ({
-        ...host,
-        hasPassword: Boolean(host.password),
-      })),
+      // list() strips secrets from managed hosts: members must not receive container keys, and
+      // the sanitized export is still a valid sync payload because sync restores the stored
+      // secrets before replacing state.
+      hosts: hostStore.list(),
       projects: projectStore.listConfigured(),
       pinnedThreads: gatewayMemoryState.pinnedThreads,
       notifications: normalizeNotificationSettings(gatewayMemoryState.notifications),

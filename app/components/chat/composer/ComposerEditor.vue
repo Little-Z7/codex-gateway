@@ -44,6 +44,7 @@ const emit = defineEmits<{
   keydown: [event: KeyboardEvent];
   paste: [event: ClipboardEvent];
   limit: [message: string];
+  expand: [expanded: boolean];
 }>();
 
 const container = ref<HTMLElement | null>(null);
@@ -85,6 +86,7 @@ onMounted(() => {
     parent: container.value,
     state: EditorState.create({ doc: props.modelValue, extensions: extensions() }),
   });
+  emitExpanded(view.value);
 });
 
 onBeforeUnmount(() => {
@@ -140,6 +142,17 @@ function extensions(): Extension[] {
     EditorView.lineWrapping,
     EditorView.editable.of(!props.disabled),
     placeholderExtension(props.placeholder),
+    EditorView.theme({
+      "&": { backgroundColor: "transparent", fontSize: "1rem" },
+      ".cm-scroller": { fontFamily: "inherit", overflow: "auto" },
+      ".cm-content": {
+        padding: "0.25rem 0",
+        caretColor: "var(--ink)",
+        minHeight: "1.5rem",
+      },
+      ".cm-line": { lineHeight: "1.5rem", padding: "0 0.125rem" },
+      "&.cm-focused": { outline: "none" },
+    }),
     mentionPlugin,
     EditorView.atomicRanges.of(
       (editor) => editor.plugin(mentionPlugin)?.decorations ?? Decoration.none,
@@ -199,7 +212,13 @@ function handleUpdate(update: ViewUpdate) {
         emit("update:references", retained, props.scopeKey);
     }
   }
+  if (update.docChanged || update.geometryChanged) emitExpanded(update.view);
   if (update.docChanged || update.selectionSet) updateMentionQuery(update.view);
+}
+
+function emitExpanded(editor: EditorView) {
+  const wrapped = editor.contentHeight > editor.defaultLineHeight * 1.6;
+  emit("expand", editor.state.doc.lines > 1 || wrapped);
 }
 
 function updateMentionQuery(editor: EditorView) {
@@ -340,8 +359,8 @@ function dismissMenu() {
 
 <style>
 .composer-editor .cm-editor {
-  max-height: min(28dvh, 10rem);
-  min-height: 3.25rem;
+  max-height: 12rem;
+  min-height: 1.5rem;
   background: transparent;
 }
 .composer-editor .cm-scroller {
@@ -349,8 +368,7 @@ function dismissMenu() {
   font-family: inherit;
 }
 .composer-editor .cm-content {
-  min-height: 3.25rem;
-  padding: 0.5rem 0.25rem;
+  min-height: 1.5rem;
   font-size: 1rem;
   line-height: 1.5rem;
   caret-color: var(--ink);
@@ -364,6 +382,9 @@ function dismissMenu() {
 .composer-editor .cm-activeLine,
 .composer-editor .cm-activeLineGutter {
   background: transparent;
+}
+.composer-editor .cm-placeholder {
+  color: var(--ink-faint);
 }
 .composer-editor .cm-file-reference {
   display: inline-flex;
@@ -379,15 +400,5 @@ function dismissMenu() {
   font-size: 0.875rem;
   vertical-align: baseline;
   white-space: nowrap;
-}
-@media (min-width: 48rem) {
-  .composer-editor .cm-editor {
-    max-height: min(24vh, 12rem);
-    min-height: clamp(3.75rem, 10vh, 6rem);
-  }
-  .composer-editor .cm-content {
-    min-height: clamp(3.75rem, 10vh, 6rem);
-    line-height: 1.75rem;
-  }
 }
 </style>

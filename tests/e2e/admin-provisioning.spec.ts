@@ -1,0 +1,217 @@
+import { expect, test, type Page } from "@playwright/test";
+import { z } from "zod";
+import { authenticatedFetch, openApp } from "./helpers/app";
+import { dockerInspectContainer } from "./helpers/docker-engine";
+
+async function apiStatus(page: Page, request: { url: string; method?: string; body?: unknown }) {
+  return page.evaluate(async (request) => {
+    const token = localStorage.getItem("codex-gateway-auth-token");
+    const hasToken = token !== null && token !== "";
+    const url = request.url.startsWith("/api/") ? `/gw${request.url}` : request.url;
+    const response = await fetch(url, {
+      method: request.method ?? "GET",
+      headers: {
+        ...(hasToken ? { authorization: `Bearer ${token}` } : {}),
+        ...(request.body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      body: request.body === undefined ? undefined : JSON.stringify(request.body),
+    });
+    return { status: response.status, body: await response.text() };
+  }, request);
+}
+
+async function openUsersTab(page: Page) {
+  await page.getByTestId("sidebar-user-menu").click();
+  await page.getByTestId("settings-toggle").click();
+  await expect(page.getByTestId("settings-panel")).toBeVisible();
+  await page.getByRole("tab", { name: /用户管理|User management/ }).click();
+}
+
+test("admin provisions a workspace container and the member uses it", async ({ page, browser }) => {
+  test.setTimeout(300_000);
+  const memberName = `prov-${Date.now().toString(36)}`.slice(0, 32);
+  const memberPassword = "prov-member-password-ok";
+
+  await openApp(page);
+  await openUsersTab(page);
+
+  // Provisioning is enabled in the E2E topology: the status card and the create switch render.
+  await expect(page.getByTestId("provisioning-status")).toBeVisible();
+
+  await page.getByTestId("admin-create-user").click();
+  await page.getByTestId("admin-user-username-input").fill(memberName);
+  await page.getByTestId("admin-user-password-input").fill(memberPassword);
+  await page.getByTestId("admin-user-create-submit").click();
+
+  // Container creation runs in the background; the panel polls until it is ready.
+  const row = page.getByTestId(`admin-user-row-${memberName}`);
+  await expect(row).toBeVisible();
+  const stateBadge = row.getByTestId(`container-state-${memberName}`);
+  await expect(stateBadge).toBeVisible({ timeout: 30_000 });
+  await expect(stateBadge).toContainText(/运行中|Running/, { timeout: 180_000 });
+  await expect(row.getByText(/就绪|Ready/)).toBeVisible({ timeout: 30_000 });
+
+  // The member sees exactly one managed host with the default workspace project.
+  const memberContext = await browser.newContext();
+  const memberPage = await memberContext.newPage();
+  await openApp(memberPage, {
+    resetConfig: false,
+    credentials: { username: memberName, password: memberPassword },
+  });
+  const hosts = await authenticatedFetch(memberPage, { url: "/api/hosts" }, (value) =>
+    z
+      .array(z.object({ id: z.number(), managed: z.boolean(), name: z.string() }).loose())
+      .parse(value),
+  );
+  expect(hosts).toHaveLength(1);
+  expect(hosts[0]!.managed).toBe(true);
+  const managedHostId = hosts[0]!.id;
+
+  await memberPage.getByTestId("sidebar-user-menu").click();
+  await memberPage.getByTestId("settings-toggle").click();
+  await memberPage.getByRole("tab", { name: /主机|Hosts/ }).click();
+  await expect(memberPage.locator(`[data-testid^="managed-badge-"]`)).toBeVisible();
+  await memberPage.keyboard.press("Escape");
+
+  // The workspace project exists and the container config got the file-based auth store and
+  // the full-access sandbox entrypoint defaults.
+  const projects = await authenticatedFetch(memberPage, { url: "/api/projects" }, (value) =>
+    z.array(z.object({ name: z.string(), remotePath: z.string() }).loose()).parse(value),
+  );
+  expect(projects).toEqual([
+    expect.objectContaining({ name: "workspace", remotePath: "/home/dev/workspace" }),
+  ]);
+
+  const configToml = await apiStatus(memberPage, {
+    url: `/api/remote/files?hostId=${managedHostId}&path=/home/dev/.codex/config.toml`,
+  });
+  expect(configToml.status).toBe(200);
+  expect(configToml.body).toContain('cli_auth_credentials_store = "file"');
+  expect(configToml.body).toContain('sandbox_mode = "danger-full-access"');
+
+  // User containers must carry bounded json-file log rotation.
+  const inspect = await dockerInspectContainer(`codex-e2e-user-${memberName}`);
+  const logConfig = inspect.HostConfig.LogConfig;
+  expect(logConfig.Type).toBe("json-file");
+  expect(logConfig.Config["max-size"]).toBe("10m");
+  expect(logConfig.Config["max-file"]).toBe("3");
+
+  // SSH + app-server inside the user container respond; an empty thread list is acceptable
+  // without a shared Codex login.
+  const threads = await apiStatus(memberPage, {
+    url: `/api/threads?hostId=${managedHostId}&limit=50`,
+  });
+  expect(threads.status).toBe(200);
+
+  // Container lifecycle: stop then start again through the admin UI (the users panel is still
+  // open from the earlier steps).
+  const memberRow = page.getByTestId(`admin-user-row-${memberName}`);
+  await memberRow.getByTestId(`admin-container-toggle-${memberName}`).click();
+  await expect(stateBadge).toContainText(/已停止|Exited/, { timeout: 30_000 });
+  await memberRow.getByTestId(`admin-container-toggle-${memberName}`).click();
+  await expect(stateBadge).toContainText(/运行中|Running/, { timeout: 60_000 });
+
+  // Deleting the user removes the row and, with keepVolume off, the container and volume.
+  await memberRow.getByTestId(`admin-delete-user-${memberName}`).click();
+  await page.getByTestId("admin-delete-confirm").click();
+  await expect(memberRow).toBeHidden();
+
+  const members = await apiStatus(page, { url: "/api/admin/users" });
+  expect(members.body).not.toContain(`"${memberName}"`);
+  await memberContext.close();
+});
+
+test("provisioning replaces a manually configured managed host without leaving orphans", async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const memberName = `reprov-${Date.now().toString(36)}`.slice(0, 32);
+  const memberPassword = "reprov-member-password";
+
+  await openApp(page);
+
+  // Create a member without auto-provisioning, then give it a manual managed host.
+  const created = await apiStatus(page, {
+    url: "/api/admin/users",
+    method: "POST",
+    body: { username: memberName, password: memberPassword, role: "user", provision: false },
+  });
+  expect(created.status).toBe(200);
+  const memberId = z
+    .object({ user: z.object({ id: z.number() }).loose() })
+    .parse(JSON.parse(created.body)).user.id;
+
+  const manualHost = await apiStatus(page, {
+    url: `/api/admin/users/${memberId}/managed-host`,
+    method: "PUT",
+    body: {
+      name: "manual-managed",
+      sshHost: "ssh-target",
+      port: 22,
+      username: "codex",
+      authMode: "password",
+      password: "codex",
+      proxyUrl: "",
+    },
+  });
+  expect(manualHost.status).toBe(200);
+
+  // Provision over the manual host: the manual host must be removed, not orphaned.
+  const provision = await apiStatus(page, {
+    url: `/api/admin/users/${memberId}/provision`,
+    method: "POST",
+  });
+  expect(provision.status).toBe(200);
+
+  await expect
+    .poll(
+      async () => {
+        const users = await authenticatedFetch(page, { url: "/api/admin/users" }, (value) =>
+          z
+            .object({
+              users: z.array(
+                z
+                  .object({
+                    username: z.string(),
+                    managedHost: z.object({ status: z.string() }).nullable(),
+                  })
+                  .loose(),
+              ),
+            })
+            .loose()
+            .parse(value),
+        );
+        return users.users.find((user) => user.username === memberName)?.managedHost?.status;
+      },
+      { timeout: 180_000, intervals: [2_000] },
+    )
+    .toBe("ready");
+
+  const memberContext = await browser.newContext();
+  const memberPage = await memberContext.newPage();
+  await openApp(memberPage, {
+    resetConfig: false,
+    credentials: { username: memberName, password: memberPassword },
+  });
+  const hosts = await authenticatedFetch(memberPage, { url: "/api/hosts" }, (value) =>
+    z
+      .array(
+        z
+          .object({ id: z.number(), managed: z.boolean(), name: z.string(), sshHost: z.string() })
+          .loose(),
+      )
+      .parse(value),
+  );
+  expect(hosts).toHaveLength(1);
+  expect(hosts[0]!.managed).toBe(true);
+  expect(hosts[0]!.sshHost).toBe(`codex-e2e-user-${memberName}`);
+
+  // Cleanup: delete the member (drops container + volume).
+  const removed = await apiStatus(page, {
+    url: `/api/admin/users/${memberId}`,
+    method: "DELETE",
+  });
+  expect(removed.status).toBe(200);
+  await memberContext.close();
+});

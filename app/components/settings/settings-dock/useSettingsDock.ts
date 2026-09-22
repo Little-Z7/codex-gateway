@@ -1,17 +1,24 @@
 import type { DockviewApi, DockviewReadyEvent, IDockviewPanel } from "dockview-vue";
+import { useAuthStore } from "@/stores/auth";
 import { settingsPanelKinds, settingsPanelRegistry } from "./panel-registry";
 
 const DEFAULT_SETTINGS_PANEL = "config";
 
 export function useSettingsDock() {
   const { locale, t } = useI18n();
+  const auth = useAuthStore();
   const dockApi = shallowRef<DockviewApi | null>(null);
+  // The user-management tab exists only for admins; it is omitted entirely for members so the
+  // panel id is never registered.
+  const visibleKinds = computed(() =>
+    settingsPanelKinds.filter((kind) => kind !== "users" || auth.isAdmin),
+  );
 
   function syncPanelTitles() {
     const api = dockApi.value;
     if (api === null) return;
 
-    for (const kind of settingsPanelKinds) {
+    for (const kind of visibleKinds.value) {
       const panel = api.getPanel(kind);
       if (panel !== undefined) panel.api.setTitle(t(settingsPanelRegistry[kind].titleKey));
     }
@@ -24,7 +31,7 @@ export function useSettingsDock() {
     let groupAnchor: IDockviewPanel | null = null;
     let defaultPanel: IDockviewPanel | null = null;
 
-    for (const kind of settingsPanelKinds) {
+    for (const kind of visibleKinds.value) {
       const policy = settingsPanelRegistry[kind];
       const panel: IDockviewPanel = api.addPanel({
         id: kind,

@@ -1,4 +1,4 @@
-import { computed, ref, watch } from "vue";
+import { computed, watch } from "vue";
 
 import { storeToRefs } from "pinia";
 import {
@@ -19,12 +19,15 @@ export function useThreadSettingsControls() {
   const navigation = useGatewayNavigationStore();
   const projectDefaultsStore = useGatewayProjectDefaultsStore();
   const { models, defaultModel } = storeToRefs(gateway);
-  const { selectedThreadSettings } = storeToRefs(composer);
+  const { selectedThreadSettings, draftModel, draftEffort, draftApprovalMode, draftProvider } =
+    storeToRefs(composer);
   const { selectedHostId, selectedProjectId, selectedThreadId } = storeToRefs(navigation);
-  const newThreadModel = ref("");
-  const newThreadEffort = ref<ReasoningEffort>("default");
-  const newThreadApprovalMode = ref<ApprovalPolicy | "custom">("custom");
-  const selectedProvider = ref<AgentProviderId>("codex");
+  // Pre-thread settings live in the composer store so the top-bar picker and the composer share
+  // one source of truth (and the e2e driver can reach them).
+  const newThreadModel = draftModel;
+  const newThreadEffort = draftEffort;
+  const newThreadApprovalMode = draftApprovalMode;
+  const selectedProvider = draftProvider;
 
   const projectDefaults = computed(() => {
     if (selectedHostId.value === null || selectedProjectId.value === null) return null;
@@ -84,10 +87,13 @@ export function useThreadSettingsControls() {
     },
   });
   const selectedApprovalMode = computed<ApprovalPolicy | "custom">({
-    get: () =>
-      selectedThreadId.value === null
-        ? newThreadApprovalMode.value
-        : (selectedThreadSettings.value.approvalPolicy ?? "custom"),
+    get: () => {
+      if (selectedThreadId.value !== null) {
+        return selectedThreadSettings.value.approvalPolicy ?? "custom";
+      }
+      if (newThreadApprovalMode.value !== null) return newThreadApprovalMode.value;
+      return newThreadProjectDefaults.value?.approvalPolicy ?? "on-request";
+    },
     set: (approvalPolicy) => {
       if (selectedThreadId.value === null) {
         newThreadApprovalMode.value = approvalPolicy;

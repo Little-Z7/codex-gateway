@@ -99,7 +99,7 @@ async function copyImage() {
     auth.hydrate();
     const response = await fetch(props.source, {
       headers:
-        props.source.startsWith("/api/") && auth.token
+        isGatewayApiPath(props.source) && auth.token
           ? { authorization: `Bearer ${auth.token}` }
           : {},
     });

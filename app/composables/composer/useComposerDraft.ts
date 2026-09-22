@@ -1,8 +1,9 @@
-import { ref, watch } from "vue";
+import { onScopeDispose, ref, watch } from "vue";
 
 import { storeToRefs } from "pinia";
 import type { UploadedFileRecord } from "~~/shared/types";
 import { useGatewayComposerStore } from "@/stores/gateway-composer";
+import { gatewayDomainEvents } from "@/stores/gateway/domain-events";
 import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
 import { selectedThreadKey } from "@/stores/gateway/thread-utils/identity";
 import type { ComposerFileReference } from "@/stores/gateway/types";
@@ -53,6 +54,11 @@ export function useComposerDraft() {
     },
     { deep: true, flush: "sync" },
   );
+
+  const unsubscribeFill = gatewayDomainEvents.on("composer-fill-requested", ({ text }) => {
+    turnText.value = text;
+  });
+  onScopeDispose(unsubscribeFill);
 
   function clearDraft() {
     turnText.value = "";

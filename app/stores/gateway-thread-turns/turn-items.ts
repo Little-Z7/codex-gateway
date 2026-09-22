@@ -11,11 +11,11 @@ import {
 } from "@/stores/gateway/thread-utils/identity";
 import { captureSessionEpoch } from "@/utils/session-epoch";
 import { requestThreadItemsPage } from "./transport";
-import type { Translate } from "./types";
+import type { Translate, TranslateExists } from "./types";
 
 const ITEM_PAGE_LIMIT = 100;
 
-export async function loadTurnItems(t: Translate, turnId: string) {
+export async function loadTurnItems(t: Translate, te: TranslateExists, turnId: string) {
   const navigation = useGatewayNavigationStore();
   const views = useGatewayThreadViewStore();
   const turns = useGatewayThreadTurnsStore();
@@ -70,7 +70,7 @@ export async function loadTurnItems(t: Translate, turnId: string) {
   } catch (error: unknown) {
     if (sessionIsCurrent()) {
       useGatewayBootstrapStore().setError(
-        messageFromError(error, t("app.loadTurnItemsFailed"), errorMessageLabels(t)),
+        messageFromError(error, t("app.loadTurnItemsFailed"), errorMessageLabels(t, te)),
         { hostId, threadId, turnId },
       );
     }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentProjectDefaults } from "~~/shared/types";
+import type { AgentProjectDefaults, ApprovalPolicy } from "~~/shared/types";
 import type { AgentRpcClient } from "../../provider-adapter";
 
 const configReadResponseSchema = z
@@ -8,6 +8,8 @@ const configReadResponseSchema = z
       .object({
         model: z.string().nullable(),
         model_reasoning_effort: z.string().nullable(),
+        approval_policy: z.unknown().optional(),
+        approvalPolicy: z.unknown().optional(),
       })
       .loose(),
   })
@@ -26,5 +28,16 @@ export async function readCodexProjectDefaults(
     provider: "codex",
     model: response.config.model,
     effort: response.config.model_reasoning_effort,
+    // config.toml may omit approval_policy. Codex still starts threads as on-request
+    // (AskForApproval::default). Surface that effective default so the draft pill matches
+    // the thread composer instead of showing "custom".
+    approvalPolicy:
+      approvalPolicyFromConfig(response.config.approval_policy ?? response.config.approvalPolicy) ??
+      "on-request",
   };
+}
+
+function approvalPolicyFromConfig(value: unknown): ApprovalPolicy | null {
+  if (value === "untrusted" || value === "on-request" || value === "never") return value;
+  return null;
 }

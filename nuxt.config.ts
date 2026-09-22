@@ -1,8 +1,14 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineNuxtConfig({
   compatibilityDate: "2025-07-15",
+  app: {
+    // The Gateway UI lives under /gw/ so every other root path can serve same-origin browser
+    // previews routed by the preview cookie. See server/nitro/node-entry.mjs.
+    baseURL: "/gw/",
+  },
   devtools: { enabled: true },
   sourcemap: {
     client: false,
@@ -18,7 +24,7 @@ export default defineNuxtConfig({
   modules: ["@pinia/nuxt", "@nuxtjs/device", "@nuxtjs/i18n", "nuxt-echarts"],
   echarts: {
     renderer: "canvas",
-    charts: ["LineChart"],
+    charts: ["LineChart", "BarChart", "PieChart"],
     components: ["GridComponent", "TooltipComponent", "LegendComponent"],
   },
   vite: {
@@ -28,6 +34,17 @@ export default defineNuxtConfig({
       dedupe: ["prismjs"],
     },
     plugins: [tailwindcss()],
+  },
+  hooks: {
+    "nitro:config": (nitroConfig) => {
+      // The dev preset keeps its own worker entry so `nuxt dev` still hot-reloads; preview
+      // interception outside /gw/ only exists in the production node-server bundle.
+      if (nitroConfig.dev !== true) {
+        nitroConfig.entry = fileURLToPath(
+          new URL("./server/nitro/node-entry.mjs", import.meta.url),
+        );
+      }
+    },
   },
   nitro: {
     rollupConfig: {
@@ -39,7 +56,7 @@ export default defineNuxtConfig({
     },
     scheduledTasks: {
       "*/30 * * * * *": ["gateway:sync-running-threads"],
-      "*/5 * * * *": ["gateway:poll-tmux-monitors"],
+      "*/5 * * * *": ["gateway:poll-tmux-monitors", "gateway:reconcile-containers"],
       "0 * * * *": ["gateway:prune-expired-sessions"],
     },
   },

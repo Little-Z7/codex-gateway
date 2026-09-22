@@ -25,7 +25,17 @@ import {
 } from "~~/shared/runtime/terminal-stream";
 import { terminalManager } from "../terminal/terminal-manager";
 
+const activePeers = new WeakSet<RealtimePeer>();
+let activePeerCount = 0;
+
+/** Open realtime websocket connections — surfaced on the admin system page. */
+export function realtimePeerCount() {
+  return activePeerCount;
+}
+
 export function openRealtimePeer(peer: RealtimePeer) {
+  activePeers.add(peer);
+  activePeerCount += 1;
   const state = stateFor(peer);
   state.authTimer = setTimeout(() => {
     if (!state.authenticated) {
@@ -100,6 +110,7 @@ export async function handleRealtimePeerBinaryMessage(peer: RealtimePeer, data: 
 }
 
 export function cleanupRealtimePeer(peer: RealtimePeer) {
+  if (activePeers.delete(peer)) activePeerCount -= 1;
   const state = stateFor(peer);
   if (state.authTimer !== undefined) {
     clearTimeout(state.authTimer);
@@ -151,6 +162,7 @@ function realtimeErrorDetails(
 ) {
   const code = realtimeErrorCode(error);
   const errorRecord = recordFromUnknown(error);
+  const nested = recordFromUnknown(errorRecord?.data);
   const cause = recordFromUnknown(errorRecord?.cause);
   return {
     requestType: request?.type ?? null,
@@ -166,6 +178,10 @@ function realtimeErrorDetails(
     statusMessage: errorRecord?.statusMessage ?? cause?.statusMessage ?? null,
     rpcMethod: errorRecord?.rpcMethod ?? null,
     rpcCode: errorRecord?.rpcCode ?? null,
+    dimension: nested?.dimension ?? errorRecord?.dimension ?? null,
+    used: nested?.used ?? errorRecord?.used ?? null,
+    limit: nested?.limit ?? errorRecord?.limit ?? null,
+    resetAt: nested?.resetAt ?? errorRecord?.resetAt ?? null,
   };
 }
 
@@ -180,5 +196,9 @@ function realtimeErrorCode(error: unknown) {
   if (isStaleThreadCursorErrorLike(error)) {
     return STALE_THREAD_CURSOR_ERROR_CODE;
   }
+  const errorRecord = recordFromUnknown(error);
+  const nested = recordFromUnknown(errorRecord?.data);
+  const code = errorRecord?.code ?? nested?.code;
+  if (typeof code === "string" && code !== "") return code;
   return "realtimeMessageFailed";
 }

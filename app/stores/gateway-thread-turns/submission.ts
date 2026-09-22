@@ -3,6 +3,7 @@ import { useGatewayCatalogStore } from "@/stores/gateway-catalog";
 import { useGatewayBootstrapStore } from "@/stores/gateway-bootstrap";
 import { useGatewayComposerStore } from "@/stores/gateway-composer";
 import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
+import { applyThreadPreviewFallback } from "@/stores/gateway-navigation/actions/thread-list";
 import { useGatewayThreadRuntimeStore } from "@/stores/gateway-thread-runtime";
 import { useGatewayThreadTurnsStore } from "@/stores/gateway-thread-turns";
 import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
@@ -19,11 +20,14 @@ import {
 } from "./history";
 import { runTurnRequestWithAutoRetry } from "./retry";
 import { requestTurnStart, requestTurnSteer } from "./transport";
-import type { Translate, TurnRequestResult } from "./types";
+import type { Translate, TranslateExists, TurnRequestResult } from "./types";
 import { captureSessionEpoch } from "@/utils/session-epoch";
+import { useGatewayBudgetStore } from "@/stores/gateway-budget";
+import { RealtimeRequestError } from "@/stores/gateway-realtime/request-errors";
 
 export async function sendTurn(
   t: Translate,
+  te: TranslateExists,
   text: string,
   options: ComposerTurnOptions = {},
 ): Promise<boolean> {
@@ -59,6 +63,7 @@ export async function sendTurn(
   } else {
     insertOptimisticNewTurnMessage(threadId, clientUserMessageId, optimisticContent);
   }
+  applyThreadPreviewFallback(hostId, threadId, text);
 
   const projectId = navigation.selectedProjectId;
   if (projectId === null) {
@@ -112,11 +117,21 @@ export async function sendTurn(
   } catch (error: unknown) {
     if (!sessionIsCurrent()) return false;
     useGatewayThreadTurnsStore().clearRequest(hostId, threadId);
-    gateway.setError(messageFromError(error, t("app.sendMessageFailed"), errorMessageLabels(t)), {
-      hostId,
-      projectId,
-      threadId,
-    });
+    if (error instanceof RealtimeRequestError && error.code === "budget.exceeded") {
+      await useGatewayBudgetStore().refresh();
+      if (!shouldSteerActiveTurn) {
+        runtimeStore.setThreadStatus(hostId, threadId, "completed");
+      }
+      return false;
+    }
+    gateway.setError(
+      messageFromError(error, t("app.sendMessageFailed"), errorMessageLabels(t, te)),
+      {
+        hostId,
+        projectId,
+        threadId,
+      },
+    );
     if (!shouldSteerActiveTurn) {
       runtimeStore.setThreadStatus(hostId, threadId, "completed");
     }

@@ -111,7 +111,11 @@ test("upgrades empty, legacy Node, and npm Codex SSH hosts with bounded concurre
   await expect(page.getByTestId("chat-scroll-area").getByText(marker)).toBeVisible({
     timeout: 240_000,
   });
-  await expect(page.getByTestId(`thread-button-${threadId}`).getByLabel("已完成")).toBeVisible({
+  // The sidebar row for the thread that is currently open never carries the completion badge
+  // (ThreadStatusIndicator only surfaces it for a completed turn nobody has looked at yet; see
+  // app/stores/gateway/thread-runtime/completion-attention.ts:syncThreadCompletionAttention). The
+  // composer's own aria-label is the real, always-on signal that the turn finished.
+  await expect(page.getByTestId("send-turn-button")).toHaveAttribute("aria-label", "已完成", {
     timeout: 240_000,
   });
 });
@@ -209,8 +213,10 @@ daemon_dir="\${CODEX_HOME:-$HOME/.codex}/app-server-daemon"
 rm -f "$daemon_dir"/app-server.pid "$daemon_dir"/app-server.pid.lock "$daemon_dir"/app-server.stderr.log "$daemon_dir"/loaded-threads.json
 mkdir -p "$daemon_dir"
 # This is the same official daemon lifecycle command used by Gateway. The browser still drives
-# the scenario; the shell only provisions the real remote app-server process.
-nohup ${codexBin} app-server daemon bootstrap --remote-control >"$daemon_dir/e2e-app-server.log" 2>&1 </dev/null &
+# the scenario; the shell only provisions the real remote app-server process. Spawn through a
+# login shell so it inherits the same /etc/profile.d provider environment a real
+# gateway-launched app-server would get (remoteLoginShellCommand does the same in production).
+nohup bash -lc 'exec "$@"' _ ${codexBin} app-server daemon bootstrap --remote-control >"$daemon_dir/e2e-app-server.log" 2>&1 </dev/null &
 for i in $(seq 1 100); do
   if [ -S "$socket" ]; then
     break
@@ -233,9 +239,11 @@ rm -f "$daemon_dir"/app-server.pid "$daemon_dir"/app-server.pid.lock "$daemon_di
   await expect(page.getByTestId("chat-scroll-area").getByText(marker)).toBeVisible({
     timeout: 120_000,
   });
-  // The response marker proves the browser reached the daemon-backed app-server. The composer
-  // is the user-facing completion state for the selected turn; the sidebar row can lag while
-  // its activity projection catches up and is not part of this daemon transport assertion.
+  // The sidebar row for the thread that is currently open never carries the completion badge
+  // (ThreadStatusIndicator only surfaces it for a completed turn nobody has looked at yet; see
+  // app/stores/gateway/thread-runtime/completion-attention.ts:syncThreadCompletionAttention).
+  // The response marker proves the browser reached the daemon-backed app-server, and the
+  // composer's aria-label is the real, always-on signal that the turn finished.
   await expect(page.getByTestId("send-turn-button")).toHaveAttribute("aria-label", "已完成", {
     timeout: 120_000,
   });

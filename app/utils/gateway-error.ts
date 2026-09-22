@@ -4,6 +4,7 @@ import { firstNonEmptyString } from "~~/shared/utils/strings";
 
 export interface GatewayErrorPayload {
   code?: string;
+  retryAfterSeconds?: number;
   details?: Record<string, unknown>;
   message?: string;
   statusCode?: number;
@@ -29,9 +30,30 @@ export function gatewayErrorPayload(error: unknown): GatewayErrorPayload {
       (typeof candidate.message === "string" ||
         typeof candidate.statusMessage === "string" ||
         typeof candidate.code === "string" ||
-        recordFromUnknown(candidate.details) !== null),
+        recordFromUnknown(candidate.details) !== null ||
+        recordFromUnknown(candidate.data) !== null),
   );
-  return payload ?? {};
+  if (payload === undefined || payload === null) {
+    return {};
+  }
+  // h3 serializes createError's `data` as a nested object; flatten known fields so callers can
+  // read payload.code / payload.retryAfterSeconds regardless of which layer produced them.
+  const nested = recordFromUnknown(payload.data);
+  return {
+    ...payload,
+    code:
+      typeof payload.code === "string"
+        ? payload.code
+        : typeof nested?.code === "string"
+          ? nested.code
+          : undefined,
+    retryAfterSeconds:
+      typeof payload.retryAfterSeconds === "number"
+        ? payload.retryAfterSeconds
+        : typeof nested?.retryAfterSeconds === "number"
+          ? nested.retryAfterSeconds
+          : undefined,
+  };
 }
 
 export function gatewayErrorMessage(error: unknown, fallback: string) {

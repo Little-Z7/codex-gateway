@@ -38,7 +38,7 @@ ARG E2E_UID=1000
 ARG E2E_GID=1000
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssh-server git ca-certificates sudo tmux procps \
+  && apt-get install -y -o Acquire::Retries=8 --no-install-recommends openssh-server git ca-certificates sudo tmux procps \
   && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --gid ${E2E_GID} codex \

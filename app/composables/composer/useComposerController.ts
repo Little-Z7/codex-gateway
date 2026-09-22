@@ -12,6 +12,7 @@ import { useGatewayComposerStore } from "@/stores/gateway-composer";
 import { useGatewayNavigationStore } from "@/stores/gateway-navigation";
 import { useGatewayThreadRuntimeStore } from "@/stores/gateway-thread-runtime";
 import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
+import { useGatewayBudgetStore } from "@/stores/gateway-budget";
 import { latestThreadPlanItem, planItemSummary } from "@/utils/thread-plan";
 import { isThreadGoalOngoing } from "@/utils/thread-goal-display";
 import { useComposerSlashMenu } from "./useComposerSlashMenu";
@@ -23,6 +24,7 @@ export function useComposerController() {
   const navigation = useGatewayNavigationStore();
   const runtime = useGatewayThreadRuntimeStore();
   const threadView = useGatewayThreadViewStore();
+  const budget = useGatewayBudgetStore();
   const { t } = useI18n();
   const { models, loadingModels } = storeToRefs(gateway);
   const { selectedHostId, selectedProjectId, selectedThreadId } = storeToRefs(navigation);
@@ -49,6 +51,7 @@ export function useComposerController() {
   );
 
   const { turnText, attachedFiles, fileReferences, clearDraft } = useComposerDraft();
+  const { draftApprovalMode } = storeToRefs(composer);
   const goalControls = useComposerGoalControls(turnText);
   const settings = useThreadSettingsControls();
   const attachmentUpload = useAttachmentUpload(selectedHostId, attachedFiles);
@@ -69,8 +72,11 @@ export function useComposerController() {
       // Existing-thread settings are projected from thread/resume instead of inferred here.
       model: settings.selectedModel.value === "" ? undefined : settings.selectedModel.value,
       effort,
+      // A still-null draft approval is the remote default (on-request). Omit it so thread.start
+      // does not freeze today's default as a Gateway override the way an explicit pill choice does.
       approvalPolicy:
-        settings.selectedApprovalMode.value === "custom"
+        settings.selectedApprovalMode.value === "custom" ||
+        (selectedThreadId.value === null && draftApprovalMode.value === null)
           ? undefined
           : settings.selectedApprovalMode.value,
       // Provider is a thread-creation choice. Existing threads already have a provider-bound
@@ -94,7 +100,7 @@ export function useComposerController() {
   );
   const canSendTurn = computed(
     () =>
-      selectedThreadId.value !== null &&
+      (selectedThreadId.value !== null || navigation.newThreadDraft) &&
       submit.hasComposerInput.value &&
       !attachmentUpload.uploadingAttachments.value,
   );
@@ -104,7 +110,9 @@ export function useComposerController() {
   );
   const canUsePrimaryAction = computed(() =>
     Boolean(
-      (canSendTurn.value || canInterruptTurn.value) && !attachmentUpload.uploadingAttachments.value,
+      (canSendTurn.value || canInterruptTurn.value) &&
+      !attachmentUpload.uploadingAttachments.value &&
+      (budget.exceeded === null || canInterruptTurn.value),
     ),
   );
   const sendButtonLabel = computed(() => {
@@ -150,7 +158,7 @@ export function useComposerController() {
       return;
     }
     event.preventDefault();
-    if (selectedThreadId.value === null) {
+    if (selectedThreadId.value === null && !navigation.newThreadDraft) {
       return;
     }
     void submitComposer();

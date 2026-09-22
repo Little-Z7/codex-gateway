@@ -3,10 +3,18 @@ import { trimmedOrNull } from "~~/shared/utils/strings";
 import { gatewayMemoryState, nextId, nowIso, type StoredHostRecord } from "./memory";
 
 function sanitizeHost(host: StoredHostRecord): HostRecord {
-  return {
+  const sanitized = {
     ...host,
     hasPassword: Boolean(host.password),
+    hasPrivateKey: Boolean(host.privateKey),
   };
+  if (host.managed) {
+    // Managed hosts carry Gateway-provisioned container credentials the member never needs to
+    // see; strip them before the record leaves the server.
+    delete sanitized.privateKey;
+    delete sanitized.password;
+  }
+  return sanitized;
 }
 
 function normalizeHost(input: HostCreateInput, id = nextId(gatewayMemoryState.hosts)) {
@@ -23,7 +31,9 @@ function normalizeHost(input: HostCreateInput, id = nextId(gatewayMemoryState.ho
     privateKey: input.privateKey ?? null,
     password: input.password ?? null,
     proxyUrl: trimmedOrNull(input.proxyUrl),
+    managed: input.managed ?? existing?.managed ?? false,
     hasPassword: Boolean(input.password),
+    hasPrivateKey: Boolean(input.privateKey),
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };
@@ -35,6 +45,7 @@ export const hostStore = {
       ...host,
       proxyUrl: trimmedOrNull(host.proxyUrl),
       hasPassword: Boolean(host.password),
+      hasPrivateKey: Boolean(host.privateKey),
     }));
   },
 

@@ -85,7 +85,7 @@ test("fans out a real remote app-server thread to multiple browser clients acros
 
   const firstMarker = `E2E 第一轮 ${Date.now()}`;
   await page
-    .getByPlaceholder("输入后续修改要求")
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
     .fill(
       [
         `请执行一个较长命令，然后最终只回复这个标记：${firstMarker}`,
@@ -129,7 +129,11 @@ test("fans out a real remote app-server thread to multiple browser clients acros
   await expect(page.getByTestId("send-turn-button")).toHaveAttribute("aria-label", "已完成", {
     timeout: AGENT_OUTPUT_TIMEOUT_MS,
   });
-  await expect(page.getByTestId(`thread-button-${threadId}`).getByLabel("已完成")).toBeVisible();
+  // The sidebar row never shows the completion badge for the thread that is currently open
+  // (ThreadStatusIndicator suppresses it once the user has already seen the result; see
+  // app/stores/gateway/thread-runtime/completion-attention.ts:syncThreadCompletionAttention).
+  // What the sidebar does guarantee is that its running indicator clears once the turn is done.
+  await expect(page.getByTestId(`thread-button-${threadId}`).getByLabel("运行中")).toBeHidden();
   await expect(page.getByText("加载回合内容失败")).toHaveCount(0);
   await revealVirtualizedChatLocator(page, firstIntermediateStepsToggle(page));
   // This scenario owns realtime reconnection and cross-browser fanout. Whether completion
@@ -157,7 +161,8 @@ test("fans out a real remote app-server thread to multiple browser clients acros
   await expect(page.getByTestId("send-turn-button")).toHaveAttribute("aria-label", "已完成", {
     timeout: AGENT_OUTPUT_TIMEOUT_MS,
   });
-  await expect(page.getByTestId(`thread-button-${threadId}`).getByLabel("已完成")).toBeVisible();
+  // Same suppression as above: the open thread's sidebar row never shows the completion badge.
+  await expect(page.getByTestId(`thread-button-${threadId}`).getByLabel("运行中")).toBeHidden();
   await revealVirtualizedChatLocator(page, firstIntermediateStepsToggle(page));
   await firstIntermediateStepsToggle(page).click();
   await revealVirtualizedChatLocator(
@@ -187,7 +192,7 @@ test("fans out a real remote app-server thread to multiple browser clients acros
   const secondPage = await secondContext.newPage();
   let remoteImageRequestCount = 0;
   secondPage.on("request", (request) => {
-    if (new URL(request.url()).pathname === "/api/remote/images") {
+    if (new URL(request.url()).pathname === "/gw/api/remote/images") {
       remoteImageRequestCount += 1;
     }
   });
@@ -204,7 +209,7 @@ test("fans out a real remote app-server thread to multiple browser clients acros
       .toBe(backgroundThreadId);
     const backgroundStatusMarker = `E2E 跨浏览器侧边栏状态 ${Date.now()}`;
     await page
-      .getByPlaceholder("输入后续修改要求")
+      .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
       .fill(
         [
           `请执行较长命令后回复：${backgroundStatusMarker}`,
@@ -217,7 +222,7 @@ test("fans out a real remote app-server thread to multiple browser clients acros
       secondPage.getByTestId(`thread-button-${threadId}`).getByLabel("运行中"),
     ).toBeVisible({ timeout: 30_000 });
     await expect(
-      secondPage.getByTestId(`recent-thread-button-${threadId}`).getByLabel("运行中"),
+      secondPage.getByTestId(`thread-button-${threadId}`).getByLabel("运行中"),
     ).toBeVisible({ timeout: 30_000 });
     await expect
       .poll(() => threadRuntimeStatus(secondPage, host.id, threadId), { timeout: 30_000 })
@@ -230,7 +235,9 @@ test("fans out a real remote app-server thread to multiple browser clients acros
       .toBe("completed");
 
     await openThreadFromProjectOrRestoredState(secondPage, host.id, project.id, threadId);
-    await expect(secondPage.getByPlaceholder("输入后续修改要求")).toBeEnabled();
+    await expect(
+      secondPage.getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/),
+    ).toBeEnabled();
     await expect
       .poll(async () => secondPage.getByTestId("chat-scroll-area").getByText(firstMarker).count(), {
         timeout: AGENT_OUTPUT_TIMEOUT_MS,
@@ -328,7 +335,7 @@ test("fans out a real remote app-server thread to multiple browser clients acros
   const interruptMarker = `E2E interrupt ${Date.now()}`;
   const turnStartMessageOffset = await realtimeClientMessageCount(page);
   await page
-    .getByPlaceholder("输入后续修改要求")
+    .getByPlaceholder(/询问任何问题|继续对话|Ask anything|Continue the conversation/)
     .fill(
       [
         `请执行一个较长命令来等待中断：${interruptMarker}`,
@@ -362,11 +369,11 @@ test("fans out a real remote app-server thread to multiple browser clients acros
 
 function isTokenlessRealtimeUrl(rawUrl: string) {
   const url = new URL(rawUrl);
-  return url.pathname === "/api/realtime" && url.search === "";
+  return url.pathname === "/gw/api/realtime" && url.search === "";
 }
 
 function firstIntermediateStepsToggle(page: Page) {
-  return page.getByRole("button", { name: /中间过程/ }).first();
+  return page.getByTestId("intermediate-steps").first();
 }
 
 async function openThreadFromProjectOrRestoredState(
@@ -386,23 +393,15 @@ async function openThreadFromProjectOrRestoredState(
     await page.getByTestId(`host-button-${hostId}`).click();
   }
   await expect(projectButton).toBeVisible();
-  const row = page.getByTestId(`project-thread-row-${threadId}`);
-  if (!(await row.isVisible().catch(() => false))) {
+  const threadButton = page.getByTestId(`thread-button-${threadId}`);
+  if (!(await threadButton.isVisible().catch(() => false))) {
     await projectButton.click();
   }
   if ((await currentSelectedThreadId(page)) === threadId) {
     return;
   }
-  const threadButton = page.getByTestId(`thread-button-${threadId}`);
-  if (await threadButton.isVisible().catch(() => false)) {
-    await threadButton.click();
-    await expect
-      .poll(async () => currentSelectedThreadId(page), { timeout: 10_000 })
-      .toBe(threadId);
-    return;
-  }
-  await expect(row).toBeVisible({ timeout: 30_000 });
-  await row.click();
+  await expect(threadButton).toBeVisible({ timeout: 30_000 });
+  await threadButton.click();
   await expect.poll(async () => currentSelectedThreadId(page), { timeout: 10_000 }).toBe(threadId);
 }
 

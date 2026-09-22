@@ -3,6 +3,8 @@ import type { RealtimeClientMessage } from "~~/shared/types";
 type RealtimeRequestMessage = Extract<RealtimeClientMessage, { requestId: string }>;
 
 export class RealtimeRequestError extends Error {
+  readonly code: string | undefined;
+
   constructor(
     message: string,
     readonly request: RealtimeRequestMessage | undefined,
@@ -11,6 +13,7 @@ export class RealtimeRequestError extends Error {
   ) {
     super(formatRealtimeRequestError(message, request, details));
     this.name = "RealtimeRequestError";
+    this.code = typeof details.code === "string" ? details.code : undefined;
   }
 }
 

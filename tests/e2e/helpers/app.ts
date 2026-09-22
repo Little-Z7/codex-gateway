@@ -3,11 +3,18 @@ import { installRealtimeRoute } from "./realtime-route";
 
 export const E2E_USERNAME = process.env.E2E_GATEWAY_USERNAME ?? "e2e";
 export const E2E_PASSWORD = process.env.E2E_GATEWAY_PASSWORD ?? "codex-gateway-e2e-password";
+export const E2E_MEMBER_USERNAME = process.env.E2E_GATEWAY_MEMBER_USERNAME ?? "e2e-member";
+export const E2E_MEMBER_PASSWORD =
+  process.env.E2E_GATEWAY_MEMBER_PASSWORD ?? "codex-gateway-e2e-member-password";
 const resetPages = new WeakSet<Page>();
 
 export async function openApp(
   page: Page,
-  options: { resetConfig?: boolean; interceptRealtime?: boolean } = {},
+  options: {
+    resetConfig?: boolean;
+    interceptRealtime?: boolean;
+    credentials?: { username: string; password: string };
+  } = {},
 ) {
   // Playwright only routes WebSockets created after registration. Install a transparent pass-
   // through before the first navigation; focused tests can later intercept individual protocol
@@ -36,7 +43,9 @@ export async function authenticatedFetch<T>(
     if (token === null || token === "") {
       throw new Error("Missing E2E auth token");
     }
-    const response = await fetch(request.url, {
+    // The Gateway UI and API live under the app baseURL; /api/* is shorthand for /gw/api/*.
+    const url = request.url.startsWith("/api/") ? `/gw${request.url}` : request.url;
+    const response = await fetch(url, {
       method: request.method ?? "GET",
       headers: {
         authorization: `Bearer ${token}`,
@@ -53,12 +62,15 @@ export async function authenticatedFetch<T>(
   return parseResponse(responseText === "" ? {} : JSON.parse(responseText));
 }
 
-async function waitForHydratedApp(page: Page, options: { resetConfig?: boolean } = {}) {
+async function waitForHydratedApp(
+  page: Page,
+  options: { resetConfig?: boolean; credentials?: { username: string; password: string } } = {},
+) {
   const diagnostics = collectPageDiagnostics(page);
   await expect(page.getByTestId("app-ready"), await diagnostics()).toBeAttached({
     timeout: 90_000,
   });
-  await loginIfNeeded(page);
+  await loginIfNeeded(page, options.credentials);
   if (options.resetConfig !== false && !resetPages.has(page)) {
     resetPages.add(page);
     await resetGatewayConfig(page);
@@ -93,7 +105,18 @@ export async function resetGatewayConfig(page: Page) {
   );
 }
 
-async function loginIfNeeded(page: Page) {
+async function loginIfNeeded(
+  page: Page,
+  credentials: { username: string; password: string } = {
+    username: E2E_USERNAME,
+    password: E2E_PASSWORD,
+  },
+) {
+  const landingLogin = page.getByTestId("landing-login");
+  if (await landingLogin.isVisible().catch(() => false)) {
+    await landingLogin.click();
+    await expect(page.getByTestId("login-form")).toBeVisible({ timeout: 30_000 });
+  }
   if (
     !(await page
       .getByTestId("login-form")
@@ -102,8 +125,8 @@ async function loginIfNeeded(page: Page) {
   ) {
     return;
   }
-  await page.getByTestId("login-username").fill(E2E_USERNAME);
-  await page.getByTestId("login-password").fill(E2E_PASSWORD);
+  await page.getByTestId("login-username").fill(credentials.username);
+  await page.getByTestId("login-password").fill(credentials.password);
   await page.getByTestId("login-submit").click();
   await expect(page.getByTestId("login-form")).toBeHidden({ timeout: 30_000 });
   await page.waitForFunction(() => Boolean(localStorage.getItem("codex-gateway-auth-token")), {

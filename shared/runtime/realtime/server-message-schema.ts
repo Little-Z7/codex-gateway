@@ -197,7 +197,6 @@ const browserSessionSchema = z
     panelId: nonEmptyString,
     targetUrl: nonEmptyString,
     allowInsecureTls: z.boolean().optional(),
-    previewOrigin: nonEmptyString,
     bootstrapUrl: nonEmptyString,
     status: z.enum(["open", "closed"]),
   })
@@ -399,6 +398,7 @@ const agentProjectDefaultsSchema = z
     provider: z.literal("codex"),
     model: z.string().nullable(),
     effort: z.string().nullable(),
+    approvalPolicy: z.enum(["untrusted", "on-request", "never"]).nullable(),
   })
   .strict();
 // Top-level Gateway messages are closed protocol objects. Nested app-server thread/envelope
@@ -777,6 +777,13 @@ export const realtimeServerMessageSchema: z.ZodType<RealtimeServerMessage> = z.d
       .strict(),
     z
       .object({ type: z.literal("browser.closed"), ...requestIdField, sessionId: nonEmptyString })
+      .strict(),
+    z
+      .object({
+        type: z.literal("browser.sessionClosed"),
+        sessionId: nonEmptyString,
+        reason: z.enum(["replaced"]),
+      })
       .strict(),
     z
       .object({

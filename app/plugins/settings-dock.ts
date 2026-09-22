@@ -2,6 +2,9 @@ import SettingsDockTab from "@/components/settings/settings-dock/SettingsDockTab
 import { defineAsyncComponent } from "vue";
 
 const asyncPanels = {
+  SettingsDockAccountPanel: defineAsyncComponent(
+    () => import("@/components/settings/settings-dock/SettingsDockAccountPanel.vue"),
+  ),
   SettingsDockAppearancePanel: defineAsyncComponent(
     () => import("@/components/settings/settings-dock/SettingsDockAppearancePanel.vue"),
   ),
@@ -13,6 +16,9 @@ const asyncPanels = {
   ),
   SettingsDockNotificationPanel: defineAsyncComponent(
     () => import("@/components/settings/settings-dock/SettingsDockNotificationPanel.vue"),
+  ),
+  SettingsDockUsersPanel: defineAsyncComponent(
+    () => import("@/components/settings/settings-dock/SettingsDockUsersPanel.vue"),
   ),
 };
 

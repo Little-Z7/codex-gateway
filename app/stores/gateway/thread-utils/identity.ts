@@ -13,6 +13,8 @@ export interface ErrorMessageLabels {
   proxy: string;
   proxyEnabled: string;
   proxyNone: string;
+  /** Maps a stable server error code (errors.<code>) to localized text, null when missing. */
+  errorForCode?: (code: string) => string | null;
 }
 
 const defaultErrorLabels: ErrorMessageLabels = {
@@ -36,8 +38,18 @@ export function messageFromError(
   return unknownGatewayErrorFromError(error, fallback, labels).toDisplayMessage();
 }
 
-export function errorMessageLabels(t: (key: string) => string): ErrorMessageLabels {
+export function errorMessageLabels(
+  t: (key: string, named?: Record<string, unknown>) => string,
+  te?: (key: string) => boolean,
+): ErrorMessageLabels {
   return {
+    errorForCode:
+      te === undefined
+        ? undefined
+        : (code) => {
+            const key = `errors.${code}`;
+            return te(key) ? t(key) : null;
+          },
     scope: t("app.errorScope"),
     host: t("app.errorHost"),
     ssh: t("app.errorSsh"),
@@ -87,8 +99,13 @@ export function titleForThread(
   const label = firstNonEmptyString([thread.title, thread.name, thread.preview]);
   if (label !== null) return label;
   const identity = thread.id ?? thread.threadId;
-  return identity === undefined ? "Untitled" : String(identity);
+  if (identity === undefined) return "Untitled";
+  const label2 = String(identity);
+  return MACHINE_ID_RE.test(label2) ? "Untitled" : label2;
 }
+
+// App-server thread ids are UUIDs; rendering one as a title leaks implementation detail.
+const MACHINE_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function sortThreads(threads: GatewayThread[]) {
   return [...threads].sort((left, right) => {

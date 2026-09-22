@@ -7,166 +7,168 @@
 :root {
   color-scheme: light;
   --canvas: #ffffff;
-  --canvas-soft: #f6f5f4;
+  --canvas-soft: #f9f9f9;
   --surface: #ffffff;
-  --ink: #000000;
-  --ink-secondary: #31302e;
-  --ink-muted: #615d59;
-  --ink-faint: #a39e98;
-  --hairline: #e6e6e6;
-  --primary-active: #005bab;
-  --accent-sky: #62aef0;
-  --accent-purple: #d6b6f6;
-  --accent-purple-deep: #391c57;
-  --accent-pink: #ff64c8;
-  --accent-orange: #dd5b00;
-  --accent-orange-deep: #793400;
-  --accent-teal: #2a9d99;
-  --accent-green: #1aae39;
-  --accent-brown: #523410;
+  --ink: #0d0d0d;
+  --ink-secondary: #3a3a3a;
+  --ink-muted: #5d5d5d;
+  --ink-faint: #8f8f8f;
+  --hairline: #e3e3e3;
+  --primary-active: #2f2f2f;
+  --accent-sky: #5b8def;
+  --accent-purple: #9d94d0;
+  --accent-purple-deep: #6b5b95;
+  --accent-pink: #c6789e;
+  --accent-orange: #d97706;
+  --accent-orange-deep: #92400e;
+  --accent-teal: #0d9488;
+  --accent-green: #16a34a;
+  --accent-brown: #8a6d4d;
   --card: #ffffff;
-  --card-foreground: #000000;
+  --card-foreground: #0d0d0d;
   --popover: #ffffff;
-  --popover-foreground: #000000;
-  --primary: #0075de;
+  --popover-foreground: #0d0d0d;
+  --primary: #0d0d0d;
   --primary-foreground: #ffffff;
-  --secondary: #213183;
-  --secondary-foreground: #ffffff;
-  --muted: #f6f5f4;
-  --muted-foreground: #615d59;
-  --accent: #f6f5f4;
-  --accent-foreground: #31302e;
+  --secondary: #f0f0f0;
+  --secondary-foreground: #0d0d0d;
+  --muted: #f9f9f9;
+  --muted-foreground: #5d5d5d;
+  --accent: rgba(13, 13, 13, 0.06);
+  --accent-foreground: #0d0d0d;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: #ffffff;
-  --border: #e6e6e6;
-  --input: #e6e6e6;
-  --ring: #0075de;
-  --radius: 0.5rem;
-  --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --background: #f6f5f4;
-  --foreground: #000000;
-  --chart-1: #62aef0;
-  --chart-2: #d6b6f6;
-  --chart-3: #ff64c8;
-  --chart-4: #2a9d99;
-  --chart-5: #1aae39;
-  --sidebar: #f6f5f4;
-  --sidebar-foreground: #000000;
-  --sidebar-primary: #0075de;
+  --border: #e3e3e3;
+  --input: #e3e3e3;
+  --ring: #0d0d0d;
+  --radius: 0.75rem;
+  --font-sans:
+    "OpenAI Sans", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --background: #ffffff;
+  --foreground: #0d0d0d;
+  --chart-1: #5b8def;
+  --chart-2: #a3a3a3;
+  --chart-3: #737373;
+  --chart-4: #525252;
+  --chart-5: #d4d4d4;
+  --sidebar: #f9f9f9;
+  --sidebar-foreground: #0d0d0d;
+  --sidebar-primary: #0d0d0d;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #ffffff;
-  --sidebar-accent-foreground: #31302e;
-  --sidebar-border: #e6e6e6;
-  --sidebar-ring: #0075de;
+  --sidebar-accent: rgba(13, 13, 13, 0.06);
+  --sidebar-accent-foreground: #0d0d0d;
+  --sidebar-border: #e3e3e3;
+  --sidebar-ring: #0d0d0d;
 }
 
 :root.dark {
   color-scheme: dark;
-  --canvas: #191919;
-  --canvas-soft: #202020;
-  --surface: #252525;
-  --ink: #f1f1ef;
+  --canvas: #212121;
+  --canvas-soft: #2a2a2a;
+  --surface: #2f2f2f;
+  --ink: #ececec;
   --ink-secondary: #d4d4d4;
-  --ink-muted: #9b9b9b;
-  --ink-faint: #6f6f6f;
-  --hairline: #373737;
-  --primary-active: #3267ad;
-  --accent-sky: #447acb;
-  --accent-purple: #865dbb;
-  --accent-purple-deep: #d6b6f6;
-  --accent-pink: #ba4a78;
-  --accent-orange: #cb7b37;
+  --ink-muted: #b4b4b4;
+  --ink-faint: #8e8e8e;
+  --hairline: #424242;
+  --primary-active: #ececec;
+  --accent-sky: #5b8def;
+  --accent-purple: #9d94d0;
+  --accent-purple-deep: #b9a8ec;
+  --accent-pink: #d18fbe;
+  --accent-orange: #e5a15c;
   --accent-orange-deep: #f0b57a;
-  --accent-teal: #4f9d99;
-  --accent-green: #4f9768;
-  --accent-brown: #a27763;
-  --card: #252525;
-  --card-foreground: #f1f1ef;
-  --popover: #252525;
-  --popover-foreground: #f1f1ef;
-  --primary: #447acb;
-  --primary-foreground: #ffffff;
-  --secondary: #2a2a2a;
-  --secondary-foreground: #f1f1ef;
-  --muted: #252525;
-  --muted-foreground: #9b9b9b;
-  --accent: #252525;
-  --accent-foreground: #f1f1ef;
+  --accent-teal: #4db8b0;
+  --accent-green: #4fae74;
+  --accent-brown: #b09683;
+  --card: #2f2f2f;
+  --card-foreground: #ececec;
+  --popover: #2f2f2f;
+  --popover-foreground: #ececec;
+  --primary: #ffffff;
+  --primary-foreground: #0d0d0d;
+  --secondary: #2f2f2f;
+  --secondary-foreground: #ececec;
+  --muted: #2f2f2f;
+  --muted-foreground: #b4b4b4;
+  --accent: rgba(255, 255, 255, 0.08);
+  --accent-foreground: #ececec;
   --destructive: #be524b;
   --destructive-foreground: #ffffff;
-  --border: #373737;
-  --input: #373737;
-  --ring: #447acb;
-  --background: #191919;
-  --foreground: #f1f1ef;
-  --chart-1: #447acb;
-  --chart-2: #865dbb;
-  --chart-3: #ba4a78;
-  --chart-4: #4f9d99;
-  --chart-5: #4f9768;
-  --sidebar: #191919;
-  --sidebar-foreground: #f1f1ef;
-  --sidebar-primary: #447acb;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #252525;
-  --sidebar-accent-foreground: #f1f1ef;
-  --sidebar-border: #373737;
-  --sidebar-ring: #447acb;
+  --border: #424242;
+  --input: #424242;
+  --ring: #ececec;
+  --background: #212121;
+  --foreground: #ececec;
+  --chart-1: #5b8def;
+  --chart-2: #b4b4b4;
+  --chart-3: #8e8e8e;
+  --chart-4: #6f6f6f;
+  --chart-5: #d4d4d4;
+  --sidebar: #171717;
+  --sidebar-foreground: #ececec;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #0d0d0d;
+  --sidebar-accent: rgba(255, 255, 255, 0.08);
+  --sidebar-accent-foreground: #ececec;
+  --sidebar-border: #2f2f2f;
+  --sidebar-ring: #ececec;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
     color-scheme: dark;
-    --canvas: #191919;
-    --canvas-soft: #202020;
-    --surface: #252525;
-    --ink: #f1f1ef;
+    --canvas: #212121;
+    --canvas-soft: #2a2a2a;
+    --surface: #2f2f2f;
+    --ink: #ececec;
     --ink-secondary: #d4d4d4;
-    --ink-muted: #9b9b9b;
-    --ink-faint: #6f6f6f;
-    --hairline: #373737;
-    --primary-active: #3267ad;
-    --accent-sky: #447acb;
-    --accent-purple: #865dbb;
-    --accent-purple-deep: #d6b6f6;
-    --accent-pink: #ba4a78;
-    --accent-orange: #cb7b37;
+    --ink-muted: #b4b4b4;
+    --ink-faint: #8e8e8e;
+    --hairline: #424242;
+    --primary-active: #ececec;
+    --accent-sky: #5b8def;
+    --accent-purple: #9d94d0;
+    --accent-purple-deep: #b9a8ec;
+    --accent-pink: #d18fbe;
+    --accent-orange: #e5a15c;
     --accent-orange-deep: #f0b57a;
-    --accent-teal: #4f9d99;
-    --accent-green: #4f9768;
-    --accent-brown: #a27763;
-    --card: #252525;
-    --card-foreground: #f1f1ef;
-    --popover: #252525;
-    --popover-foreground: #f1f1ef;
-    --primary: #447acb;
-    --primary-foreground: #ffffff;
-    --secondary: #2a2a2a;
-    --secondary-foreground: #f1f1ef;
-    --muted: #252525;
-    --muted-foreground: #9b9b9b;
-    --accent: #252525;
-    --accent-foreground: #f1f1ef;
+    --accent-teal: #4db8b0;
+    --accent-green: #4fae74;
+    --accent-brown: #b09683;
+    --card: #2f2f2f;
+    --card-foreground: #ececec;
+    --popover: #2f2f2f;
+    --popover-foreground: #ececec;
+    --primary: #ffffff;
+    --primary-foreground: #0d0d0d;
+    --secondary: #2f2f2f;
+    --secondary-foreground: #ececec;
+    --muted: #2f2f2f;
+    --muted-foreground: #b4b4b4;
+    --accent: rgba(255, 255, 255, 0.08);
+    --accent-foreground: #ececec;
     --destructive: #be524b;
     --destructive-foreground: #ffffff;
-    --border: #373737;
-    --input: #373737;
-    --ring: #447acb;
-    --background: #191919;
-    --foreground: #f1f1ef;
-    --chart-1: #447acb;
-    --chart-2: #865dbb;
-    --chart-3: #ba4a78;
-    --chart-4: #4f9d99;
-    --chart-5: #4f9768;
-    --sidebar: #191919;
-    --sidebar-foreground: #f1f1ef;
-    --sidebar-primary: #447acb;
-    --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #252525;
-    --sidebar-accent-foreground: #f1f1ef;
-    --sidebar-border: #373737;
-    --sidebar-ring: #447acb;
+    --border: #424242;
+    --input: #424242;
+    --ring: #ececec;
+    --background: #212121;
+    --foreground: #ececec;
+    --chart-1: #5b8def;
+    --chart-2: #b4b4b4;
+    --chart-3: #8e8e8e;
+    --chart-4: #6f6f6f;
+    --chart-5: #d4d4d4;
+    --sidebar: #171717;
+    --sidebar-foreground: #ececec;
+    --sidebar-primary: #ffffff;
+    --sidebar-primary-foreground: #0d0d0d;
+    --sidebar-accent: rgba(255, 255, 255, 0.08);
+    --sidebar-accent-foreground: #ececec;
+    --sidebar-border: #2f2f2f;
+    --sidebar-ring: #ececec;
   }
 }
 
@@ -246,7 +248,7 @@
 
 @layer components {
   .markdown-content {
-    @apply min-w-0 max-w-full text-[0.9375rem] leading-8 text-inherit;
+    @apply min-w-0 max-w-full text-base leading-[1.75] text-inherit;
   }
 
   .markdown-content > :first-child {
@@ -312,6 +314,26 @@
 
   .markdown-content pre.shiki-block {
     @apply border border-hairline bg-canvas-soft;
+  }
+
+  .markdown-content .code-block {
+    @apply my-4 overflow-hidden rounded-lg border border-hairline;
+  }
+
+  .markdown-content .code-block-header {
+    @apply flex items-center justify-between gap-3 bg-canvas px-3 py-1.5 text-xs text-ink-muted;
+  }
+
+  .markdown-content .code-block-lang {
+    @apply truncate font-mono lowercase;
+  }
+
+  .markdown-content .code-block-copy {
+    @apply shrink-0 rounded-md px-1.5 py-0.5 text-ink-muted hover:bg-canvas-soft hover:text-ink;
+  }
+
+  .markdown-content .code-block pre {
+    @apply my-0 rounded-none border-0;
   }
 
   /* Shiki's dual-theme output sets these variables on each token. Keep selection in CSS so theme

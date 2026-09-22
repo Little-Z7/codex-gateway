@@ -5,7 +5,7 @@ import { authenticatedFetch, openApp } from "./helpers/app";
 test("requires bearer auth for protected HTTP APIs", async ({ page }) => {
   await openApp(page);
   const unauthorized = await page.evaluate(async () => {
-    const response = await fetch("/api/config/export");
+    const response = await fetch("/gw/api/config/export");
     return {
       ok: response.ok,
       status: response.status,
@@ -23,6 +23,7 @@ test("requires bearer auth for protected HTTP APIs", async ({ page }) => {
 
 test("defaults to Chinese and can switch to English", async ({ page }) => {
   await openApp(page);
+  await page.getByTestId("sidebar-user-menu").click();
   await expect(page.getByText("设置")).toBeVisible();
   await page.getByTestId("settings-toggle").click();
   await page.getByRole("tab", { name: "外观" }).click();
@@ -40,7 +41,7 @@ test("returns to login when the current session is revoked", async ({ page }) =>
   // Revoke through HTTP without touching browser storage. The authenticated realtime connection
   // must deliver the policy close that clears the stale local session in the same way as expiry.
   const revokeStatus = await page.evaluate(async (authorization) => {
-    const response = await fetch("/api/auth/logout", {
+    const response = await fetch("/gw/api/auth/logout", {
       method: "POST",
       headers: { authorization: `Bearer ${authorization}` },
     });
@@ -50,7 +51,7 @@ test("returns to login when the current session is revoked", async ({ page }) =>
 
   await expect(page.getByRole("heading", { name: "登录 Codex Gateway" })).toBeVisible();
   const revokedStatus = await page.evaluate(async (authorization) => {
-    const response = await fetch("/api/config/export", {
+    const response = await fetch("/gw/api/config/export", {
       headers: { authorization: `Bearer ${authorization}` },
     });
     return response.status;
@@ -75,10 +76,12 @@ test("synchronizes logout state across same-origin tabs", async ({ page }) => {
 
 test("config JSON editor shows current config by default and scrolls", async ({ page }) => {
   await openApp(page);
+  await page.getByTestId("sidebar-user-menu").click();
   await page.getByTestId("settings-toggle").click();
   const settingsPanel = page.getByTestId("settings-panel");
   await expect(settingsPanel.locator(".dv-groupview")).toHaveCount(1);
-  await expect(settingsPanel.getByRole("tab")).toHaveCount(4);
+  // The default e2e account is an admin: the 账户/用户管理 extra tabs are visible too.
+  await expect(settingsPanel.getByRole("tab")).toHaveCount(6);
   const editor = page.getByTestId("config-json-editor");
   await expect(editor).toContainText('"version"');
   await expect(editor).toContainText('"notifications"');
@@ -121,6 +124,7 @@ test("config JSON editor shows current config by default and scrolls", async ({ 
 
 test("Bark notification settings are saved to server config", async ({ page }) => {
   await openApp(page);
+  await page.getByTestId("sidebar-user-menu").click();
   await page.getByTestId("settings-toggle").click();
   await page.getByRole("tab", { name: "通知" }).click();
   const barkSwitch = page.getByRole("switch", { name: "启用 Bark" });

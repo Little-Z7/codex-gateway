@@ -44,16 +44,16 @@ function imageSource(image: { type: string; url: string; path: string }) {
       hostId: String(props.hostId),
       path: image.path,
     });
-    return `/api/remote/images?${query.toString()}`;
+    return gatewayPath(`api/remote/images?${query.toString()}`);
   }
   return "";
 }
 </script>
 
 <template>
-  <Message from="user" class="min-w-0 max-w-full">
+  <Message from="user" class="min-w-0 !max-w-[70%]">
     <MessageContent
-      class="thread-user-message min-w-0 max-w-full space-y-3 rounded-2xl bg-canvas-soft px-4 py-4 text-[0.9375rem] leading-7 text-ink group-[.is-user]:rounded-2xl group-[.is-user]:bg-canvas-soft group-[.is-user]:py-4 group-[.is-user]:text-ink md:max-w-3xl md:px-5 md:group-[.is-user]:px-5"
+      class="thread-user-message min-w-0 max-w-full space-y-3 rounded-[1.5rem] bg-muted px-5 py-2.5 text-base leading-[1.75] text-ink group-[.is-user]:rounded-[1.5rem] group-[.is-user]:bg-muted group-[.is-user]:text-ink"
     >
       <div v-if="imageParts.length" class="grid max-w-2xl grid-cols-1 gap-2 sm:grid-cols-2">
         <template v-for="image in imageParts" :key="image.id">

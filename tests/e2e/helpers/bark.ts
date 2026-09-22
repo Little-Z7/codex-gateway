@@ -44,6 +44,7 @@ export async function useBarkReceiver() {
 }
 
 export async function configureBarkNotifications(page: Page, serverUrl: string, deviceKey: string) {
+  await page.getByTestId("sidebar-user-menu").click();
   await page.getByTestId("settings-toggle").click();
   await page.getByRole("tab", { name: "通知" }).click();
   const barkSwitch = page.getByRole("switch", { name: "启用 Bark" });

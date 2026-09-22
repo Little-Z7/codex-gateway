@@ -64,6 +64,7 @@ export function applyStartedThreadResult(result: ThreadOpenResult) {
   views.currentThread = result.thread;
   views.setHistory(result.history);
   navigation.selectedThreadId = threadId;
+  navigation.newThreadDraft = false;
   applyCommonThreadResult(threadId, result, result.lastEventId);
   return threadId;
 }

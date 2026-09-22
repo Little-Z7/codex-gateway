@@ -221,6 +221,17 @@ export function replaceCurrentGatewayMemoryState(nextState: GatewayMemoryState) 
   statesByUser.set(userId, nextState);
 }
 
+export function dropGatewayMemoryState(userId: number) {
+  statesByUser.delete(userId);
+}
+
+/** Buffered gateway events across every user scope — surfaced on the admin system page. */
+export function gatewayEventCount() {
+  let total = anonymousState.events.length;
+  for (const state of statesByUser.values()) total += state.events.length;
+  return total;
+}
+
 export function runWithGatewayUser<T>(userId: number, callback: () => T): T {
   return userScope.run(userId, callback);
 }
@@ -242,6 +253,7 @@ export function buildGatewayMemoryState(config: GatewayConfig): GatewayMemorySta
       ...host,
       proxyUrl: trimmedOrNull(host.proxyUrl),
       hasPassword: typeof host.password === "string" && host.password.length > 0,
+      hasPrivateKey: typeof host.privateKey === "string" && host.privateKey.length > 0,
     })),
     projects: (config.projects ?? []).map((project) => ({
       ...project,

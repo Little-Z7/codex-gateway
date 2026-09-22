@@ -1,14 +1,11 @@
 <script setup lang="ts">
 import ComposerShell from "@/components/chat/composer/ComposerShell.vue";
-import { useComposerController } from "@/composables/composer/useComposerController";
+import { computed, onMounted, watch } from "vue";
+import { useInjectedComposerController } from "@/components/chat/composer/context";
+import { useGatewayBudgetStore } from "@/stores/gateway-budget";
+import { useGatewayThreadViewStore } from "@/stores/gateway-thread-view";
 
 const {
-  activeEffortCompactLabel,
-  activeEffortValue,
-  activeModel,
-  activeModelLabel,
-  hostDefaultModelLabel,
-  hostDefaultEffortLabel,
   activePlanSummary,
   attachedFiles,
   fileReferences,
@@ -16,7 +13,6 @@ const {
   canUsePrimaryAction,
   composerInputEnabled,
   deactivatePlanMode,
-  effortOptions,
   filteredSlashCommands,
   goalActionPending,
   goalInputActive,
@@ -27,17 +23,11 @@ const {
   hasComposerInput,
   interruptingTurn,
   isThreadRunning,
-  labelEffortOption,
-  loadingModels,
-  modelOptionValue,
-  models,
   planModeActive,
   removeAttachment,
   runSlashCommand,
   selectSlashCommandIndex,
   selectedApprovalMode,
-  selectedProvider,
-  providerOptions,
   selectedSlashCommandIndex,
   selectedThreadGoal,
   selectedThreadGoalObservedAt,
@@ -52,18 +42,27 @@ const {
   resumeSelectedThreadGoal,
   clearSelectedThreadGoal,
   setSelectedApprovalMode,
-  setSelectedProvider,
-  setSelectedEffort,
-  setSelectedModel,
   slashMenuOpen,
   turnText,
   uploadingAttachments,
   handleFileReferenceLimit,
-} = useComposerController();
+} = useInjectedComposerController();
+const threadView = useGatewayThreadViewStore();
+const budget = useGatewayBudgetStore();
+const emptyThread = computed(() => threadView.timelineTurns.length === 0);
+
+onMounted(() => {
+  void budget.refresh();
+});
+watch(selectedThreadStatus, (status, previous) => {
+  if (previous === "running" && status !== "running") void budget.refresh();
+});
 </script>
 
 <template>
   <ComposerShell
+    :empty-thread="emptyThread"
+    :embedded="emptyThread"
     v-model="turnText"
     v-model:file-references="fileReferences"
     :attached-files="attachedFiles"
@@ -82,21 +81,7 @@ const {
     :selected-host-id="selectedHostId"
     :selected-project-id="selectedProjectId"
     :selected-approval-mode="selectedApprovalMode"
-    :selected-provider="selectedProvider"
-    :provider-options="providerOptions"
-    :can-select-provider="selectedThreadId === null"
     :selected-thread-token-usage="selectedThreadTokenUsage"
-    :models="models"
-    :loading-models="loadingModels"
-    :active-model="activeModel"
-    :active-model-label="activeModelLabel"
-    :host-default-model-label="hostDefaultModelLabel"
-    :host-default-effort-label="hostDefaultEffortLabel"
-    :active-effort-value="activeEffortValue"
-    :active-effort-compact-label="activeEffortCompactLabel"
-    :effort-options="effortOptions"
-    :label-effort-option="labelEffortOption"
-    :model-option-value="modelOptionValue"
     :has-composer-input="hasComposerInput"
     :is-thread-running="isThreadRunning"
     :can-interrupt-turn="canInterruptTurn"
@@ -118,8 +103,5 @@ const {
     @file-reference-limit="handleFileReferenceLimit"
     @primary-action="handlePrimaryAction"
     @update-selected-approval-mode="setSelectedApprovalMode"
-    @select-model="setSelectedModel"
-    @select-effort="setSelectedEffort"
-    @select-provider="setSelectedProvider"
   />
 </template>
