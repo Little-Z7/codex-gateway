@@ -11,6 +11,13 @@ import { z } from "zod";
 const ARTIFACT_IDLE_TTL_MS = 30_000;
 const RELEASE_METADATA_TIMEOUT_MS = 30_000;
 const RELEASE_ASSET_TIMEOUT_MS = 10 * 60_000;
+// The standalone archive is ~130MB; a single mid-stream hiccup over a sandboxed outbound proxy
+// (observed in practice: intermittent `fetch failed` partway through the body) previously failed
+// the whole install with no retry. Bounded retry-with-backoff per URL before falling through to
+// the next mirror (releases.openai.com, then GitHub) keeps the existing sha256 verification and
+// partial-file cleanup unchanged and only adds resilience to transient network failures.
+const DOWNLOAD_ATTEMPTS_PER_URL = 3;
+const DOWNLOAD_RETRY_BACKOFF_MS = [2_000, 5_000];
 
 export interface CodexArtifactBundle {
   releaseTarget: CodexRemotePlatform["releaseTarget"];
@@ -108,7 +115,7 @@ async function prepareBundle(
   }
 }
 
-interface StandaloneRelease {
+export interface StandaloneRelease {
   assetName: string;
   downloadUrls: string[];
   sha256: string;
@@ -187,30 +194,42 @@ async function readReleaseAssets(url: string) {
   return releaseMetadataSchema.parse(await response.json()).assets;
 }
 
-async function downloadVerifiedArchive(release: StandaloneRelease, outputPath: string) {
+export async function downloadVerifiedArchive(release: StandaloneRelease, outputPath: string) {
   const failures: string[] = [];
   for (const url of release.downloadUrls) {
-    try {
-      const response = await fetch(url, {
-        signal: AbortSignal.timeout(RELEASE_ASSET_TIMEOUT_MS),
-      });
-      if (!response.ok || response.body === null) {
-        throw new Error(`HTTP ${response.status}`);
+    for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS_PER_URL; attempt += 1) {
+      try {
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(RELEASE_ASSET_TIMEOUT_MS),
+        });
+        if (!response.ok || response.body === null) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        await pipeline(Readable.from(response.body), createWriteStream(outputPath));
+        const actual = await hashFile(outputPath, "sha256");
+        if (actual !== release.sha256) {
+          throw new Error(`SHA-256 mismatch: expected ${release.sha256}, received ${actual}`);
+        }
+        return;
+      } catch (error) {
+        failures.push(
+          `${url} (attempt ${attempt}/${DOWNLOAD_ATTEMPTS_PER_URL}): ${error instanceof Error ? error.message : String(error)}`,
+        );
+        // Always clear a partial/corrupt file before the next attempt or URL picks up cleanly.
+        await rm(outputPath, { force: true });
+        if (attempt < DOWNLOAD_ATTEMPTS_PER_URL) {
+          await sleep(DOWNLOAD_RETRY_BACKOFF_MS[attempt - 1] ?? 5_000);
+        }
       }
-      await pipeline(Readable.from(response.body), createWriteStream(outputPath));
-      const actual = await hashFile(outputPath, "sha256");
-      if (actual !== release.sha256) {
-        throw new Error(`SHA-256 mismatch: expected ${release.sha256}, received ${actual}`);
-      }
-      return;
-    } catch (error) {
-      failures.push(`${url}: ${error instanceof Error ? error.message : String(error)}`);
-      await rm(outputPath, { force: true });
     }
   }
   throw new Error(
     `Failed to download official Codex archive ${release.assetName}: ${failures.join("; ")}`,
   );
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
 async function hashFile(path: string, algorithm: "sha256" | "sha512") {
