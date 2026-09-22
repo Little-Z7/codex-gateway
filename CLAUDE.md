@@ -176,3 +176,12 @@ app-server 启动方式同时改为 `nohup "$CODEX_BIN" app-server daemon bootst
 - **用户容器内的 Codex**：`provisioning-config.ts` 读同一个变量，`user-container-provisioner.ts` 把它写进容器 `Env`；`deploy/user-container/entrypoint.sh` 再落一份到 `/etc/profile.d/codex-gateway-outbound-proxy.sh`——和共享 API-key provider 的 key 同理，sshd 不会把容器 Env 带进 SSH 会话，Gateway 又是通过 `$SHELL -l -i -c` 登录 shell 启动 app-server，只有 profile.d 才能读到。
 
 `CODEX_GATEWAY_OUTBOUND_NO_PROXY` 只是逗号分隔的额外直连主机名/IP；`localhost`/`127.0.0.1`/`::1` 无论是否设置都会直连（Node 内置默认）。**不支持 CIDR 网段**——已实测 `no_proxy=10.0.0.0/8` 这类写法不会被当成直连匹配，Node 的代理匹配只认精确主机名/IP 和域名后缀；整段私网需要直连时只能逐个列主机名，或依赖上游代理（mihomo/Clash）自身的规则表。
+
+### 用户容器隔离
+
+`server/utils/gateway/provisioning/user-network-isolation.ts` + `user-container-provisioner.ts` 实现 `CODEX_GATEWAY_USER_NETWORK_ISOLATION`（`shared` 默认 / `per-user`）、`CODEX_GATEWAY_USER_CONTAINER_PIDS`、`CODEX_GATEWAY_USER_CONTAINER_CGROUP_PARENT` 三项，完整设计、实测矩阵和 233 类"同机跑生产服务"机器的宿主机命令见 `deploy/README.zh-CN.md` 的"安全加固"一节，不在这里重复。几个容易踩坑的点：
+
+- **per-user 网络的子网按来源子网整体保留，不按单个网络的目的 IP**：`CODEX_GATEWAY_USER_NETWORK_SUBNET_BASE`（默认 `172.30.0.0/16`）给每个用户切一个确定性的 `/24`（`computeUserSubnet`），这样宿主机只需要一条静态 `iptables -s <supernet> ...` 规则就能覆盖所有当前和未来的每用户网络，不需要在网络创建/重建时动态改防火墙规则——这是 Gateway 容器本身没有 host netns/`NET_ADMIN`、只能通过 `docker.sock` 操作 Docker 资源、却不能直接管宿主机 iptables 的必然结果。
+- **同一 Linux 网桥内的容器间流量不受 `Internal: true` 约束**：Docker 的 `Internal` 只挡"离开这个网络"的路由，不挡"网络内部谁能连谁的哪个端口"。Gateway 和出站代理容器必须被接入每个用户网络才能提供 SSH/出网，这意味着用户容器在网络层能连到 Gateway 和代理的**所有**端口，不只是预期的 22/代理数据端口——已实测确认，需要宿主机另加 `DOCKER-USER` iptables 规则才能收窄到端口级，且该规则**需要 `br_netfilter` 内核模块 + `bridge-nf-call-iptables=1`** 才对同网桥流量生效（默认 Ubuntu+Docker CE 不会自动启用）。
+- **目的地是宿主机自己的流量走 `INPUT` 不走 `FORWARD`**：用户容器能通过自己所在网络的 bridge 网关 IP（Docker 给每个网络分配的 `.1` 地址，宿主机在该网段上的地址）连到宿主机上任何监听 `0.0.0.0` 的服务，这条路径不经过 `DOCKER-USER`（那是转发链），需要单独的 `INPUT` 规则才能挡住；这条规则不依赖 `br_netfilter`。
+- **生命周期依赖 Gateway 能识别"自己"**：`os.hostname()` 在 Docker 里默认就是容器自身 ID（除非 compose 显式设置了 `hostname:`，本仓库两个 compose 文件都没有），`user-network-isolation.ts` 用它做 `docker network connect` 的默认目标；`CODEX_GATEWAY_SELF_CONTAINER` 可覆盖。Gateway 启动（`server/plugins/provisioning-repair.ts`）和每次定时 `reconcileContainers`（`server/tasks/gateway/reconcile-containers.ts`，5 分钟一次）都会重新执行一遍"把自己和代理容器接回所有已知的每用户网络"，分别覆盖"Gateway 容器被重建"和"代理容器被外部重建"两种情况——`docker network connect` 对已连接的容器是幂等的，可以放心频繁调用。

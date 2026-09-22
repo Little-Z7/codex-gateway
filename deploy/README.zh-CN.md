@@ -197,6 +197,161 @@ docker compose --profile build-only build --build-arg http_proxy=<proxy> --build
 
 或者一次性在部署机的 `~/.docker/config.json` 里配置 `proxies.default`，让 Docker CLI 对所有构建/容器都生效。
 
+## 安全加固
+
+默认配置（`shared` 网络、无 PID/cgroup 上限）保持了升级前的行为，兼容本机 `pnpm dev`/E2E 环境。**同一台机器上还跑着其它生产服务**时（例如线上部署机），建议按下文把用户容器的资源和网络都收紧。所有改动只在**重建容器**后生效——已经在跑的容器不会自动应用新的 `HostConfig`/网络配置，需要 admin 后台的"重建"或 `docker compose up -d --build codex-gateway` 后走一遍 provision/recreate 流程。
+
+### 资源限制
+
+- `CODEX_GATEWAY_USER_CONTAINER_PIDS`（默认 `512`，`0` 表示不限）写入 `HostConfig.PidsLimit`，防止容器内 fork 炸弹耗尽宿主机 PID。已实测：设置为较小值时 Docker 会直接拒绝超额的新进程（`OCI runtime exec failed`），容器本身不受影响。
+- `CODEX_GATEWAY_USER_CONTAINER_CGROUP_PARENT` 把所有用户容器的 cgroup 挂到同一个 systemd slice 下（**仅 systemd cgroup 驱动**，`docker info` 里 `Cgroup Driver: systemd`；`cgroupfs` 驱动不支持这个用法），这样宿主机可以对这个 slice 整体设一个上限，即使单个容器的 `CODEX_GATEWAY_USER_CONTAINER_MEMORY/CPUS` 留空或设得较宽松，也不会拖垮同机的其它服务。
+
+  部署机一次性建立 slice（名字不要含 `-`，否则 systemd 会把它解析成多级父 slice；下面示例用 `codexgatewayusers.slice`）：
+
+  ```bash
+  cat > /etc/systemd/system/codexgatewayusers.slice <<'EOF'
+  [Unit]
+  Description=codex-gateway user containers (aggregate resource cap)
+
+  [Slice]
+  MemoryMax=8G
+  CPUQuota=400%
+  TasksMax=4096
+  EOF
+  systemctl daemon-reload
+  systemctl start codexgatewayusers.slice
+  ```
+
+  再在 `.env` 里设置 `CODEX_GATEWAY_USER_CONTAINER_CGROUP_PARENT=codexgatewayusers.slice`，重建用户容器后生效。之后调整上限不需要重建容器，直接：
+
+  ```bash
+  systemctl set-property codexgatewayusers.slice MemoryMax=12G CPUQuota=600% TasksMax=8192
+  ```
+
+  该机制已实测验证：`docker run --cgroup-parent=<slice> ...` 创建的容器会出现在 `/sys/fs/cgroup/<slice>/docker-<id>.scope` 下；在 slice 上设置 `MemoryMax` 后，容器内单个进程超出 slice 总量会被 cgroup OOM killer 杀死（`dmesg` 显示 `oom_memcg=/<slice>`），但容器本身（其它进程）不受影响；`TasksMax` 同理是 slice 内所有容器进程数之和的上限，`systemctl set-property` 对运行中的 slice 立即生效。
+
+### 网络隔离
+
+`CODEX_GATEWAY_USER_NETWORK_ISOLATION=per-user`（默认 `shared`，即历史行为不变）让每个用户拿到一个独立的 `Internal: true` Docker bridge 网络，只有 Gateway 自身容器和 `CODEX_GATEWAY_OUTBOUND_PROXY_CONTAINER` 指定的出站代理容器会被接入。目标：用户容器只能 (1) 接受 Gateway 发起的 SSH，(2) 经代理容器的数据端口出网；不能访问其它用户容器、宿主机、局域网、Gateway 的 HTTP 端口、代理容器的控制端口。
+
+实测矩阵（Ubuntu 24.04 / Docker CE / cgroup v2 / systemd 驱动，与线上机型一致；容器均为 `alpine` + `nc`，用 `nc -z -w2 <ip> <port>` 探测）：
+
+| 从用户容器 A 出发 | 目标 | 仅靠 Docker `Internal: true`（无 iptables） | 加两条 `DOCKER-USER` + 一条 `INPUT` 规则后 |
+| --- | --- | --- | --- |
+| A → B（另一个用户，不同的每用户网络） | B:22 | **已阻断**（不在同一网络，无路由） | 已阻断 |
+| A → 宿主机默认 bridge 网关 IP（如 `docker0` 172.18.0.1） | 任意端口 | **已阻断**（Internal 网络无出网路由） | 已阻断 |
+| A → 局域网/公网（如 1.1.1.1:443） | 443 | **已阻断**（同上） | 已阻断 |
+| A → **自己所在网络自己的 bridge 网关 IP**（如 172.30.11.1，宿主机在该网段的地址） | 宿主机上监听 `0.0.0.0` 的服务（如 sshd） | **未阻断**——这条流量对内核而言是"目的地是本机"的 `INPUT` 流量，不受 `Internal` 网络语义约束，也不经过 `DOCKER-USER`（那是 `FORWARD` 链） | 已阻断（`INPUT` 规则） |
+| A → Gateway 容器:3000（Gateway 与代理容器都被接入了 A 的网络） | Gateway 的 HTTP/管理端口 | **未阻断**——Docker 网桥内同网段容器之间没有端口级 ACL，`Internal` 只挡外部路由 | 已阻断（`DOCKER-USER` 规则，**需要 `br_netfilter` 内核模块**，见下） |
+| A → 代理容器:7890（数据端口） | 出站代理 | 可达（符合预期，用户需要经代理出网） | 仍可达 |
+| A → 代理容器:9090（Clash 控制端口，若使用 Clash） | 代理的管理 API | **未阻断**，原因同 Gateway:3000 | 已阻断（`DOCKER-USER` 规则） |
+| Gateway → A:22 | SSH（Gateway 管理用户容器的路径） | 可达（预期，Gateway 与 A 同网络） | 仍可达 |
+| Gateway 容器被 `docker rm && docker run` 重建后 → A:22 | SSH | 重建后立刻不可达（网络成员丢失） | Gateway 启动时会自动 `docker network connect` 回所有用户网络（见下），重连后立刻恢复可达 |
+
+结论：**Docker 原生的 `Internal: true` 网络已经覆盖了绝大部分隔离面**（跨用户、局域网、公网、宿主机默认网桥），代码只需要创建/挂接/回收这些网络（见下方生命周期），不需要额外的 iptables 才能达到"用户之间互相隔离、也隔离出局域网/公网"的效果。但还剩两类**同一网段内**的可达性，Docker 没有端口级 ACL 能拦，需要宿主机加两类 iptables 规则：
+
+1. **`DOCKER-USER` 链**（Docker 保留给管理员自定义规则的链，dockerd 重启不会清空它，但**不会**跨机器重启持久化，需要配合 `iptables-persistent`）按来源子网 + 目的端口丢弃，覆盖"Gateway HTTP 端口"和"代理控制端口"两个网关：
+
+   ```bash
+   iptables -I DOCKER-USER -s 172.30.0.0/16 -p tcp --dport 3000 -j DROP \
+     -m comment --comment "codex-gateway: block user containers -> gateway HTTP"
+   iptables -I DOCKER-USER -s 172.30.0.0/16 -p tcp --dport 9090 -j DROP \
+     -m comment --comment "codex-gateway: block user containers -> proxy control port"
+   ```
+
+   `172.30.0.0/16` 必须和 `CODEX_GATEWAY_USER_NETWORK_SUBNET_BASE` 一致（默认就是这个值）；按**来源子网**而不是按目的 IP 匹配是关键——Gateway/代理容器的 IP 会在每次被重建、重新接入网络时改变，子网匹配不需要跟着更新，一条静态规则永久覆盖所有当前和未来的每用户网络。端口按你实际用的端口改（Gateway 固定 3000；代理控制端口看你用的实现，Clash 默认 9090）。
+
+   **前置条件**：这条规则要生效，宿主机必须加载 `br_netfilter` 内核模块并打开 `net.bridge.bridge-nf-call-iptables`——否则同一个 Linux 网桥内的容器间流量根本不经过 `iptables FORWARD`/`DOCKER-USER`（纯二层转发，对 netfilter 不可见），规则形同虚设。已实测确认：不加载 `br_netfilter` 时上表第 5、7 行会显示"可达"，加载后立即变为"已阻断"，且不影响 SSH（第 8 行）和代理数据端口（第 6 行）。持久化：
+
+   ```bash
+   cat > /etc/modules-load.d/codex-gateway-br-netfilter.conf <<'EOF'
+   br_netfilter
+   EOF
+   cat > /etc/sysctl.d/99-codex-gateway-bridge-nf.conf <<'EOF'
+   net.bridge.bridge-nf-call-iptables=1
+   EOF
+   modprobe br_netfilter
+   sysctl --system
+   ```
+
+2. **`INPUT` 链**：用户容器不应该有任何理由直接访问宿主机本身（哪怕是端口 22），所以直接整段丢弃来自保留子网、目的地是宿主机自己的流量——这条不需要 `br_netfilter`（目的地是本机地址的流量走标准 `INPUT` 处理，与网桥转发无关），能同时挡住"经由自己所在网络的 bridge 网关 IP 访问宿主机上监听 `0.0.0.0` 的服务"这个向量（已实测：起一个绑定 `0.0.0.0` 的监听器，加规则前可达，加规则后阻断）：
+
+   ```bash
+   iptables -I INPUT -s 172.30.0.0/16 -j DROP \
+     -m comment --comment "codex-gateway: block user containers -> host itself"
+   ```
+
+   持久化（Ubuntu/Debian）：
+
+   ```bash
+   apt-get install -y iptables-persistent
+   netfilter-persistent save
+   ```
+
+   （或者写一个在 `network-online.target` 之后运行的 systemd oneshot 服务，在里面重新执行上面几条 `iptables -I` 命令，效果等价。）
+
+**代理控制端口的另一个保护层**：如果你的宿主机/CI 环境不方便碰 `br_netfilter`/`iptables-persistent`，退而求其次，务必给代理（如 Clash）配置的管理 API 设置 `secret`，这样即使控制端口在网络层可达，没有 secret 也调不动它。
+
+生命周期覆盖：
+
+- **provision**：按用户名 + userId 派生的确定性名字/子网创建（或复用已存在的）每用户网络，创建成功后立刻把 Gateway 自身容器和 `CODEX_GATEWAY_OUTBOUND_PROXY_CONTAINER` 接进去，再创建用户容器并把它的 `NetworkMode` 设成这个网络。
+- **deprovision（彻底删除）**：先把 Gateway/代理容器从该网络断开，再删除网络。**deprovision 且保留数据卷**（管理台"重建"用的路径）不删网络——网络原地留着（这时只有 Gateway/代理两个成员，没有安全含义），下次 provision 按名字复用，子网不变，不会产生新的子网探测开销。
+- **滚动重建全部容器 / 配额变更重建**：逐个走 deprovision（保留卷）→ provision，网络处理同上，不会中断其它用户的网络。
+- **定时 reconcile（每 5 分钟）**：除了原有的容器状态漂移检查，还会对每一个仍记录着 `networkName` 的用户重新执行一次 Gateway/代理容器接入（`docker network connect` 是幂等的，已接入会被忽略）——这是**代理容器被外部重建**后的自愈路径，最多 5 分钟内自动恢复。
+- **Gateway 自身重启/重建**：Nitro 启动插件（`server/plugins/provisioning-repair.ts`）会在处理完中断的 provisioning 行之后，立刻对所有已知的每用户网络重新执行一次接入。Gateway 容器的自身标识默认用 `os.hostname()`（Docker 默认把容器主机名设成它自己的容器 ID，本仓库的 compose 文件都没有覆盖 `hostname:`，所以零配置就能工作）；`CODEX_GATEWAY_SELF_CONTAINER` 可以显式覆盖（compose 里默认设成固定的 `codex-gateway`，即 `container_name` 的值，更直观也更稳）。
+
+### 共享挂载
+
+- `/srv/codex-auth`（共享 ChatGPT 登录）现在**只在 `CODEX_GATEWAY_MODEL_PROVIDER=openai`（默认，共享登录路径）时才挂载**；用 `custom`（共享 API-key provider）的部署完全不会挂这个目录，容器内也就没有共享登录态可读。判定逻辑读的是"设置层"（DB 优先于 env）解析出来的最终 provider 模式，不是看这个环境变量本身是否配置。
+- `/data/shared` 默认改成**只读**挂载；需要历史上那种"所有用户互相可写"的行为时，显式设置 `CODEX_GATEWAY_SHARED_DATA_WRITABLE=true`。
+
+### 233 类"同机跑生产服务"机器的推荐配置
+
+```dotenv
+CODEX_GATEWAY_USER_CONTAINER_PIDS=512
+CODEX_GATEWAY_USER_CONTAINER_CGROUP_PARENT=codexgatewayusers.slice
+CODEX_GATEWAY_USER_NETWORK_ISOLATION=per-user
+CODEX_GATEWAY_USER_NETWORK_SUBNET_BASE=172.30.0.0/16
+CODEX_GATEWAY_SELF_CONTAINER=codex-gateway
+CODEX_GATEWAY_OUTBOUND_PROXY_CONTAINER=clash
+#CODEX_GATEWAY_SHARED_DATA_WRITABLE=  # 留空/不设，保持只读
+```
+
+宿主机一次性命令：
+
+```bash
+# 1) 资源上限 slice
+cat > /etc/systemd/system/codexgatewayusers.slice <<'EOF'
+[Slice]
+MemoryMax=8G
+CPUQuota=400%
+TasksMax=4096
+EOF
+systemctl daemon-reload && systemctl start codexgatewayusers.slice
+
+# 2) br_netfilter（DOCKER-USER 规则的前置条件），持久化
+echo br_netfilter > /etc/modules-load.d/codex-gateway-br-netfilter.conf
+echo 'net.bridge.bridge-nf-call-iptables=1' > /etc/sysctl.d/99-codex-gateway-bridge-nf.conf
+modprobe br_netfilter && sysctl --system
+
+# 3) 两条 DOCKER-USER + 一条 INPUT 规则，端口按实际的 Gateway/代理端口改
+iptables -I DOCKER-USER -s 172.30.0.0/16 -p tcp --dport 3000 -j DROP
+iptables -I DOCKER-USER -s 172.30.0.0/16 -p tcp --dport 9090 -j DROP
+iptables -I INPUT -s 172.30.0.0/16 -j DROP
+apt-get install -y iptables-persistent && netfilter-persistent save
+```
+
+之后 `docker compose up -d --build codex-gateway`，并对**已存在**的用户容器逐个走"重建（保留卷）"（或"滚动重建全部容器"）让新的 `HostConfig`/网络生效。
+
+### 未覆盖的风险（需要产品侧决策）
+
+加固到这一步之后仍然存在、代码没有（也无法仅靠这些配置项）解决的风险，供决策是否需要更重的隔离方案（gVisor/Kata、rootless Docker、userns-remap 等）：
+
+- **容器逃逸 = 宿主机 root**：用户容器内 `dev` 用户拥有免密 sudo，宿主机没有开启 Docker `userns-remap`。一旦发生内核或 runc 层面的逃逸漏洞，攻击者在容器内已经是 root（sudo 免密），逃逸后直接是宿主机 root，本次改动的资源/网络限制都无法阻止这一步。
+- **模型 API key 对容器内用户可读**：`custom` provider 的 key 通过环境变量注入（`docker inspect` 可见）并落到容器内 `/etc/profile.d/`；容器内的 `dev` 用户（有 sudo）始终能读到自己的 key。
+- **Gateway 持有 `docker.sock`**：Gateway 容器可以控制宿主机上的任意容器，等同于宿主机 root 能力；只应部署在受信管理员才能访问的后台之后。
+- **代理控制端口的兜底**：如果宿主机不便应用 `br_netfilter`/iptables（例如某些高度锁定的容器化 CI），Gateway HTTP 端口和代理控制端口在同网段内仍然可达；此时至少要给代理的管理 API 配置 secret/token 认证。
+
 ## 常见故障
 
 - **docker.sock 权限**：Gateway 容器内必须能访问 `/var/run/docker.sock`（compose 已挂载）；用户管理页顶部的诊断卡会显示 Docker 不可达。
