@@ -107,6 +107,11 @@ services:
       CODEX_GATEWAY_SHARED_AUTH_DIR: ${E2E_SHARED_AUTH_DIR:?E2E_SHARED_AUTH_DIR is required}
       CODEX_GATEWAY_SHARED_AUTH_MOUNT: /srv/codex-auth
       CODEX_GATEWAY_SHARED_DATA_DIR: ${E2E_SHARED_DATA_DIR:?E2E_SHARED_DATA_DIR is required}
+      # /data/shared now defaults to read-only (see deploy/README.zh-CN.md's "安全加固"); this
+      # fixture stays on "shared" isolation mode and multi-user-isolation.spec.ts explicitly
+      # exercises the opt-in read-write sharing behavior across two members' containers, so it
+      # needs to turn the opt-in flag back on.
+      CODEX_GATEWAY_SHARED_DATA_WRITABLE: "true"
       CODEX_GATEWAY_USER_CONTAINER_PREFIX: codex-e2e-user-
       CODEX_GATEWAY_SANDBOX_MODE: danger-full-access
       # Outbound proxy for sandboxes with no direct internet route, using the real product config
@@ -171,6 +176,70 @@ services:
       timeout: 3s
       retries: 60
 
+  # Second provisioning-capable gateway, configured for CODEX_GATEWAY_USER_NETWORK_ISOLATION=
+  # per-user (the default suite above stays on "shared" to match production's default and keep
+  # the existing socat-based outbound-proxy fixture reachable). Own DB/volume so it never shares
+  # state with gateway-under-test. Reuses the same built server output and user image; no outbound
+  # proxy container is attached because network-isolation.spec.ts only asserts reachability
+  # (codex --version over SSH needs no model API access), not a real turn.
+  gateway-per-user:
+    image: codex-gateway-e2e-runner
+    mem_limit: 1g
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3102"
+      CODEX_GATEWAY_CONFIG_SECRET: e2e-config-secret
+      # Same volume/bind path build-runner wipes with `rm -rf .data-e2e/*` at the start of every
+      # run-in-containers.sh invocation (see that script) -- a dedicated volume here would instead
+      # accumulate users/containers across runs (and, worse, stale rows referencing containers
+      # that a later run's cleanup trap already force-removed by label, which then spams the log
+      # with harmless but confusing background-reconnect ENOTFOUND noise for old runs' users).
+      CODEX_GATEWAY_DB_PATH: /workspace/codex-gateway/.data-e2e/codex-gateway-per-user.db
+      BROWSER_PREVIEW_SCHEME: http
+      CODEX_GATEWAY_PROVISIONING: docker
+      CODEX_GATEWAY_USER_IMAGE: codex-gateway-e2e-user:latest
+      CODEX_GATEWAY_DOCKER_SOCKET: /var/run/docker.sock
+      CODEX_GATEWAY_SHARED_AUTH_DIR: ${E2E_SHARED_AUTH_DIR:?E2E_SHARED_AUTH_DIR is required}
+      CODEX_GATEWAY_SHARED_AUTH_MOUNT: /srv/codex-auth
+      CODEX_GATEWAY_USER_CONTAINER_PREFIX: codex-e2e-pu-
+      CODEX_GATEWAY_SANDBOX_MODE: danger-full-access
+      CODEX_GATEWAY_USER_NETWORK_ISOLATION: per-user
+      # Dedicated test-only supernet, distinct from any subnet Docker itself auto-assigns, so the
+      # isolation test's iptables setup (applied by run-in-containers.sh, torn down in its
+      # cleanup trap) cannot collide with anything else on the runner host.
+      CODEX_GATEWAY_USER_NETWORK_SUBNET_BASE: 10.250.0.0/16
+      # This Gateway process's own Codex release-archive download (see CLAUDE.md's "出站代理")
+      # needs the same sandbox proxy gateway-under-test uses -- without it every provision hits
+      # `fetch failed` against releases.openai.com/GitHub, the standalone-layout migration never
+      # completes, and the first real RPC connection to the user container fails. No NO_PROXY
+      # entries: unlike gateway-under-test, this instance never talks to the ssh-target/bark-target
+      # fixtures directly. Known, accepted limitation of this fixture only: the *same* proxy value
+      # also gets injected into every user container it provisions (provisioningConfig().
+      # outboundProxy has one value, shared by the Gateway process and its user containers), but
+      # that address (the host's own bridge IP) is unreachable from inside an Internal per-user
+      # network -- see deploy/README.zh-CN.md's "安全加固" (a real per-user deployment instead
+      # points CODEX_GATEWAY_OUTBOUND_PROXY at a proxy *container* attached to every per-user
+      # network via CODEX_GATEWAY_OUTBOUND_PROXY_CONTAINER, which this E2E topology has none of).
+      # Harmless here: network-isolation.spec.ts only asserts reachability and RPC/SSH plumbing,
+      # never a real model turn inside the isolated containers.
+      CODEX_GATEWAY_OUTBOUND_PROXY: ${E2E_OUTBOUND_PROXY:-}
+    volumes:
+      - build-output:/e2e-output:ro
+      - e2e-data:/workspace/codex-gateway/.data-e2e
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: ["node", "/e2e-output/server/index.mjs"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "const s=require('node:net').connect(3102,'127.0.0.1',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1))",
+        ]
+      interval: 1s
+      timeout: 3s
+      retries: 60
+
   test-runner:
     image: codex-gateway-e2e-runner
     mem_limit: 2g
@@ -179,6 +248,8 @@ services:
       gateway-under-test:
         condition: service_healthy
       gateway-fresh:
+        condition: service_healthy
+      gateway-per-user:
         condition: service_healthy
     environment:
       CI: ${CI:-}
