@@ -87,6 +87,33 @@ export class DockerEngineClient {
     return this.request("GET", `/networks/${encodeURIComponent(name)}`);
   }
 
+  createNetwork(input: {
+    Name: string;
+    Driver?: string;
+    Internal?: boolean;
+    Labels?: Record<string, string>;
+    IPAM?: { Config: Array<{ Subnet: string; Gateway?: string }> };
+  }) {
+    return this.request("POST", "/networks/create", input);
+  }
+
+  removeNetwork(id: string) {
+    return this.request("DELETE", `/networks/${encodeURIComponent(id)}`);
+  }
+
+  connectNetwork(networkId: string, containerId: string) {
+    return this.request("POST", `/networks/${encodeURIComponent(networkId)}/connect`, {
+      Container: containerId,
+    });
+  }
+
+  disconnectNetwork(networkId: string, containerId: string, force = false) {
+    return this.request("POST", `/networks/${encodeURIComponent(networkId)}/disconnect`, {
+      Container: containerId,
+      Force: force,
+    });
+  }
+
   createVolume(input: { Name: string; Labels?: Record<string, string> }) {
     return this.request("POST", "/volumes/create", input);
   }

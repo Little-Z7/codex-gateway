@@ -10,6 +10,13 @@ import { auditLog } from "../audit/audit-log";
 import { runtimeLog } from "../runtime/runtime-log";
 import { DockerEngineClient, isDockerNotFound } from "./docker-engine-client";
 import { provisioningConfig } from "./provisioning-config";
+import {
+  attachInfraToUserNetwork,
+  detachInfraAndRemoveUserNetwork,
+  ensureUserNetwork,
+  reconnectAllUserNetworks,
+  userNetworkNameFor,
+} from "./user-network-isolation";
 
 export type ContainerState = "running" | "exited" | "missing" | "unknown";
 
@@ -214,6 +221,8 @@ export const userContainerProvisioner = {
           containerId: row.containerId,
           volumeName: row.volumeName,
           sshPublicKey: keyPair.public,
+          networkName: row.networkName,
+          networkSubnet: row.networkSubnet,
           lastError: null,
         });
         repaired += 1;
@@ -236,12 +245,27 @@ export const userContainerProvisioner = {
     return repaired;
   },
 
+  /** Re-attaches the Gateway's own container (and the outbound proxy container) to every
+   * provisioned user's isolated network. No-op outside CODEX_GATEWAY_USER_NETWORK_ISOLATION=
+   * per-user. Idempotent and cheap — safe to call on every Gateway startup and reconcile pass so
+   * a *recreated* Gateway or proxy container regains access without manual intervention. */
+  async reconnectUserNetworks(): Promise<void> {
+    const config = provisioningConfig();
+    if (!config.enabled || config.networkIsolation !== "per-user") return;
+    const networks = [...userStore.listManagedHosts().values()]
+      .map((row) => row.networkName)
+      .filter((name): name is string => name !== null);
+    if (networks.length === 0) return;
+    await reconnectAllUserNetworks(new DockerEngineClient(), config, networks);
+  },
+
   /** Periodic drift check: managed containers that vanished are flagged `missing` so the admin
    * console can offer rebuild; a row whose container came back flips back to ready. */
   async reconcileContainers(): Promise<void> {
     const config = provisioningConfig();
     if (!config.enabled) return;
     const docker = new DockerEngineClient();
+    await userContainerProvisioner.reconnectUserNetworks();
     for (const row of userStore.listManagedHosts().values()) {
       if (row.status !== "ready" && row.status !== "missing" && row.status !== "error") continue;
       if (row.containerName === null) continue;
@@ -319,10 +343,13 @@ async function provisionContainer(userId: number) {
   const config = provisioningConfig();
   const user = userStore.findById(userId);
   if (user === null) throw new Error("User not found");
-  if (config.dockerNetwork === null || config.sharedAuthDir === null) {
+  if (config.networkIsolation === "shared" && config.dockerNetwork === null) {
     throw new Error(
-      "Provisioning requires CODEX_GATEWAY_DOCKER_NETWORK and CODEX_GATEWAY_SHARED_AUTH_DIR",
+      "Provisioning requires CODEX_GATEWAY_DOCKER_NETWORK when CODEX_GATEWAY_USER_NETWORK_ISOLATION=shared",
     );
+  }
+  if (config.sharedAuthDir === null) {
+    throw new Error("Provisioning requires CODEX_GATEWAY_SHARED_AUTH_DIR");
   }
   if (config.modelProvider.error !== null) {
     throw new Error(config.modelProvider.error);
@@ -330,6 +357,10 @@ async function provisionContainer(userId: number) {
   const docker = new DockerEngineClient();
   const containerName = userContainerProvisioner.containerNameFor(user.username);
   const volumeName = userContainerProvisioner.volumeNameFor(user.username);
+  const userNetworkName =
+    config.networkIsolation === "per-user"
+      ? userNetworkNameFor(config.containerPrefix, user.username)
+      : null;
   const labels = { [MANAGED_LABEL]: "true", [USER_LABEL]: user.username };
 
   // Capture the existing managed host id *before* marking the row as provisioning: writing 0
@@ -340,8 +371,10 @@ async function provisionContainer(userId: number) {
     status: "provisioning",
     containerName,
     volumeName,
+    networkName: userNetworkName,
     lastError: null,
   });
+  let resolvedNetworkSubnet: string | null = null;
   try {
     const keyPair = generateEd25519KeyPair();
     await docker.createVolume({ Name: volumeName, Labels: labels }).catch(ignoreIfExists);
@@ -376,8 +409,29 @@ async function provisionContainer(userId: number) {
     const binds = [`${volumeName}:/home/dev`, `${config.sharedAuthDir}:/srv/codex-auth:rw`];
     if (config.sharedDataDir !== null) binds.push(`${config.sharedDataDir}:/data/shared:rw`);
 
+    // "shared" (default, unchanged): every user container joins the one shared dockerNetwork.
+    // "per-user": each user gets a dedicated Internal:true bridge network that only the Gateway's
+    // own container and the outbound proxy container are attached to (see
+    // deploy/README.zh-CN.md's "安全加固" section for what this does and does not isolate).
+    let networkMode: string;
+    if (userNetworkName !== null) {
+      const ensured = await ensureUserNetwork(docker, {
+        name: userNetworkName,
+        subnetBase: config.userNetworkSubnetBase,
+        startIndex: userId,
+        username: user.username,
+      });
+      resolvedNetworkSubnet = ensured.subnet;
+      await attachInfraToUserNetwork(docker, config, ensured.name);
+      networkMode = ensured.name;
+    } else {
+      if (config.dockerNetwork === null)
+        throw new Error("CODEX_GATEWAY_DOCKER_NETWORK is required");
+      networkMode = config.dockerNetwork;
+    }
+
     const hostConfig: Record<string, unknown> = {
-      NetworkMode: config.dockerNetwork,
+      NetworkMode: networkMode,
       Binds: binds,
       RestartPolicy: { Name: "unless-stopped" },
       Init: true,
@@ -424,6 +478,8 @@ async function provisionContainer(userId: number) {
       containerId,
       volumeName,
       sshPublicKey: keyPair.public,
+      networkName: userNetworkName,
+      networkSubnet: resolvedNetworkSubnet,
       lastError: null,
     });
     runtimeLog("user container provisioned", {
@@ -437,6 +493,8 @@ async function provisionContainer(userId: number) {
       status: "error",
       containerName,
       volumeName,
+      networkName: userNetworkName,
+      networkSubnet: resolvedNetworkSubnet,
       lastError: error instanceof Error ? error.message : String(error),
     });
     runtimeLog("user container provisioning failed", {
@@ -474,6 +532,28 @@ async function removeContainer(userId: number, keepVolume: boolean) {
   if (managed !== null && managed.hostId !== 0) {
     await runAsUserConfigMutation(userId, () => hostStore.delete(managed.hostId));
   }
+  // Per-user network teardown only on a full delete. A keepVolume recreate leaves the
+  // (temporarily member-less) network in place with the Gateway/proxy still attached, so the
+  // subsequent re-provision finds it by name and reuses the same subnet — no churn, no gap where
+  // a *new* per-user network would need probing again.
+  const config = provisioningConfig();
+  if (
+    !keepVolume &&
+    config.networkIsolation === "per-user" &&
+    managed !== null &&
+    managed.networkName !== null
+  ) {
+    const networkName = managed.networkName;
+    await detachInfraAndRemoveUserNetwork(new DockerEngineClient(), config, networkName).catch(
+      (error: unknown) => {
+        runtimeLog("user network cleanup failed", {
+          userId,
+          network: networkName,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      },
+    );
+  }
   if (keepVolume && managed !== null) {
     // Keep the row (and its quota overrides) so a later recreate can rebuild from it; only the
     // container identity is cleared.
@@ -482,6 +562,8 @@ async function removeContainer(userId: number, keepVolume: boolean) {
       containerName: null,
       containerId: null,
       sshPublicKey: null,
+      networkName: managed.networkName,
+      networkSubnet: managed.networkSubnet,
     });
   } else {
     userStore.deleteManagedHost(userId);

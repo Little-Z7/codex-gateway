@@ -53,6 +53,10 @@ export interface ManagedHostRecord {
   lastError: string | null;
   memoryLimit: string | null;
   cpuLimit: string | null;
+  /** Per-user isolated Docker network name (CODEX_GATEWAY_USER_NETWORK_ISOLATION=per-user); null
+   *  in "shared" mode. */
+  networkName: string | null;
+  networkSubnet: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -288,7 +292,14 @@ export const userStore = {
     fields: Partial<
       Pick<
         ManagedHostRecord,
-        "status" | "containerName" | "containerId" | "volumeName" | "sshPublicKey" | "lastError"
+        | "status"
+        | "containerName"
+        | "containerId"
+        | "volumeName"
+        | "sshPublicKey"
+        | "lastError"
+        | "networkName"
+        | "networkSubnet"
       >
     > = {},
   ) {
@@ -297,8 +308,8 @@ export const userStore = {
       .prepare(
         `
           INSERT INTO managed_hosts
-            (user_id, host_id, status, container_name, container_id, volume_name, ssh_public_key, last_error, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (user_id, host_id, status, container_name, container_id, volume_name, ssh_public_key, last_error, network_name, network_subnet, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(user_id) DO UPDATE SET
             host_id = excluded.host_id,
             status = excluded.status,
@@ -307,6 +318,8 @@ export const userStore = {
             volume_name = excluded.volume_name,
             ssh_public_key = excluded.ssh_public_key,
             last_error = excluded.last_error,
+            network_name = excluded.network_name,
+            network_subnet = excluded.network_subnet,
             updated_at = excluded.updated_at
         `,
       )
@@ -319,6 +332,8 @@ export const userStore = {
         fields.volumeName ?? null,
         fields.sshPublicKey ?? null,
         fields.lastError ?? null,
+        fields.networkName ?? null,
+        fields.networkSubnet ?? null,
         now,
         now,
       );
@@ -538,6 +553,8 @@ function managedHostFromRow(row: SqlRow): ManagedHostRecord {
     lastError: rowText(row.last_error),
     memoryLimit: rowText(row.memory_limit),
     cpuLimit: rowText(row.cpu_limit),
+    networkName: rowText(row.network_name),
+    networkSubnet: rowText(row.network_subnet),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
