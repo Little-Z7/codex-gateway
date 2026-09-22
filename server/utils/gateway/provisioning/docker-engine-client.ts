@@ -119,6 +119,17 @@ export class DockerEngineClient {
     return this.request("GET", `/containers/${encodeURIComponent(id)}/json`);
   }
 
+  async listContainers(all = true): Promise<Array<{ Names?: unknown; State?: unknown }>> {
+    const query = all ? "?all=true" : "";
+    const body = await this.requestRaw("GET", `/containers/json${query}`, 8_000);
+    const parsed: unknown = JSON.parse(body.toString("utf8") || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (item): item is { Names?: unknown; State?: unknown } =>
+        typeof item === "object" && item !== null,
+    );
+  }
+
   async requestRaw(
     method: string,
     path: string,

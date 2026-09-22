@@ -92,6 +92,55 @@ export const userContainerProvisioner = {
     }
   },
 
+  /**
+   * One Docker `/containers/json` round-trip for admin list/overview instead of N inspects.
+   * Falls back to per-name inspect if the list call fails.
+   */
+  async inspectByNames(
+    names: string[],
+  ): Promise<Map<string, { state: ContainerState; name: string | null }>> {
+    const unique = [...new Set(names.filter((name) => name !== ""))];
+    const result = new Map<string, { state: ContainerState; name: string | null }>();
+    for (const name of unique) result.set(name, { state: "missing", name });
+    if (unique.length === 0) return result;
+    try {
+      const listed = await withTimeout(new DockerEngineClient().listContainers(true), 5_000);
+      const wanted = new Set(unique);
+      for (const item of listed) {
+        const stateRaw = typeof item.State === "string" ? item.State : "";
+        const state: ContainerState = stateRaw === "running" ? "running" : "exited";
+        const rawNames = Array.isArray(item.Names) ? item.Names : [];
+        for (const rawName of rawNames) {
+          if (typeof rawName !== "string") continue;
+          const name = rawName.replace(/^\//, "");
+          if (wanted.has(name)) result.set(name, { state, name });
+        }
+      }
+      return result;
+    } catch {
+      const docker = new DockerEngineClient();
+      await Promise.all(
+        unique.map(async (name) => {
+          try {
+            const info = await withTimeout(docker.inspectContainer(name), 3_000);
+            const state = info?.State;
+            const running =
+              typeof state === "object" && state !== null
+                ? Reflect.get(state, "Running") === true
+                : false;
+            result.set(name, { state: running ? "running" : "exited", name });
+          } catch (error) {
+            result.set(name, {
+              state: isDockerNotFound(error) ? "missing" : "unknown",
+              name,
+            });
+          }
+        }),
+      );
+      return result;
+    }
+  },
+
   provision(userId: number): Promise<void> {
     return enqueue(userId, () => provisionContainer(userId));
   },

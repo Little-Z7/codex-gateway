@@ -7,6 +7,7 @@ import {
   storedModelProvider,
 } from "../../utils/gateway/settings/model-provider";
 import { provisioningConfig } from "../../utils/gateway/provisioning/provisioning-config";
+import { budgetDefaults } from "../../utils/gateway/usage/budget-store";
 
 export default defineGatewayEventHandler(async (event) => {
   requireAdmin(event);
@@ -30,5 +31,6 @@ export default defineGatewayEventHandler(async (event) => {
     security: securitySettings(),
     notifications: { barkServerUrl: globalBarkServerUrl() },
     audit: auditSettings(),
+    budget: budgetDefaults(),
   };
 });

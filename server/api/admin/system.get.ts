@@ -14,6 +14,7 @@ import {
   globalBarkServerUrl,
   securitySettings,
 } from "../../utils/gateway/settings/model-provider";
+import { budgetDefaults } from "../../utils/gateway/usage/budget-store";
 
 export default defineGatewayEventHandler(async (event) => {
   requireAdmin(event);
@@ -52,6 +53,7 @@ export default defineGatewayEventHandler(async (event) => {
       security: securitySettings(),
       notifications: { barkServerUrl: globalBarkServerUrl() },
       audit: auditSettings(),
+      budget: budgetDefaults(),
     },
     paths: {
       database: trimmedOrNull(process.env.CODEX_GATEWAY_DB_PATH) ?? "/data/codex-gateway.db",

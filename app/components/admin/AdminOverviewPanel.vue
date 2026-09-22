@@ -65,6 +65,10 @@ const statCards = computed(() => {
       label: t("app.adminStatTodayTokens"),
       value: String(info.usage.today.tokens),
     },
+    {
+      label: t("app.adminBudgetExceededUsers"),
+      value: String(info.usage.overBudgetUsers ?? 0),
+    },
   ];
 });
 </script>

@@ -93,6 +93,7 @@ export interface AdminSettingsSnapshot {
   security: AdminSecuritySettings;
   notifications: { barkServerUrl: string | null };
   audit: { retentionDays: number };
+  budget: BudgetDefaults;
 }
 
 export interface AdminBackupInfo {
@@ -111,7 +112,7 @@ export interface AdminOverview {
     provisioning: number;
     error: number;
   };
-  usage: { today: { turns: number; tokens: number } };
+  usage: { today: { turns: number; tokens: number }; overBudgetUsers: number };
   volumes: { warnBytes: number; overThreshold: number | null };
   gateway: {
     version: string;
@@ -209,6 +210,7 @@ export interface AdminSystemInfo {
     security: AdminSecuritySettings;
     notifications: { barkServerUrl: string | null };
     audit: { retentionDays: number };
+    budget: BudgetDefaults;
   };
   paths: { database: string };
   runtime: {

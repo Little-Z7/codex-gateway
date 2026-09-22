@@ -21,48 +21,58 @@ export default defineGatewayEventHandler(async (event) => {
       onlineSessions: Number(row.online_sessions ?? 0),
     });
   }
-  const users = await Promise.all(
-    userStore.listUsers().map(async (user) => {
-      const managed = managedHosts.get(user.id);
-      let hostName: string | null = null;
-      if (managed) {
-        const host = userStore.loadConfig(user.id).hosts.find((item) => item.id === managed.hostId);
-        hostName = host?.name ?? null;
-      }
-      const hasContainer =
-        managed !== undefined && managed.containerName !== null && managed.status !== "removed";
-      // Inspect is a live docker call per row; failures degrade to "unknown" inside the
-      // provisioner so one broken daemon read does not fail the whole list.
-      const container = hasContainer ? await userContainerProvisioner.inspect(user.id) : null;
-      return {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        isActive: user.isActive,
-        createdAt: user.createdAt,
-        displayName: user.displayName,
-        note: user.note,
-        mustChangePassword: user.mustChangePassword,
-        managedHost:
-          managed === undefined
-            ? null
-            : {
-                hostId: managed.hostId,
-                hostName,
-                status: managed.status,
-                lastError: managed.lastError,
-                containerName: managed.containerName,
-                volumeName: managed.volumeName,
-                quota: {
-                  memory: managed.memoryLimit,
-                  cpus: managed.cpuLimit,
-                },
+  const containerNames = [...managedHosts.values()]
+    .map((managed) => managed.containerName)
+    .filter((name): name is string => name !== null && name !== "");
+  const containerStates = await userContainerProvisioner.inspectByNames(containerNames);
+  const users = userStore.listUsers().map((user) => {
+    const managed = managedHosts.get(user.id);
+    let hostName: string | null = null;
+    if (managed) {
+      const host = userStore.loadConfig(user.id).hosts.find((item) => item.id === managed.hostId);
+      hostName = host?.name ?? null;
+    }
+    const containerName = managed?.containerName;
+    const hasContainer =
+      managed !== undefined &&
+      containerName !== undefined &&
+      containerName !== null &&
+      containerName !== "" &&
+      managed.status !== "removed";
+    const container = hasContainer
+      ? (containerStates.get(containerName) ?? {
+          state: "missing" as const,
+          name: containerName,
+        })
+      : null;
+    return {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+      displayName: user.displayName,
+      note: user.note,
+      mustChangePassword: user.mustChangePassword,
+      managedHost:
+        managed === undefined
+          ? null
+          : {
+              hostId: managed.hostId,
+              hostName,
+              status: managed.status,
+              lastError: managed.lastError,
+              containerName: managed.containerName,
+              volumeName: managed.volumeName,
+              quota: {
+                memory: managed.memoryLimit,
+                cpus: managed.cpuLimit,
               },
-        container,
-        lastLoginAt: sessionStats.get(user.id)?.lastLoginAt ?? null,
-        onlineSessions: sessionStats.get(user.id)?.onlineSessions ?? 0,
-      };
-    }),
-  );
+            },
+      container,
+      lastLoginAt: sessionStats.get(user.id)?.lastLoginAt ?? null,
+      onlineSessions: sessionStats.get(user.id)?.onlineSessions ?? 0,
+    };
+  });
   return { users };
 });

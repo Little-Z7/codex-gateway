@@ -103,6 +103,17 @@ watch(
       auditRetentionDays.value = info.settings.audit.retentionDays;
       auditRetentionInitialized.value = true;
     }
+    if (!budgetInitialized.value && info.settings.budget) {
+      const defaults = info.settings.budget;
+      budgetForm.value = {
+        dailyTokens: defaults.dailyTokens === null ? "" : String(defaults.dailyTokens),
+        monthlyTokens: defaults.monthlyTokens === null ? "" : String(defaults.monthlyTokens),
+        dailyTurns: defaults.dailyTurns === null ? "" : String(defaults.dailyTurns),
+        monthlyTurns: defaults.monthlyTurns === null ? "" : String(defaults.monthlyTurns),
+        warnPercent: defaults.warnPercent,
+      };
+      budgetInitialized.value = true;
+    }
   },
   { immediate: true },
 );

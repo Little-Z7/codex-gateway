@@ -8,6 +8,11 @@ import { provisioningConfig } from "../../utils/gateway/provisioning/provisionin
 import { defineGatewayEventHandler } from "../../utils/gateway/http/errors";
 import { trimmedOrNull } from "~~/shared/utils/strings";
 import { usageStore } from "../../utils/gateway/usage/usage-store";
+import {
+  budgetDefaults,
+  effectiveLimitsFor,
+  listUserBudgetRows,
+} from "../../utils/gateway/usage/budget-store";
 import { volumeWarnBytes } from "../../utils/gateway/provisioning/container-inventory";
 import { DockerEngineClient } from "../../utils/gateway/provisioning/docker-engine-client";
 
@@ -24,19 +29,28 @@ export default defineGatewayEventHandler(async (event) => {
   const managedHosts = userStore.listManagedHosts();
   const containerCounts = { running: 0, exited: 0, missing: 0, provisioning: 0, error: 0 };
   if (provisioningConfig().enabled) {
-    const inspections = await Promise.all(
-      [...managedHosts.values()].map(async (managed) => {
-        if (managed.status === "provisioning") return "provisioning";
-        if (managed.status === "error") return "error";
-        if (managed.containerName === null || managed.status === "removed") return null;
-        const container = await userContainerProvisioner.inspect(managed.userId);
-        return container.state;
-      }),
+    const inspectable = [...managedHosts.values()].filter(
+      (managed) =>
+        managed.status !== "provisioning" &&
+        managed.status !== "error" &&
+        managed.containerName !== null &&
+        managed.status !== "removed",
     );
-    for (const state of inspections) {
+    const states = await userContainerProvisioner.inspectByNames(
+      inspectable.map((managed) => managed.containerName ?? ""),
+    );
+    for (const managed of managedHosts.values()) {
+      if (managed.status === "provisioning") {
+        containerCounts.provisioning += 1;
+        continue;
+      }
+      if (managed.status === "error") {
+        containerCounts.error += 1;
+        continue;
+      }
+      if (managed.containerName === null || managed.status === "removed") continue;
+      const state = states.get(managed.containerName)?.state ?? "missing";
       if (state === "running" || state === "exited" || state === "missing") {
-        containerCounts[state] += 1;
-      } else if (state === "provisioning" || state === "error") {
         containerCounts[state] += 1;
       }
     }
@@ -53,7 +67,7 @@ export default defineGatewayEventHandler(async (event) => {
       total: Number(sessionRows?.total ?? 0),
     },
     containers: containerCounts,
-    usage: { today: usageStore.todayTotals() },
+    usage: { today: usageStore.todayTotals(), overBudgetUsers: countOverBudgetUsers() },
     volumes: await (async () => {
       if (!provisioningConfig().enabled) return { warnBytes: volumeWarnBytes(), overThreshold: 0 };
       try {
@@ -85,3 +99,27 @@ export default defineGatewayEventHandler(async (event) => {
     provisioning: await provisioningDiagnostics(),
   };
 });
+
+function countOverBudgetUsers() {
+  const defaults = budgetDefaults();
+  const rows = listUserBudgetRows();
+  const usageByUser = new Map(usageStore.usageByUser().map((row) => [row.userId, row]));
+  let count = 0;
+  for (const user of userStore.listUsers()) {
+    const { limits } = effectiveLimitsFor(rows.get(user.id) ?? null, defaults);
+    const usage = usageByUser.get(user.id);
+    const dailyTokens = usage?.dailyTokens ?? 0;
+    const monthlyTokens = usage?.monthlyTokens ?? 0;
+    const dailyTurns = usage?.dailyTurns ?? 0;
+    const monthlyTurns = usage?.monthlyTurns ?? 0;
+    if (
+      (limits.dailyTokens !== null && dailyTokens >= limits.dailyTokens) ||
+      (limits.monthlyTokens !== null && monthlyTokens >= limits.monthlyTokens) ||
+      (limits.dailyTurns !== null && dailyTurns >= limits.dailyTurns) ||
+      (limits.monthlyTurns !== null && monthlyTurns >= limits.monthlyTurns)
+    ) {
+      count += 1;
+    }
+  }
+  return count;
+}
