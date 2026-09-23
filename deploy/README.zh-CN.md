@@ -318,7 +318,7 @@ docker compose --profile build-only build --build-arg http_proxy=<proxy> --build
 - **deprovision（彻底删除）**：先把 Gateway/代理容器从该网络断开，再删除网络。**deprovision 且保留数据卷**（管理台"重建"用的路径）不删网络——网络原地留着（这时只有 Gateway/代理两个成员，没有安全含义），下次 provision 按名字复用，子网不变，不会产生新的子网探测开销。
 - **滚动重建全部容器 / 配额变更重建**：逐个走 deprovision（保留卷）→ provision，网络处理同上，不会中断其它用户的网络。
 - **定时 reconcile（每 5 分钟）**：除了原有的容器状态漂移检查，还会对每一个仍记录着 `networkName` 的用户重新执行一次 Gateway/代理容器接入（`docker network connect` 是幂等的，已接入会被忽略）——这是**代理容器被外部重建**后的自愈路径，最多 5 分钟内自动恢复。
-- **Gateway 自身重启/重建**：Nitro 启动插件（`server/plugins/provisioning-repair.ts`）会在处理完中断的 provisioning 行之后，立刻对所有已知的每用户网络重新执行一次接入。Gateway 容器的自身标识默认用 `os.hostname()`（Docker 默认把容器主机名设成它自己的容器 ID，本仓库的 compose 文件都没有覆盖 `hostname:`，所以零配置就能工作）；`CODEX_GATEWAY_SELF_CONTAINER` 可以显式覆盖（compose 里默认设成固定的 `codex-gateway`，即 `container_name` 的值，更直观也更稳）。
+- **Gateway 自身重启/重建**：Nitro 启动插件（`server/plugins/provisioning-repair.ts`）会在处理完中断的 provisioning 行之后，立刻对所有已知的每用户网络重新执行一次接入。Gateway 容器的自身标识默认用 `os.hostname()`（Docker 默认把容器主机名设成它自己的容器 ID，本仓库的 compose 文件都没有覆盖 `hostname:`，所以零配置就能工作）；`CODEX_GATEWAY_SELF_CONTAINER` 可以显式覆盖（compose 默认留空走 `os.hostname()`，这样用 override 改了 `container_name` 的部署也不会接错容器；233 这类固定 `container_name: codex-gateway` 的部署可以在 `.env` 里显式写上）。provision 时如果 Gateway 自身或代理容器找不到，会直接报错并把该用户标成 error，而不是建出一个 SSH 不通或没有出网的容器；后台的定时重连仍然会忽略已消失的网络/容器。
 
 ### 共享挂载
 
@@ -371,6 +371,7 @@ apt-get install -y iptables-persistent && netfilter-persistent save
 - **模型 API key 对容器内用户可读**：`custom` provider 的 key 通过环境变量注入（`docker inspect` 可见）并落到容器内 `/etc/profile.d/`；容器内的 `dev` 用户始终能读到自己的 key（Codex 本身就要用它，这是设计使然）。
 - **Gateway 持有 `docker.sock`**：Gateway 容器可以控制宿主机上的任意容器，等同于宿主机 root 能力；只应部署在受信管理员才能访问的后台之后。
 - **代理控制端口的兜底**：如果宿主机不便应用 `br_netfilter`/iptables（例如某些高度锁定的容器化 CI），Gateway HTTP 端口和代理控制端口在同网段内仍然可达；此时至少要给代理的管理 API 配置 secret/token 认证。
+- **经代理数据端口绕回内网**：用户容器能用的唯一出口是代理的数据端口，代理替它发起的连接来源是代理容器自己的 IP，不在 `CODEX_GATEWAY_USER_NETWORK_SUBNET_BASE` 里，上面那几条 `-s <supernet>` 规则挡不住。常见的 Clash/mihomo 规则集会把 `10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16`、`127.0.0.0/8` 走 `DIRECT`，于是用户容器可以经代理访问局域网主机、宿主机上监听 `0.0.0.0` 的服务（经代理所在网络的网关 IP），以及 Gateway 发布的端口。需要封住时，在代理配置里、这些 `DIRECT` 规则之前，对来源是保留子网（`SRC-IP-CIDR`）且目的地址是私网/回环的请求返回 `REJECT`（mihomo 的 `AND` 逻辑规则可以组合这两个条件；注意目的是主机名时要解析后才能按 IP 匹配），改完实测；或者给用户容器单独起一个只放行公网目的地址的代理实例。
 
 ## 常见故障
 
