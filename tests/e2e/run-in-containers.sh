@@ -129,8 +129,20 @@ iptables -C DOCKER-USER -s 10.250.0.0/16 -p tcp --dport 3102 -j DROP >/dev/null 
 iptables -C INPUT -s 10.250.0.0/16 -j DROP >/dev/null 2>&1 \
   || iptables -I INPUT -s 10.250.0.0/16 -j DROP >/dev/null 2>&1 || true
 
+# `docker build` does not read this shell's proxy variables, and a proxy from the Docker CLI's own
+# config pointing at the host's loopback is unreachable from inside the build container -- pass
+# the sandbox proxy explicitly, as tests/e2e/docker-compose.yml does for ssh-target-mfa.
+user_image_proxy_args=()
+if [ -n "$E2E_OUTBOUND_PROXY" ]; then
+  user_image_proxy_args=(
+    --build-arg "http_proxy=$E2E_OUTBOUND_PROXY"
+    --build-arg "https_proxy=$E2E_OUTBOUND_PROXY"
+    --build-arg "no_proxy=localhost,127.0.0.1"
+  )
+fi
 docker build -t codex-gateway-e2e-user:latest \
   --build-arg "CODEX_CLI_VERSION=$E2E_SUPPORTED_CODEX_VERSION" \
+  "${user_image_proxy_args[@]}" \
   "$project_dir/deploy/user-container" >/dev/null
 
 "${compose[@]}" build --quiet \
