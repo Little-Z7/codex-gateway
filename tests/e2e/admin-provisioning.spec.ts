@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { z } from "zod";
 import { authenticatedFetch, openApp } from "./helpers/app";
-import { dockerInspectContainer } from "./helpers/docker-engine";
+import { dockerExecInContainer, dockerInspectContainer } from "./helpers/docker-engine";
 
 async function apiStatus(page: Page, request: { url: string; method?: string; body?: unknown }) {
   return page.evaluate(async (request) => {
@@ -95,6 +95,19 @@ test("admin provisions a workspace container and the member uses it", async ({ p
   expect(logConfig.Type).toBe("json-file");
   expect(logConfig.Config["max-size"]).toBe("10m");
   expect(logConfig.Config["max-file"]).toBe("3");
+
+  // `dev` is unprivileged: every capability dropped except what the root entrypoint/sshd need,
+  // setuid escalation blocked, and no sudo in the image at all.
+  expect(inspect.HostConfig.CapDrop).toEqual(["ALL"]);
+  expect(inspect.HostConfig.CapAdd ?? []).not.toContain("SYS_ADMIN");
+  expect(inspect.HostConfig.SecurityOpt).toContain("no-new-privileges:true");
+  const privileges = await dockerExecInContainer(
+    `codex-e2e-user-${memberName}`,
+    ["sh", "-c", "command -v sudo || echo no-sudo; grep CapEff /proc/self/status"],
+    "dev",
+  );
+  expect(privileges.output).toContain("no-sudo");
+  expect(privileges.output).toMatch(/CapEff:\s+0+\s*$/m);
 
   // SSH + app-server inside the user container respond; an empty thread list is acceptable
   // without a shared Codex login.

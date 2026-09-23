@@ -144,7 +144,12 @@ docker compose up -d codex-gateway
 
 ## 权限与 sandbox
 
-- 用户容器内工作用户为 `dev`（uid 1000），有免密 sudo；容器即隔离边界。
+- 用户容器内工作用户为 `dev`（uid 1000），**没有 sudo**；容器即隔离边界。容器以 `CapDrop: ALL` 启动，只加回 entrypoint
+  和 sshd 需要的 9 项 capability（`CHOWN`/`DAC_OVERRIDE`/`FOWNER`/`SETUID`/`SETGID`/`SYS_CHROOT`/`NET_BIND_SERVICE`/`KILL`/`AUDIT_WRITE`），
+  并设置 `no-new-privileges`，所以 `su`、`passwd` 这类 setuid 程序也提不了权。这些能力只有容器里的 root 进程（entrypoint、sshd）
+  持有，`dev` 的进程一项都没有。代价是用户不能在容器里 `apt-get install`，需要的系统级工具要加进
+  `deploy/user-container/Dockerfile`；`npm i -g --prefix ~/.local`、`pip install --user` 这类装到 home 下的方式不受影响。
+  这些设置只在**创建容器**时生效，已有容器需要在管理台"滚动重建全部容器"（保留 home 卷）后才会用上。
 - 共享目录（`shared-auth`、`shared-data`）统一 chown 到 1000:1000。
 - 容器内 `~/.codex/config.toml` 默认写入 `cli_auth_credentials_store = "file"` 与 `sandbox_mode = "danger-full-access"`（可用 `CODEX_GATEWAY_SANDBOX_MODE` 覆盖）；entrypoint 只在键缺失时写入，不覆盖用户修改。
 
@@ -362,8 +367,8 @@ apt-get install -y iptables-persistent && netfilter-persistent save
 
 加固到这一步之后仍然存在、代码没有（也无法仅靠这些配置项）解决的风险，供决策是否需要更重的隔离方案（gVisor/Kata、rootless Docker、userns-remap 等）：
 
-- **容器逃逸 = 宿主机 root**：用户容器内 `dev` 用户拥有免密 sudo，宿主机没有开启 Docker `userns-remap`。一旦发生内核或 runc 层面的逃逸漏洞，攻击者在容器内已经是 root（sudo 免密），逃逸后直接是宿主机 root，本次改动的资源/网络限制都无法阻止这一步。
-- **模型 API key 对容器内用户可读**：`custom` provider 的 key 通过环境变量注入（`docker inspect` 可见）并落到容器内 `/etc/profile.d/`；容器内的 `dev` 用户（有 sudo）始终能读到自己的 key。
+- **容器逃逸**：`dev` 已经没有 sudo，capability 也收紧了，攻击者要先在容器内做一次本地提权才能拿到 root，逃逸面比原来小很多。但宿主机没有开启 Docker `userns-remap`，容器内的 root 仍然就是宿主机 uid 0，所以"容器内提权 + 内核/runc 逃逸"这条链一旦打通，结果依然是宿主机 root。要彻底切断，需要 userns-remap、rootless Docker 或 gVisor。
+- **模型 API key 对容器内用户可读**：`custom` provider 的 key 通过环境变量注入（`docker inspect` 可见）并落到容器内 `/etc/profile.d/`；容器内的 `dev` 用户始终能读到自己的 key（Codex 本身就要用它，这是设计使然）。
 - **Gateway 持有 `docker.sock`**：Gateway 容器可以控制宿主机上的任意容器，等同于宿主机 root 能力；只应部署在受信管理员才能访问的后台之后。
 - **代理控制端口的兜底**：如果宿主机不便应用 `br_netfilter`/iptables（例如某些高度锁定的容器化 CI），Gateway HTTP 端口和代理控制端口在同网段内仍然可达；此时至少要给代理的管理 API 配置 secret/token 认证。
 

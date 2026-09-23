@@ -60,6 +60,9 @@ const containerInspectSchema = z.looseObject({
     LogConfig: z.looseObject({ Type: z.string(), Config: z.record(z.string(), z.string()) }),
     Memory: z.number().optional(),
     NanoCpus: z.number().optional(),
+    CapDrop: z.array(z.string()).nullable().optional(),
+    CapAdd: z.array(z.string()).nullable().optional(),
+    SecurityOpt: z.array(z.string()).nullable().optional(),
   }),
 });
 
@@ -144,10 +147,17 @@ export async function dockerNetworkGatewayIp(networkName: string): Promise<strin
 export async function dockerExecInContainer(
   name: string,
   cmd: string[],
+  user?: string,
 ): Promise<{ output: string; exitCode: number }> {
   const resolved = await resolveContainerName(name);
   const createSchema = z.looseObject({ Id: z.string() });
-  const execBody = { AttachStdout: true, AttachStderr: true, Tty: false, Cmd: cmd };
+  const execBody = {
+    AttachStdout: true,
+    AttachStderr: true,
+    Tty: false,
+    Cmd: cmd,
+    ...(user === undefined ? {} : { User: user }),
+  };
   const createRes = await requestWithBody(
     "POST",
     `/containers/${encodeURIComponent(resolved)}/exec`,

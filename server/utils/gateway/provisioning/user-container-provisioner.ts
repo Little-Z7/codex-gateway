@@ -48,6 +48,20 @@ const MANAGED_LABEL = "codex-gateway.managed";
 const USER_LABEL = "codex-gateway.user";
 const READY_PROBE_TIMEOUT_MS = 90_000;
 const READY_PROBE_INTERVAL_MS = 2_000;
+// The entrypoint runs as root over a volume owned by `dev` (chown/chmod/rewrite config.toml and
+// authorized_keys -> CHOWN, DAC_OVERRIDE, FOWNER), then execs sshd (bind :22, privilege-separated
+// chroot + drop to dev, signal its children, write utmp/audit records).
+const USER_CONTAINER_CAPABILITIES = [
+  "CHOWN",
+  "DAC_OVERRIDE",
+  "FOWNER",
+  "SETUID",
+  "SETGID",
+  "SYS_CHROOT",
+  "NET_BIND_SERVICE",
+  "KILL",
+  "AUDIT_WRITE",
+];
 
 const inFlight = new Map<number, Promise<unknown>>();
 
@@ -446,6 +460,13 @@ async function provisionContainer(userId: number) {
       RestartPolicy: { Name: "unless-stopped" },
       Init: true,
       PidsLimit: config.pidsLimit,
+      // Only root in the container (the entrypoint and sshd) holds capabilities; `dev` has none
+      // and no sudo. Keep just what those two need -- chown the home volume, bind :22, privilege
+      // separation (chroot + setuid/setgid to dev), kill its own children, write login audit
+      // records -- and block setuid escalation paths outright.
+      CapDrop: ["ALL"],
+      CapAdd: USER_CONTAINER_CAPABILITIES,
+      SecurityOpt: ["no-new-privileges:true"],
       LogConfig: {
         Type: "json-file",
         Config: {

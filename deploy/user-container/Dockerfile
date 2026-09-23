@@ -20,13 +20,14 @@ ARG USER_GID=1000
 
 RUN apt-get update \
   && apt-get install -y -o Acquire::Retries=8 --no-install-recommends \
-    openssh-server git tmux procps ca-certificates curl sudo \
+    openssh-server git tmux procps ca-certificates curl \
   && rm -rf /var/lib/apt/lists/*
 
+# `dev` deliberately has no sudo: an escape from this container should land as an unprivileged
+# user, not as root. The provisioner also sets no-new-privileges, so setuid binaries (su, passwd,
+# ...) cannot raise privileges either. Tools users need system-wide belong in this image.
 RUN groupadd --gid ${USER_GID} dev \
   && useradd --uid ${USER_UID} --gid ${USER_GID} --create-home --shell /bin/bash dev \
-  && usermod -aG sudo dev \
-  && echo 'dev ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/dev \
   && mkdir -p /run/sshd
 
 COPY --from=node-runtime /tmp/codex-node/ /usr/local/
