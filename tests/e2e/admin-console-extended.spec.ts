@@ -4,6 +4,12 @@ import { openApp } from "./helpers/app";
 import { dockerInspectContainer } from "./helpers/docker-engine";
 import { SUPPORTED_CODEX_VERSION as SUPPORTED_CODEX } from "../../server/utils/gateway/infra/codex/codex-version";
 
+// Same gate as multi-user-isolation.spec.ts: a real turn needs either the shared ChatGPT login or
+// the API-key provider; without either it can never reach "Done".
+const MODEL_READY =
+  process.env.E2E_SHARED_AUTH_PRESENT === "1" ||
+  (process.env.E2E_MODEL_PROVIDER_API_KEY ?? "") !== "";
+
 const usersSchema = z.looseObject({
   users: z.array(
     z.looseObject({
@@ -258,6 +264,10 @@ async function loginStatus(
 }
 
 test("usage statistics capture a real turn", async ({ page, browser }) => {
+  test.skip(
+    !MODEL_READY,
+    "No Codex credentials (neither shared login nor E2E_MODEL_PROVIDER_API_KEY)",
+  );
   test.setTimeout(480_000);
   const suffix = Date.now().toString(36);
   const usageUser = `cu-${suffix}`;
@@ -411,12 +421,25 @@ test("provider settings, security lockout, backups and audit csv", async ({ page
       .parse(JSON.parse(list.body))
       .backups.some((b) => b.name === backupName),
   ).toBe(true);
-  const download = await apiStatus(page, {
-    url: `/api/admin/backups/${backupName}/download`,
-  });
+  // Only read the tar header: a backup includes every user's home volume (each now carrying its
+  // own Codex standalone install), so buffering the whole download with response.text() can reach
+  // gigabytes and crash the renderer.
+  const download = await page.evaluate(async (url) => {
+    const token = localStorage.getItem("codex-gateway-auth-token") ?? "";
+    const response = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+    const reader = response.body?.getReader();
+    const head: number[] = [];
+    while (reader !== undefined && head.length < 512) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      head.push(...value.subarray(0, 512 - head.length));
+    }
+    await reader?.cancel();
+    return { status: response.status, magic: String.fromCharCode(...head.slice(257, 262)) };
+  }, `/gw/api/admin/backups/${backupName}/download`);
   expect(download.status).toBe(200);
   // ustar magic at offset 257.
-  expect(download.body.slice(257, 262)).toBe("ustar");
+  expect(download.magic).toBe("ustar");
 
   // Audit CSV export: first line is the stable header.
   const auditCsv = await apiStatus(page, { url: "/api/admin/audit/export.csv" });
