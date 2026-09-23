@@ -96,6 +96,11 @@ services:
       PORT: "3100"
       CODEX_GATEWAY_CONFIG_SECRET: e2e-config-secret
       CODEX_GATEWAY_DB_PATH: /workspace/codex-gateway/.data-e2e/codex-gateway.db
+      # The ~130MB Codex standalone archive is re-fetched for every provisioned container
+      # otherwise. .data-e2e is wiped at the start of every run (see run-in-containers.sh), so the
+      # cache gets its own named volume that survives `compose down` and is shared with
+      # gateway-per-user -- both instances install the same version onto the same platform.
+      CODEX_GATEWAY_CODEX_ARTIFACT_CACHE_DIR: /codex-artifact-cache
       NUXT_IGNORE_LOCK: "1"
       # Previews share the Gateway origin and are routed by cookie; BROWSER_PREVIEW_SCHEME only
       # keeps the HttpOnly cookie non-Secure over plain HTTP.
@@ -131,6 +136,7 @@ services:
     volumes:
       - build-output:/e2e-output:ro
       - e2e-data:/workspace/codex-gateway/.data-e2e
+      - codex-artifact-cache:/codex-artifact-cache
       - /var/run/docker.sock:/var/run/docker.sock
       - ${E2E_SHARED_AUTH_DIR:?E2E_SHARED_AUTH_DIR is required}:/srv/codex-auth:ro
       - ../../deploy/user-container:/app/deploy/user-container:ro
@@ -195,6 +201,7 @@ services:
       # that a later run's cleanup trap already force-removed by label, which then spams the log
       # with harmless but confusing background-reconnect ENOTFOUND noise for old runs' users).
       CODEX_GATEWAY_DB_PATH: /workspace/codex-gateway/.data-e2e/codex-gateway-per-user.db
+      CODEX_GATEWAY_CODEX_ARTIFACT_CACHE_DIR: /codex-artifact-cache
       BROWSER_PREVIEW_SCHEME: http
       CODEX_GATEWAY_PROVISIONING: docker
       CODEX_GATEWAY_USER_IMAGE: codex-gateway-e2e-user:latest
@@ -226,6 +233,7 @@ services:
     volumes:
       - build-output:/e2e-output:ro
       - e2e-data:/workspace/codex-gateway/.data-e2e
+      - codex-artifact-cache:/codex-artifact-cache
       - /var/run/docker.sock:/var/run/docker.sock
     command: ["node", "/e2e-output/server/index.mjs"]
     healthcheck:
@@ -290,6 +298,8 @@ services:
 volumes:
   bark-requests:
   build-output:
+  # Deliberately not wiped between runs -- see CODEX_GATEWAY_CODEX_ARTIFACT_CACHE_DIR above.
+  codex-artifact-cache:
   e2e-data:
   e2e-data-fresh:
   runner-home:
