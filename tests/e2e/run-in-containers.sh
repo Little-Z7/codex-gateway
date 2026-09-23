@@ -68,26 +68,81 @@ fi
 
 cleanup() {
   local status=$?
+  # This function must always reach the iptables teardown at the bottom no matter what fails
+  # above it (a transient `docker ps`/`docker network ls` error would otherwise trip the script's
+  # own `set -e` mid-trap and silently skip it, leaving host firewall rules behind -- observed in
+  # practice). Cleanup is inherently best-effort; every step below already has its own `|| true`,
+  # this just stops the *first* unprotected failure from short-circuiting everything after it.
+  set +e
   if [ "$status" -ne 0 ]; then
     "${compose[@]}" logs --no-color \
-      gateway-under-test ssh-target ssh-target-legacy-node ssh-target-npm-codex \
+      gateway-under-test gateway-per-user ssh-target ssh-target-legacy-node ssh-target-npm-codex \
       ssh-target-mfa >&2 || true
   fi
   "${compose[@]}" down --remove-orphans >/dev/null 2>&1 || true
   # Provisioned user containers live outside the compose project; remove them plus their volumes.
+  # codex-e2e-user- is the "shared" isolation-mode fixture (gateway-under-test); codex-e2e-pu- is
+  # the CODEX_GATEWAY_USER_NETWORK_ISOLATION=per-user fixture (gateway-per-user, see
+  # network-isolation.spec.ts).
   for container in $(docker ps -aq --filter "label=codex-gateway.managed=true" \
     --filter "name=codex-e2e-user-"); do
+    docker rm -f "$container" >/dev/null 2>&1 || true
+  done
+  for container in $(docker ps -aq --filter "label=codex-gateway.managed=true" \
+    --filter "name=codex-e2e-pu-"); do
     docker rm -f "$container" >/dev/null 2>&1 || true
   done
   for volume in $(docker volume ls -q --filter "name=codex-e2e-user-"); do
     docker volume rm -f "$volume" >/dev/null 2>&1 || true
   done
+  for volume in $(docker volume ls -q --filter "name=codex-e2e-pu-"); do
+    docker volume rm -f "$volume" >/dev/null 2>&1 || true
+  done
+  # Per-user networks are created directly against the host Docker daemon (not by compose) and
+  # outlive the container they were created for whenever a test fails mid-way; label-based cleanup
+  # covers that. See server/utils/gateway/provisioning/user-network-isolation.ts.
+  for network in $(docker network ls -q --filter "label=codex-gateway.user-network=true" \
+    --filter "name=codex-e2e-pu-"); do
+    docker network rm "$network" >/dev/null 2>&1 || true
+  done
+  # Best-effort teardown of the host firewall rules network-isolation.spec.ts's setup applied
+  # (see the block below); harmless no-op if they were never added (e.g. this run never touched
+  # the per-user spec, or the runner lacked NET_ADMIN and the initial setup already failed).
+  iptables -D DOCKER-USER -s 10.250.0.0/16 -p tcp --dport 3102 -j DROP >/dev/null 2>&1 || true
+  iptables -D INPUT -s 10.250.0.0/16 -j DROP >/dev/null 2>&1 || true
   rm -rf "$E2E_SHARED_AUTH_DIR" "$E2E_SHARED_DATA_DIR"
 }
 trap cleanup EXIT
 
+# network-isolation.spec.ts (CODEX_GATEWAY_USER_NETWORK_ISOLATION=per-user) asserts that a user
+# container cannot reach the Gateway's own HTTP port or the host itself over the per-user network
+# -- the two gaps documented in deploy/README.zh-CN.md's "安全加固" that Docker's `Internal: true`
+# alone does not close. Applying the same host-level iptables setup here (scoped to the dedicated
+# 10.250.0.0/16 test supernet, see tests/e2e/docker-compose.yml's gateway-per-user service) makes
+# that a real, non-mocked assertion instead of a Docker-native-only check. Best-effort: a runner
+# without NET_ADMIN/root (or without a modprobe-capable kernel) silently skips this, and the
+# spec's Gateway-port assertion will fail there -- see CLAUDE.md's "用户容器隔离" note.
+modprobe br_netfilter >/dev/null 2>&1 || true
+sysctl -w net.bridge.bridge-nf-call-iptables=1 >/dev/null 2>&1 || true
+iptables -C DOCKER-USER -s 10.250.0.0/16 -p tcp --dport 3102 -j DROP >/dev/null 2>&1 \
+  || iptables -I DOCKER-USER -s 10.250.0.0/16 -p tcp --dport 3102 -j DROP >/dev/null 2>&1 || true
+iptables -C INPUT -s 10.250.0.0/16 -j DROP >/dev/null 2>&1 \
+  || iptables -I INPUT -s 10.250.0.0/16 -j DROP >/dev/null 2>&1 || true
+
+# `docker build` does not read this shell's proxy variables, and a proxy from the Docker CLI's own
+# config pointing at the host's loopback is unreachable from inside the build container -- pass
+# the sandbox proxy explicitly, as tests/e2e/docker-compose.yml does for ssh-target-mfa.
+user_image_proxy_args=()
+if [ -n "$E2E_OUTBOUND_PROXY" ]; then
+  user_image_proxy_args=(
+    --build-arg "http_proxy=$E2E_OUTBOUND_PROXY"
+    --build-arg "https_proxy=$E2E_OUTBOUND_PROXY"
+    --build-arg "no_proxy=localhost,127.0.0.1"
+  )
+fi
 docker build -t codex-gateway-e2e-user:latest \
   --build-arg "CODEX_CLI_VERSION=$E2E_SUPPORTED_CODEX_VERSION" \
+  "${user_image_proxy_args[@]}" \
   "$project_dir/deploy/user-container" >/dev/null
 
 "${compose[@]}" build --quiet \

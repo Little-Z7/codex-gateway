@@ -185,6 +185,14 @@ export function migrateGatewaySchema(db: DatabaseSync) {
   if (!managedColumns.some((column) => column.name === "cpu_limit")) {
     db.exec("ALTER TABLE managed_hosts ADD COLUMN cpu_limit TEXT");
   }
+  // Per-user isolated Docker network (CODEX_GATEWAY_USER_NETWORK_ISOLATION=per-user); NULL in
+  // "shared" mode (the historical default) or before the row's first per-user provision.
+  if (!managedColumns.some((column) => column.name === "network_name")) {
+    db.exec("ALTER TABLE managed_hosts ADD COLUMN network_name TEXT");
+  }
+  if (!managedColumns.some((column) => column.name === "network_subnet")) {
+    db.exec("ALTER TABLE managed_hosts ADD COLUMN network_subnet TEXT");
+  }
 
   if (!userColumns.some((column) => column.name === "must_change_password")) {
     db.exec("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0");
