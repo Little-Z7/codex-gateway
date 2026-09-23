@@ -446,7 +446,7 @@ async function provisionContainer(userId: number) {
         username: user.username,
       });
       resolvedNetworkSubnet = ensured.subnet;
-      await attachInfraToUserNetwork(docker, config, ensured.name);
+      await attachInfraToUserNetwork(docker, config, ensured.name, false);
       networkMode = ensured.name;
     } else {
       if (config.dockerNetwork === null)

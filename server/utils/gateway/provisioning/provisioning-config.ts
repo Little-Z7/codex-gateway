@@ -83,7 +83,7 @@ export interface ProvisioningConfig {
   cpus: string | null;
   /** HostConfig.PidsLimit sent to Docker: a positive fork-bomb guard, or -1 for unlimited. */
   pidsLimit: number;
-  /** HostConfig.CgroupParent (a systemd slice name, e.g. "codex-gateway-users.slice", under the
+  /** HostConfig.CgroupParent (a systemd slice name, e.g. "codexgatewayusers.slice", under the
    *  systemd cgroup driver) so the host can cap the aggregate resource usage of every user
    *  container via `systemctl set-property <slice> ...`. Unset by default. */
   cgroupParent: string | null;

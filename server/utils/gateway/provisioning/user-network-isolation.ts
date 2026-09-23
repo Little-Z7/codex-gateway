@@ -141,16 +141,18 @@ export async function ensureUserNetwork(
   );
 }
 
-/** Best-effort attach: ignores "already connected" and a network that no longer exists. */
+/** Attach that ignores "already connected"; with `tolerateMissing` (the default, for background
+ *  reconnect sweeps) it also ignores a network or container that no longer exists. */
 export async function connectIfNeeded(
   docker: DockerEngineClient,
   network: string,
   container: string,
+  tolerateMissing = true,
 ) {
   try {
     await docker.connectNetwork(network, container);
   } catch (error) {
-    if (isAlreadyConnected(error) || isDockerNotFound(error)) return;
+    if (isAlreadyConnected(error) || (tolerateMissing && isDockerNotFound(error))) return;
     throw error;
   }
 }
@@ -190,10 +192,11 @@ export async function attachInfraToUserNetwork(
   docker: DockerEngineClient,
   config: InfraConfig,
   networkName: string,
+  tolerateMissing = true,
 ) {
-  await connectIfNeeded(docker, networkName, selfContainerRef(config));
+  await connectIfNeeded(docker, networkName, selfContainerRef(config), tolerateMissing);
   if (config.outboundProxyContainer !== null) {
-    await connectIfNeeded(docker, networkName, config.outboundProxyContainer);
+    await connectIfNeeded(docker, networkName, config.outboundProxyContainer, tolerateMissing);
   }
 }
 

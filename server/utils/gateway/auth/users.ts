@@ -318,8 +318,8 @@ export const userStore = {
             volume_name = excluded.volume_name,
             ssh_public_key = excluded.ssh_public_key,
             last_error = excluded.last_error,
-            network_name = excluded.network_name,
-            network_subnet = excluded.network_subnet,
+            network_name = COALESCE(excluded.network_name, managed_hosts.network_name),
+            network_subnet = COALESCE(excluded.network_subnet, managed_hosts.network_subnet),
             updated_at = excluded.updated_at
         `,
       )
